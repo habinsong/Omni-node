@@ -355,7 +355,7 @@ dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj
 npm test
 ```
 
-`npm test`는 저장소 루트 `scripts/run-omninode-tests.mjs`를 실행한다.
+`npm test`는 저장소 루트 `scripts/run-omninode-tests.mjs`를 실행하며, 저장소 위생 게이트와 대시보드 WebSocket 서버 메시지 라우터 계약 검증까지 함께 확인한다.
 
 ## 설정과 시크릿
 

@@ -6,16 +6,16 @@ const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "
 const dashboardDir = path.join(repoRoot, "apps", "omninode-dashboard");
 const dashboardModulesDir = path.join(dashboardDir, "modules");
 
-function listJsFiles(dirPath) {
+function listScriptFiles(dirPath) {
   const entries = readdirSync(dirPath, { withFileTypes: true });
   const files = [];
   for (const entry of entries) {
     const fullPath = path.join(dirPath, entry.name);
     if (entry.isDirectory()) {
-      files.push(...listJsFiles(fullPath));
+      files.push(...listScriptFiles(fullPath));
       continue;
     }
-    if (entry.isFile() && entry.name.endsWith(".js")) {
+    if (entry.isFile() && (entry.name.endsWith(".js") || entry.name.endsWith(".mjs"))) {
       files.push(fullPath);
     }
   }
@@ -60,8 +60,14 @@ function main() {
 
   const dashboardFiles = [
     path.join(dashboardDir, "app.js"),
-    ...listJsFiles(dashboardModulesDir)
+    ...listScriptFiles(dashboardModulesDir)
   ];
+
+  runStep(
+    "repo hygiene gate",
+    "node",
+    [toRelative(path.join(repoRoot, "scripts", "check-repo-hygiene.mjs"))]
+  );
 
   for (const filePath of dashboardFiles) {
     runStep(`node --check ${toRelative(filePath)}`, "node", ["--check", toRelative(filePath)]);
@@ -76,6 +82,11 @@ function main() {
     "ops flow 성능 smoke",
     "node",
     [toRelative(path.join(dashboardDir, "check-ops-flow-performance.js")), "--events", "256", "--iterations", "20"]
+  );
+  runStep(
+    "dashboard server message router contract",
+    "node",
+    [toRelative(path.join(dashboardDir, "check-dashboard-server-message-router.mjs"))]
   );
   runStep(
     "middleware build",

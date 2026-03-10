@@ -19,6 +19,7 @@ publish/
 node_modules/
 .runtime/
 runtime/
+output/
 .playwright-cli/
 workspace/
 coding/.playwright-cli/

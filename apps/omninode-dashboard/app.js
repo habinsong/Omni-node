@@ -101,6 +101,7 @@ import {
   handleExecutionFlowMessage,
   handleRoutineMessage
 } from "./modules/dashboard-message-handlers.js";
+import { handleDashboardServerMessage } from "./modules/dashboard-server-message-router.mjs";
 import {
   renderChatMultiResultPanel,
   renderCodingResultPanel
@@ -3371,191 +3372,6 @@ import {
       }
     }
 
-    function summarizeToolResult(msg) {
-      if (!msg || typeof msg !== "object") {
-        return "도구 응답 수신";
-      }
-
-      if (msg.type === "sessions_list_result") {
-        return `sessions_list count=${msg.count || 0}`;
-      }
-
-      if (msg.type === "sessions_history_result") {
-        return `sessions_history status=${msg.status || "-"} count=${msg.count || 0}`;
-      }
-
-      if (msg.type === "sessions_send_result") {
-        return `sessions_send status=${msg.status || "-"} runId=${msg.runId || "-"}`;
-      }
-
-      if (msg.type === "sessions_spawn_result") {
-        return `sessions_spawn status=${msg.status || "-"} child=${msg.childSessionKey || "-"} runtime=${msg.runtime || "-"}`;
-      }
-
-      if (msg.type === "cron_result") {
-        const action = msg.action || "-";
-        if (action === "status") {
-          return `cron.status enabled=${msg.enabled ? "true" : "false"} jobs=${msg.jobs ?? 0}`;
-        }
-        if (action === "list") {
-          return `cron.list total=${msg.total ?? 0} hasMore=${msg.hasMore ? "true" : "false"}`;
-        }
-        return `cron.${action} ok=${msg.ok ? "true" : "false"}`;
-      }
-
-      if (msg.type === "browser_result") {
-        return `browser.${msg.action || "-"} ok=${msg.ok ? "true" : "false"} running=${msg.running ? "true" : "false"} tabs=${Array.isArray(msg.tabs) ? msg.tabs.length : 0}`;
-      }
-
-      if (msg.type === "canvas_result") {
-        return `canvas.${msg.action || "-"} ok=${msg.ok ? "true" : "false"} visible=${msg.visible ? "true" : "false"} target=${msg.target || "-"}`;
-      }
-
-      if (msg.type === "nodes_result") {
-        return `nodes.${msg.action || "-"} ok=${msg.ok ? "true" : "false"} nodes=${Array.isArray(msg.nodes) ? msg.nodes.length : 0} pending=${Array.isArray(msg.pendingRequests) ? msg.pendingRequests.length : 0}`;
-      }
-
-      if (msg.type === "telegram_stub_result") {
-        const head = (msg.input || "").trim();
-        const shortHead = head.length > 40 ? `${head.slice(0, 40)}...` : (head || "-");
-        return `telegram.stub status=${msg.status || "-"} ok=${msg.ok ? "true" : "false"} input=${shortHead}`;
-      }
-
-      if (msg.type === "web_search_result") {
-        const head = (msg.query || "").trim();
-        const shortHead = head.length > 40 ? `${head.slice(0, 40)}...` : (head || "-");
-        const provider = msg.provider || "-";
-        const count = Array.isArray(msg.results) ? msg.results.length : 0;
-        return `web.search provider=${provider} results=${count} query=${shortHead}`;
-      }
-
-      if (msg.type === "web_fetch_result") {
-        return `web.fetch status=${msg.status ?? "-"} len=${msg.length ?? 0} url=${msg.url || msg.requestedUrl || "-"}`;
-      }
-
-      if (msg.type === "memory_search_result") {
-        const count = Array.isArray(msg.results) ? msg.results.length : 0;
-        return `memory.search disabled=${msg.disabled ? "true" : "false"} results=${count} query=${msg.query || "-"}`;
-      }
-
-      if (msg.type === "memory_get_result") {
-        const text = typeof msg.text === "string" ? msg.text : "";
-        return `memory.get disabled=${msg.disabled ? "true" : "false"} path=${msg.path || msg.requestedPath || "-"} chars=${text.length}`;
-      }
-
-      return msg.type || "도구 응답";
-    }
-
-    function pushToolResult(msg) {
-      const summary = summarizeToolResult(msg);
-      const capturedAt = new Date().toISOString();
-      const normalizedType = (msg && msg.type) ? String(msg.type) : "unknown";
-      const group = inferToolResultGroup(normalizedType);
-      const domain = inferToolResultDomain(group);
-      const action = inferToolResultAction(msg);
-      const statusInfo = inferToolResultStatus(msg);
-      const preview = JSON.stringify(msg || {}, null, 2);
-      const errorText = (msg && typeof msg.error === "string") ? msg.error.trim() : "";
-      const itemId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-      setToolResultPreview(preview);
-      setSelectedToolResultId(itemId);
-      setToolResultItems((prev) => {
-        const next = [
-          {
-            id: itemId,
-            type: normalizedType,
-            group,
-            domain,
-            action,
-            statusLabel: statusInfo.label,
-            statusTone: statusInfo.tone,
-            hasError: statusInfo.hasError,
-            summary,
-            capturedAt,
-            errorText,
-            preview
-          },
-          ...prev
-        ];
-        return next.slice(0, 16);
-      });
-
-      if (msg && typeof msg.childSessionKey === "string" && msg.childSessionKey.trim()) {
-        setToolSessionKey(msg.childSessionKey.trim());
-      }
-
-      if (msg && typeof msg.error === "string" && msg.error.trim()) {
-        setToolControlError(msg.error.trim());
-      } else {
-        setToolControlError("");
-      }
-    }
-
-    function pushProviderRuntimeEvents(msg) {
-      const events = buildProviderRuntimeEventsFromMessage(msg);
-      if (!Array.isArray(events) || events.length === 0) {
-        return;
-      }
-
-      const capturedAt = new Date().toISOString();
-      setProviderRuntimeItems((prev) => {
-        const next = [
-          ...events.map((event) => {
-            const safeProvider = PROVIDER_RUNTIME_KEYS.includes(event.provider)
-              ? event.provider
-              : "unknown";
-            const normalized = {
-              provider: safeProvider,
-              scope: event.scope || "runtime",
-              mode: event.mode || "-",
-              model: event.model || "",
-              statusLabel: event.statusLabel || "-",
-              statusTone: event.statusTone || "neutral",
-              hasError: !!event.hasError,
-              detail: event.detail || ""
-            };
-            return {
-              id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-              capturedAt,
-              ...normalized,
-              summary: summarizeProviderRuntimeEntry(normalized)
-            };
-          }),
-          ...prev
-        ];
-        return next.slice(0, 48);
-      });
-    }
-
-    function pushGuardObsEvent(msg) {
-      const event = buildGuardObsEvent(msg);
-      if (!event) {
-        return;
-      }
-
-      const capturedAt = new Date().toISOString();
-      setGuardObsItems((prev) => {
-        const next = [
-          {
-            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            capturedAt,
-            ...event
-          },
-          ...prev
-        ];
-        return next.slice(0, 64);
-      });
-
-      const timelineEntry = buildGuardRetryTimelineEntry(event, capturedAt);
-      if (timelineEntry) {
-        setGuardRetryTimelineItems((prev) => {
-          const next = [timelineEntry, ...prev];
-          return next.slice(0, GUARD_RETRY_TIMELINE_MAX_ENTRIES);
-        });
-      }
-    }
-
     function sendToolControlRequest(payload, requestLabel) {
       if (!ensureAuthed()) {
         return;
@@ -3883,811 +3699,132 @@ import {
     }
 
     function handleServerMessage(msg) {
-      pushProviderRuntimeEvents(msg);
-      pushGuardObsEvent(msg);
-
-      if (msg.type === "pong") {
-        return;
-      }
-
-      if (msg.type === "auth_required") {
-        setAuthMeta({ sessionId: msg.sessionId || "", telegramConfigured: !!msg.telegramConfigured });
-        return;
-      }
-
-      if (msg.type === "otp_request_result") {
-        log(msg.message || "OTP 요청 결과를 확인하세요.", msg.ok ? "info" : "error");
-        return;
-      }
-
-      if (msg.type === "auth_result") {
-        const ok = !!msg.ok;
-        setAuthed(ok);
-        if (ok) {
-          const expiryText = msg.expiresAtLocal || msg.expiresAtUtc || "";
-          if (msg.authToken) {
-            saveAuthToken(msg.authToken, expiryText);
-          }
-          setAuthLocalOffset(msg.localUtcOffset || "");
-          if (Number.isFinite(msg.ttlHours) && Number(msg.ttlHours) > 0) {
-            setAuthTtlHours(String(msg.ttlHours));
-          }
-          setStatus("세션 인증됨");
-          send({ type: "get_routines" });
-          requestDoctorLast(send, { silent: true, queueIfClosed: false });
-          requestRoutingPolicyGet(send, { silent: true, queueIfClosed: false });
-          requestRoutingDecisionGetLast(send, { silent: true, queueIfClosed: false });
-          requestPlanList(send, { silent: true, queueIfClosed: false });
-          requestTaskGraphList(send, { silent: true, queueIfClosed: false });
-          requestContextScan(send, { silent: true, queueIfClosed: false });
-          requestSkillsList(send, { silent: true, queueIfClosed: false });
-          requestCommandsList(send, { silent: true, queueIfClosed: false });
-          requestNotebookGet(send, "", { silent: true, queueIfClosed: false });
-        } else {
-          if (msg.resumed) {
-            clearAuthToken();
-          }
-          setAuthLocalOffset(localUtcOffsetLabel());
-          setStatus(msg.resumed ? "세션 만료 / OTP 필요" : "인증 실패");
+      handleDashboardServerMessage(msg, {
+        state: {
+          rootTab,
+          currentConversationId,
+          currentKey,
+          isPortraitMobileLayout,
+          defaultGroqSingleModel: DEFAULT_GROQ_SINGLE_MODEL,
+          routingPolicyState,
+          plansState,
+          taskGraphState,
+          refactorState,
+          notebooksState,
+          filePreviewByConversation,
+          codingResultByConversation
+        },
+        refs: {
+          autoCreateConversationRef,
+          routineBrowserAgentPreviewRef
+        },
+        setters: {
+          setAuthMeta,
+          setAuthed,
+          setAuthLocalOffset,
+          setAuthTtlHours,
+          setStatus,
+          setContextState,
+          setRoutingPolicyState,
+          setPlansState,
+          setTaskGraphState,
+          setRefactorState,
+          setDoctorState,
+          setNotebooksState,
+          setSettingsState,
+          setGeminiUsage,
+          setCopilotPremiumUsage,
+          setCopilotLocalUsage,
+          setCopilotStatus,
+          setCopilotDetail,
+          setCodexStatus,
+          setCodexDetail,
+          setGroqModels,
+          setSelectedGroqModel,
+          setCopilotModels,
+          setSelectedCopilotModel,
+          setConversationLists,
+          setActiveConversationByKey,
+          setConversationDetails,
+          setSelectedMemoryByConversation,
+          setChatMultiResultByConversation,
+          setMemoryNotes,
+          setMemoryPreview,
+          setSelectedConversationIdsByKey,
+          setSelectedFoldersByKey,
+          setCodingResultByConversation,
+          setShowExecutionLogsByConversation,
+          setCodingRuntimeByConversation,
+          setCodingExecutionInputByConversation,
+          setFilePreviewByConversation,
+          setCodingProgressByKey,
+          setPendingByKey,
+          setOptimisticUserByKey,
+          setMetrics,
+          setToolSessionKey,
+          setToolControlError,
+          setToolResultPreview,
+          setSelectedToolResultId,
+          setToolResultItems,
+          setProviderRuntimeItems,
+          setGuardObsItems,
+          setGuardRetryTimelineItems,
+          setGuardAlertDispatchState,
+          setRoutines,
+          setRoutineSelectedId,
+          setRoutineProgress,
+          setRoutineOutputPreview
+        },
+        actions: {
+          send,
+          log,
+          saveAuthToken,
+          clearAuthToken,
+          localUtcOffsetLabel,
+          ensureAuthed,
+          finishPendingRequest,
+          setError,
+          requestConversationDetail,
+          requestAutoCreateConversation,
+          requestWorkspaceFilePreview,
+          buildCodingRuntimeMessageState,
+          inferErrorKey,
+          requestDoctorLast,
+          requestRoutingPolicyGet,
+          requestRoutingDecisionGetLast,
+          requestPlanList,
+          requestTaskGraphList,
+          requestContextScan,
+          requestSkillsList,
+          requestCommandsList,
+          requestNotebookGet,
+          requestPlanGet,
+          requestTaskGraphGet,
+          requestTaskOutput,
+          requestRefactorRead,
+          setResponsivePane
+        },
+        handlers: {
+          handleConversationMemoryMessage,
+          handleRoutineMessage,
+          handleExecutionFlowMessage
+        },
+        utils: {
+          normalizeChatMultiResultMessage: chatMultiUtils.normalizeChatMultiResultMessage,
+          attachLatencyMetaToConversation,
+          buildProviderRuntimeEventsFromMessage,
+          summarizeProviderRuntimeEntry,
+          PROVIDER_RUNTIME_KEYS,
+          buildGuardObsEvent,
+          buildGuardRetryTimelineEntry,
+          GUARD_RETRY_TIMELINE_MAX_ENTRIES,
+          inferToolResultGroup,
+          inferToolResultDomain,
+          inferToolResultAction,
+          inferToolResultStatus,
+          TOOL_RESULT_TYPES
         }
-        return;
-      }
-
-      if (msg.type === "context_scan_result") {
-        const payload = msg.payload || null;
-        const sources = Array.isArray(payload?.instructions?.sources) ? payload.instructions.sources : [];
-        const skills = Array.isArray(payload?.skills) ? payload.skills : [];
-        const commands = Array.isArray(payload?.commands) ? payload.commands : [];
-
-        setContextState((prev) => ({
-          ...prev,
-          loaded: !!payload,
-          loading: false,
-          lastError: payload ? "" : "프로젝트 문맥 스냅샷이 비어 있습니다.",
-          lastAction: "scan",
-          snapshot: payload,
-          skills: skills.length > 0 ? skills : prev.skills,
-          commands: commands.length > 0 ? commands : prev.commands
-        }));
-
-        if (payload) {
-          log(
-            `[context] scan · instructions=${sources.length} skills=${skills.length} commands=${commands.length}`,
-            "info"
-          );
-        }
-        return;
-      }
-
-      if (msg.type === "skills_list_result") {
-        const payload = msg.payload || {};
-        const items = Array.isArray(payload.items) ? payload.items : [];
-        setContextState((prev) => ({
-          ...prev,
-          loadingSkills: false,
-          lastError: "",
-          lastAction: "skills",
-          skills: items
-        }));
-        return;
-      }
-
-      if (msg.type === "commands_list_result") {
-        const payload = msg.payload || {};
-        const items = Array.isArray(payload.items) ? payload.items : [];
-        setContextState((prev) => ({
-          ...prev,
-          loadingCommands: false,
-          lastError: "",
-          lastAction: "commands",
-          commands: items
-        }));
-        return;
-      }
-
-      if (msg.type === "routing_policy_result") {
-        const payload = msg.payload || {};
-        const snapshot = payload.snapshot || null;
-        const ok = payload.ok !== false;
-        const action = msg.action || routingPolicyState.lastAction || "";
-        const effective = snapshot?.effectiveChains || {};
-        const draftChains = Object.keys(effective).reduce((acc, key) => {
-          acc[key] = Array.isArray(effective[key]) ? effective[key].join(", ") : "";
-          return acc;
-        }, {});
-
-        setRoutingPolicyState((prev) => ({
-          ...prev,
-          loaded: true,
-          loading: false,
-          pending: false,
-          lastAction: action,
-          lastError: ok ? "" : (payload.message || "라우팅 정책 요청이 실패했습니다."),
-          snapshot: snapshot || prev.snapshot,
-          draftChains: Object.keys(draftChains).length > 0 ? draftChains : prev.draftChains
-        }));
-
-        log(
-          `[routing] ${action || "action"} · ${payload.message || (ok ? "완료" : "실패")}`,
-          ok ? "info" : "error"
-        );
-        return;
-      }
-
-      if (msg.type === "routing_decision_result") {
-        const decision = msg.payload || null;
-        setRoutingPolicyState((prev) => ({
-          ...prev,
-          snapshot: prev.snapshot
-            ? {
-                ...prev.snapshot,
-                lastDecision: decision
-              }
-            : {
-                defaultChains: {},
-                overrideChains: {},
-                effectiveChains: {},
-                lastDecision: decision
-              }
-        }));
-        return;
-      }
-
-      if (msg.type === "plan_list_result") {
-        const payload = msg.payload || {};
-        const items = Array.isArray(payload.items) ? payload.items : [];
-        const nextSelectedPlanId = items.some((item) => item.planId === plansState.selectedPlanId)
-          ? plansState.selectedPlanId
-          : (items[0]?.planId || "");
-
-        setPlansState((prev) => ({
-          ...prev,
-          items,
-          loaded: true,
-          loading: false,
-          pending: false,
-          lastError: items.length === 0 ? "저장된 계획이 없습니다." : "",
-          selectedPlanId: nextSelectedPlanId || "",
-          snapshot: nextSelectedPlanId && prev.snapshot?.plan?.planId === nextSelectedPlanId
-            ? prev.snapshot
-            : (nextSelectedPlanId ? null : prev.snapshot)
-        }));
-
-        if (nextSelectedPlanId) {
-          requestPlanGet(send, nextSelectedPlanId, { silent: true, queueIfClosed: false });
-        }
-
-        return;
-      }
-
-      if (msg.type === "plan_result") {
-        const payload = msg.payload || {};
-        const snapshot = payload.snapshot || null;
-        const ok = payload.ok !== false;
-        const action = msg.action || plansState.lastAction || "";
-        const nextPlanId = snapshot?.plan?.planId || plansState.selectedPlanId || "";
-
-        setPlansState((prev) => {
-          const items = Array.isArray(prev.items) ? [...prev.items] : [];
-          if (snapshot?.plan?.planId) {
-            const nextItem = {
-              planId: snapshot.plan.planId,
-              title: snapshot.plan.title || snapshot.plan.planId,
-              objective: snapshot.plan.objective || "",
-              status: snapshot.plan.status || "Draft",
-              createdAtUtc: snapshot.plan.createdAtUtc || "",
-              updatedAtUtc: snapshot.plan.updatedAtUtc || "",
-              reviewerSummary: snapshot.plan.reviewerSummary || ""
-            };
-            const itemIndex = items.findIndex((item) => item.planId === nextItem.planId);
-            if (itemIndex >= 0) {
-              items[itemIndex] = nextItem;
-            } else {
-              items.unshift(nextItem);
-            }
-          }
-
-          return {
-            ...prev,
-            items,
-            loaded: true,
-            loading: false,
-            pending: false,
-            lastAction: action,
-            lastError: ok ? "" : (payload.message || "계획 요청이 실패했습니다."),
-            selectedPlanId: nextPlanId,
-            snapshot: snapshot || prev.snapshot,
-            createObjective: ok && action === "create" ? "" : prev.createObjective,
-            createConstraintsText: ok && action === "create" ? "" : prev.createConstraintsText,
-            createMode: ok && action === "create" ? "fast" : prev.createMode
-          };
-        });
-
-        log(
-          `[plan] ${action || "action"} · ${payload.message || (ok ? "완료" : "실패")}`,
-          ok ? "info" : "error"
-        );
-
-        if (ok && action !== "get") {
-          requestPlanList(send, { silent: true, queueIfClosed: false });
-        }
-
-        if (ok && action === "run") {
-          requestTaskGraphList(send, { silent: true, queueIfClosed: false });
-        }
-
-        return;
-      }
-
-      if (msg.type === "task_graph_list_result") {
-        const payload = msg.payload || {};
-        const items = Array.isArray(payload.items) ? payload.items : [];
-        const nextSelectedGraphId = items.some((item) => item.graphId === taskGraphState.selectedGraphId)
-          ? taskGraphState.selectedGraphId
-          : (items[0]?.graphId || "");
-
-        setTaskGraphState((prev) => ({
-          ...prev,
-          items,
-          loaded: true,
-          loading: false,
-          pending: false,
-          lastError: items.length === 0 ? "저장된 Task graph가 없습니다." : "",
-          selectedGraphId: nextSelectedGraphId || "",
-          snapshot: nextSelectedGraphId && prev.snapshot?.graph?.graphId === nextSelectedGraphId
-            ? prev.snapshot
-            : (nextSelectedGraphId ? null : prev.snapshot)
-        }));
-
-        if (nextSelectedGraphId) {
-          requestTaskGraphGet(send, nextSelectedGraphId, { silent: true, queueIfClosed: false });
-        }
-
-        return;
-      }
-
-      if (msg.type === "task_graph_result") {
-        const payload = msg.payload || {};
-        const snapshot = payload.snapshot || null;
-        const ok = payload.ok !== false;
-        const action = msg.action || taskGraphState.lastAction || "";
-        const nextGraphId = snapshot?.graph?.graphId || taskGraphState.selectedGraphId || "";
-        const nextTaskId = snapshot?.graph?.nodes?.some((task) => task.taskId === taskGraphState.selectedTaskId)
-          ? taskGraphState.selectedTaskId
-          : (snapshot?.graph?.nodes?.[0]?.taskId || "");
-
-        setTaskGraphState((prev) => {
-          const items = Array.isArray(prev.items) ? [...prev.items] : [];
-          if (snapshot?.graph?.graphId) {
-            const nextItem = {
-              graphId: snapshot.graph.graphId,
-              sourcePlanId: snapshot.graph.sourcePlanId || "",
-              status: snapshot.graph.status || "Draft",
-              createdAtUtc: snapshot.graph.createdAtUtc || "",
-              updatedAtUtc: snapshot.graph.updatedAtUtc || "",
-              totalNodes: Array.isArray(snapshot.graph.nodes) ? snapshot.graph.nodes.length : 0,
-              completedNodes: Array.isArray(snapshot.graph.nodes)
-                ? snapshot.graph.nodes.filter((task) => task.status === "Completed").length
-                : 0,
-              failedNodes: Array.isArray(snapshot.graph.nodes)
-                ? snapshot.graph.nodes.filter((task) => task.status === "Failed").length
-                : 0,
-              runningNodes: Array.isArray(snapshot.graph.nodes)
-                ? snapshot.graph.nodes.filter((task) => task.status === "Running").length
-                : 0
-            };
-            const itemIndex = items.findIndex((item) => item.graphId === nextItem.graphId);
-            if (itemIndex >= 0) {
-              items[itemIndex] = nextItem;
-            } else {
-              items.unshift(nextItem);
-            }
-          }
-
-          return {
-            ...prev,
-            items,
-            loaded: true,
-            loading: false,
-            pending: false,
-            lastAction: action,
-            lastError: ok ? "" : (payload.message || "Task graph 요청이 실패했습니다."),
-            selectedGraphId: nextGraphId,
-            selectedTaskId: nextTaskId,
-            snapshot: snapshot || prev.snapshot,
-            createPlanId: ok && action === "create" ? "" : prev.createPlanId
-          };
-        });
-
-        log(
-          `[task-graph] ${action || "action"} · ${payload.message || (ok ? "완료" : "실패")}`,
-          ok ? "info" : "error"
-        );
-
-        if (nextGraphId && nextTaskId) {
-          requestTaskOutput(send, nextGraphId, nextTaskId, { silent: true, queueIfClosed: false });
-        }
-
-        if (ok && action !== "get") {
-          requestTaskGraphList(send, { silent: true, queueIfClosed: false });
-        }
-
-        const normalizedGraphStatus = `${snapshot?.graph?.status || ""}`.toLowerCase();
-        const sourcePlanId = `${snapshot?.graph?.sourcePlanId || ""}`.trim();
-        if (sourcePlanId
-          && sourcePlanId === `${plansState.selectedPlanId || ""}`.trim()
-          && (normalizedGraphStatus === "completed" || normalizedGraphStatus === "failed" || normalizedGraphStatus === "canceled")) {
-          requestPlanGet(send, sourcePlanId, { silent: true, queueIfClosed: false });
-        }
-
-        return;
-      }
-
-      if (msg.type === "task_output_result") {
-        const payload = msg.payload || {};
-        setTaskGraphState((prev) => ({
-          ...prev,
-          output: payload,
-          selectedGraphId: payload.graphId || prev.selectedGraphId,
-          selectedTaskId: payload.taskId || prev.selectedTaskId
-        }));
-        return;
-      }
-
-      if (msg.type === "task_updated") {
-        const graphId = `${msg.graphId || ""}`.trim();
-        const task = msg.task || null;
-        if (!graphId || !task?.taskId) {
-          return;
-        }
-
-        if (taskGraphState.selectedGraphId === graphId) {
-          requestTaskGraphGet(send, graphId, { silent: true, queueIfClosed: false });
-          if (taskGraphState.selectedTaskId === task.taskId) {
-            requestTaskOutput(send, graphId, task.taskId, { silent: true, queueIfClosed: false });
-          }
-        }
-
-        requestTaskGraphList(send, { silent: true, queueIfClosed: false });
-
-        const normalizedStatus = `${task.status || ""}`.toLowerCase();
-        if (normalizedStatus === "failed" || normalizedStatus === "completed" || normalizedStatus === "canceled") {
-          log(
-            `[task] ${task.taskId} ${task.status || "-"} · ${task.title || "-"}`,
-            normalizedStatus === "failed" ? "error" : "info"
-          );
-        }
-        return;
-      }
-
-      if (msg.type === "task_log") {
-        const graphId = `${msg.graphId || ""}`.trim();
-        const taskId = `${msg.taskId || ""}`.trim();
-        const line = `${msg.line || ""}`;
-        if (graphId && taskId && taskGraphState.selectedGraphId === graphId && taskGraphState.selectedTaskId === taskId) {
-          setTaskGraphState((prev) => ({
-            ...prev,
-            output: {
-              ...(prev.output || {}),
-              graphId,
-              taskId,
-              stdout: `${prev.output?.stdout || ""}${prev.output?.stdout ? "\n" : ""}${line}`
-            }
-          }));
-        }
-        return;
-      }
-
-      if (msg.type === "refactor_result") {
-        const payload = msg.payload || {};
-        const ok = payload.ok !== false;
-        const action = msg.action || refactorState.lastAction || "";
-        const readResult = payload.readResult || null;
-        const preview = payload.preview || null;
-        const applyResult = payload.applyResult || null;
-        const issues = Array.isArray(payload.issues)
-          ? payload.issues
-          : Array.isArray(preview?.issues)
-            ? preview.issues
-            : Array.isArray(applyResult?.issues)
-              ? applyResult.issues
-              : [];
-
-        setRefactorState((prev) => ({
-          ...prev,
-          pending: false,
-          lastAction: action,
-          lastError: ok ? "" : (payload.message || "Safe Refactor 요청이 실패했습니다."),
-          lastMessage: payload.message || (ok ? "완료" : ""),
-          lastIssues: issues,
-          toolResult: payload.toolResult || null,
-          filePath: readResult?.path || preview?.path || applyResult?.path || prev.filePath,
-          loadedPath: readResult?.path || preview?.path || applyResult?.path || prev.loadedPath,
-          readResult: action === "read"
-            ? (readResult || prev.readResult)
-            : action === "apply" && ok
-              ? prev.readResult
-              : prev.readResult,
-          preview: ["preview", "lsp_rename", "ast_replace"].includes(action)
-            ? (preview || null)
-            : action === "apply" && ok && applyResult?.applied
-              ? null
-              : prev.preview,
-          selectedStartLine: action === "read" && readResult ? "" : prev.selectedStartLine,
-          selectedEndLine: action === "read" && readResult ? "" : prev.selectedEndLine,
-          replacement: action === "apply" && ok && applyResult?.applied && prev.mode === "anchor" ? "" : prev.replacement
-        }));
-
-        log(
-          `[refactor] ${action || "action"} · ${payload.message || (ok ? "완료" : "실패")}`,
-          ok ? "info" : "error"
-        );
-
-        if (action === "apply" && ok && applyResult?.applied && applyResult.path) {
-          requestRefactorRead(send, applyResult.path, { silent: true, queueIfClosed: false });
-        }
-
-        return;
-      }
-
-      if (msg.type === "doctor_result") {
-        const report = msg.report || null;
-        const found = !!msg.found;
-        setDoctorState((prev) => ({
-          ...prev,
-          report: found ? report : null,
-          loaded: true,
-          loading: false,
-          pending: false,
-          lastAction: msg.action || prev.lastAction || "",
-          lastError: found ? "" : "저장된 doctor 보고서가 없습니다.",
-          receivedAt: new Date().toISOString()
-        }));
-
-        if (found && report) {
-          const failCount = Number(report.failCount || 0);
-          const warnCount = Number(report.warnCount || 0);
-          log(
-            `[doctor] ${msg.action === "run" ? "실행" : "조회"} 완료 · ok=${report.okCount || 0} warn=${warnCount} fail=${failCount}`,
-            failCount > 0 ? "error" : "info"
-          );
-        } else if (msg.action === "get_last") {
-          log("[doctor] 저장된 보고서가 없습니다.", "info");
-        }
-        return;
-      }
-
-      if (msg.type === "notebook_result") {
-        const payload = msg.payload || {};
-        const snapshot = payload.snapshot || null;
-        const ok = payload.ok !== false;
-        const action = msg.action || notebooksState.lastAction || "";
-
-        setNotebooksState((prev) => ({
-          ...prev,
-          loaded: true,
-          loading: false,
-          pending: false,
-          lastAction: action,
-          lastError: ok ? "" : (payload.message || "notebook 요청이 실패했습니다."),
-          lastMessage: ok ? (payload.message || "") : "",
-          snapshot: snapshot || prev.snapshot,
-          receivedAt: new Date().toISOString(),
-          projectKeyDraft: prev.projectKeyDraft || snapshot?.notebook?.projectKey || "",
-          appendText: ok && action === "append" ? "" : prev.appendText
-        }));
-
-        log(
-          `[notebook] ${action || "action"} · ${payload.message || (ok ? "완료" : "실패")}`,
-          ok ? "info" : "error"
-        );
-        return;
-      }
-
-      if (msg.type === "settings_state") {
-        setSettingsState({
-          telegramBotTokenSet: !!msg.telegramBotTokenSet,
-          telegramChatIdSet: !!msg.telegramChatIdSet,
-          groqApiKeySet: !!msg.groqApiKeySet,
-          geminiApiKeySet: !!msg.geminiApiKeySet,
-          cerebrasApiKeySet: !!msg.cerebrasApiKeySet,
-          codexApiKeySet: !!msg.codexApiKeySet,
-          telegramBotTokenMasked: msg.telegramBotTokenMasked || "",
-          telegramChatIdMasked: msg.telegramChatIdMasked || "",
-          groqApiKeyMasked: msg.groqApiKeyMasked || "",
-          geminiApiKeyMasked: msg.geminiApiKeyMasked || "",
-          cerebrasApiKeyMasked: msg.cerebrasApiKeyMasked || "",
-          codexApiKeyMasked: msg.codexApiKeyMasked || ""
-        });
-        return;
-      }
-
-      if (msg.type === "settings_result") {
-        log(msg.message || "설정 적용 완료", msg.ok === false ? "error" : "info");
-        send({ type: "get_settings" });
-        send({ type: "get_codex_status" });
-        send({ type: "get_groq_models" });
-        send({ type: "get_copilot_models" });
-        send({ type: "get_usage_stats" });
-        return;
-      }
-
-      if (msg.type === "usage_stats") {
-        setGeminiUsage({
-          requests: msg.gemini?.requests || 0,
-          prompt_tokens: msg.gemini?.prompt_tokens || 0,
-          completion_tokens: msg.gemini?.completion_tokens || 0,
-          total_tokens: msg.gemini?.total_tokens || 0,
-          input_price_per_million_usd: msg.gemini?.input_price_per_million_usd || "0.5000",
-          output_price_per_million_usd: msg.gemini?.output_price_per_million_usd || "3.0000",
-          estimated_cost_usd: msg.gemini?.estimated_cost_usd || "0.000000"
-        });
-        const hasPremiumPayload = Object.prototype.hasOwnProperty.call(msg, "copilotPremium");
-        const premium = hasPremiumPayload ? (msg.copilotPremium || {}) : {};
-        const premiumItems = Array.isArray(premium.items) ? premium.items : [];
-        const premiumFallbackMessage = hasPremiumPayload
-          ? (premium.message || "Copilot Premium 응답 메시지가 비어 있습니다.")
-          : "미들웨어가 copilotPremium 필드를 보내지 않았습니다. 미들웨어 재시작 후 다시 시도하세요.";
-        const local = msg.copilotLocal || {};
-        const localItems = Array.isArray(local.items) ? local.items : [];
-        setCopilotPremiumUsage({
-          available: hasPremiumPayload ? !!premium.available : false,
-          requires_user_scope: hasPremiumPayload ? !!premium.requires_user_scope : false,
-          message: premiumFallbackMessage,
-          username: premium.username || "",
-          plan_name: premium.plan_name || "-",
-          used_requests: premium.used_requests || "0.0",
-          monthly_quota: premium.monthly_quota || "0.0",
-          percent_used: premium.percent_used || "0.00",
-          refreshed_local: premium.refreshed_local || "",
-          features_url: premium.features_url || "https://github.com/settings/copilot/features",
-          billing_url: premium.billing_url || "https://github.com/settings/billing/premium_requests_usage",
-          items: premiumItems.map((item) => ({
-            model: item.model || "-",
-            requests: item.requests || "0.0",
-            percent: item.percent || "0.00"
-          }))
-        });
-        setCopilotLocalUsage({
-          selected_model: local.selected_model || "",
-          selected_model_requests: Number(local.selected_model_requests || 0),
-          total_requests: Number(local.total_requests || 0),
-          items: localItems.map((item) => ({
-            model: item.model || "-",
-            requests: Number(item.requests || 0)
-          }))
-        });
-        return;
-      }
-
-      if (msg.type === "copilot_status") {
-        const installed = !!msg.installed;
-        const authenticated = !!msg.authenticated;
-        const text = installed
-          ? (authenticated ? `설치/인증 완료 (${msg.mode || "-"})` : `설치됨, 미인증 (${msg.mode || "-"})`)
-          : "미설치";
-        setCopilotStatus(text);
-        setCopilotDetail(msg.detail || "-");
-        return;
-      }
-
-      if (msg.type === "copilot_login_result") {
-        log(`Copilot 로그인 결과: ${msg.message || "-"}`);
-        send({ type: "get_copilot_status" });
-        send({ type: "get_copilot_models" });
-        return;
-      }
-
-      if (msg.type === "codex_status") {
-        const installed = !!msg.installed;
-        const authenticated = !!msg.authenticated;
-        const text = installed
-          ? (authenticated ? `설치/인증 완료 (${msg.mode || "-"})` : `설치됨, 미인증 (${msg.mode || "-"})`)
-          : "미설치";
-        setCodexStatus(text);
-        setCodexDetail(msg.detail || "-");
-        return;
-      }
-
-      if (msg.type === "codex_login_result") {
-        const resultMessage = msg.message || "-";
-        log(`Codex 로그인 결과: ${resultMessage}`);
-        if (/code=.*url=/i.test(resultMessage)) {
-          setCodexStatus("설치됨, 미인증 (device_auth)");
-          setCodexDetail(resultMessage);
-        } else if (/failed|429|Too Many Requests|error/i.test(resultMessage)) {
-          setCodexStatus("설치됨, 미인증 (codex)");
-          setCodexDetail(resultMessage);
-        }
-        send({ type: "get_codex_status" });
-        return;
-      }
-
-      if (msg.type === "codex_logout_result") {
-        const resultMessage = msg.message || "-";
-        log(`Codex 로그아웃 결과: ${resultMessage}`);
-        setCodexStatus("설치됨, 미인증 (codex)");
-        setCodexDetail(resultMessage);
-        send({ type: "get_codex_status" });
-        return;
-      }
-
-      if (msg.type === "groq_models") {
-        const items = Array.isArray(msg.items) ? msg.items : [];
-        setGroqModels(items);
-        setSelectedGroqModel(msg.selected || DEFAULT_GROQ_SINGLE_MODEL);
-        return;
-      }
-
-      if (msg.type === "copilot_models") {
-        const items = Array.isArray(msg.items) ? msg.items : [];
-        setCopilotModels(items);
-        setSelectedCopilotModel(msg.selected || "");
-        return;
-      }
-
-      if (msg.type === "groq_model_set" && msg.ok) {
-        setSelectedGroqModel(msg.model || "");
-        return;
-      }
-
-      if (msg.type === "copilot_model_set" && msg.ok) {
-        setSelectedCopilotModel(msg.model || "");
-        return;
-      }
-
-      if (handleConversationMemoryMessage(msg, {
-        autoCreateConversationRef,
-        setSelectedConversationIdsByKey,
-        setSelectedFoldersByKey,
-        setConversationLists,
-        setActiveConversationByKey,
-        requestConversationDetail,
-        requestAutoCreateConversation,
-        setConversationDetails,
-        setSelectedMemoryByConversation,
-        setChatMultiResultByConversation,
-        log,
-        setMemoryNotes,
-        setMemoryPreview,
-        currentConversationId,
-        send,
-        setError,
-        currentKey,
-        setFilePreviewByConversation,
-        filePreviewByConversation,
-        setCodingResultByConversation,
-        codingResultByConversation,
-        setShowExecutionLogsByConversation,
-        setCodingRuntimeByConversation,
-        setCodingExecutionInputByConversation,
-        requestWorkspaceFilePreview
-      })) {
-        return;
-      }
-
-      if (handleRoutineMessage(msg, {
-        setRoutines,
-        setRoutineSelectedId,
-        setRoutineProgress,
-        isPortraitMobileLayout,
-        setResponsivePane,
-        log,
-        setError,
-        routineBrowserAgentPreviewRef,
-        send,
-        setRoutineOutputPreview
-      })) {
-        return;
-      }
-
-      if (handleExecutionFlowMessage(msg, {
-        setCodingProgressByKey,
-        setPendingByKey,
-        setActiveConversationByKey,
-        setOptimisticUserByKey,
-        normalizeChatMultiResultMessage: chatMultiUtils.normalizeChatMultiResultMessage,
-        setChatMultiResultByConversation,
-        attachLatencyMetaToConversation,
-        setConversationDetails,
-        setSelectedMemoryByConversation,
-        finishPendingRequest,
-        setError,
-        setCodingResultByConversation,
-        codingResultByConversation,
-        setShowExecutionLogsByConversation,
-        setCodingRuntimeByConversation,
-        setCodingExecutionInputByConversation,
-        setFilePreviewByConversation,
-        filePreviewByConversation,
-        requestWorkspaceFilePreview,
-        send,
-        log,
-        setMetrics
-      })) {
-        return;
-      }
-
-      if (msg.type === "guard_alert_dispatch_result") {
-        const ok = !!msg.ok;
-        const statusLabel = (typeof msg.status === "string" && msg.status.trim())
-          ? msg.status.trim()
-          : (ok ? "sent" : "failed");
-        const statusTone = ok ? "ok" : "error";
-        const attemptedAtUtc = (typeof msg.attemptedAtUtc === "string" && msg.attemptedAtUtc.trim())
-          ? msg.attemptedAtUtc.trim()
-          : new Date().toISOString();
-        const targets = Array.isArray(msg.targets)
-          ? msg.targets.map((item) => ({
-            name: item && item.name ? `${item.name}` : "-",
-            status: item && item.status ? `${item.status}` : "-",
-            attempts: Number.isFinite(Number(item && item.attempts)) ? Number(item.attempts) : 0,
-            statusCode: Number.isFinite(Number(item && item.statusCode)) ? Number(item.statusCode) : null,
-            error: item && item.error ? `${item.error}` : "-",
-            endpoint: item && item.endpoint ? `${item.endpoint}` : "-"
-          }))
-          : [];
-        setGuardAlertDispatchState({
-          statusLabel,
-          statusTone,
-          message: msg.message || (ok ? "guard alert 전송 완료" : "guard alert 전송 실패"),
-          attemptedAtUtc,
-          sentCount: Number.isFinite(Number(msg.sentCount)) ? Number(msg.sentCount) : targets.filter((x) => x.status === "sent").length,
-          failedCount: Number.isFinite(Number(msg.failedCount)) ? Number(msg.failedCount) : targets.filter((x) => x.status === "failed").length,
-          skippedCount: Number.isFinite(Number(msg.skippedCount)) ? Number(msg.skippedCount) : targets.filter((x) => x.status === "skipped").length,
-          targets
-        });
-        log(`[guard-alert] ${msg.message || (ok ? "전송 완료" : "전송 실패")}`, ok ? "info" : "error");
-        return;
-      }
-
-      if (TOOL_RESULT_TYPES.has(msg.type)) {
-        pushToolResult(msg);
-        return;
-      }
-
-      if (msg.type === "error") {
-        const errorText = `오류: ${msg.message || "-"}`;
-        const targetKey = inferErrorKey(msg.message);
-        const rawMessage = typeof msg.message === "string" ? msg.message : "";
-        if (rootTab === "settings" && /(sessions_|cron|browser|canvas|nodes|telegram_stub|memory_|web_)/i.test(rawMessage)) {
-          setToolControlError(rawMessage);
-        }
-        if ((msg.message || "").toLowerCase().includes("unauthorized")) {
-          clearAuthToken();
-          setAuthed(false);
-          setStatus("인증 필요");
-          setCodingRuntimeByConversation((prev) => {
-            const entries = Object.entries(prev || {});
-            const pendingIds = entries.filter(([, runtime]) => runtime && runtime.pending).map(([conversationId]) => conversationId);
-            if (pendingIds.length === 0 && !currentConversationId) {
-              return prev;
-            }
-
-            const next = { ...prev };
-            pendingIds.forEach((conversationId) => {
-              next[conversationId] = buildCodingRuntimeMessageState(
-                "세션 인증이 만료되었습니다. 설정 탭에서 OTP 인증 후 다시 시도하세요.",
-                false,
-                false
-              );
-            });
-
-            if (currentConversationId && !next[currentConversationId]) {
-              next[currentConversationId] = buildCodingRuntimeMessageState(
-                "세션 인증이 만료되었습니다. 설정 탭에서 OTP 인증 후 다시 시도하세요.",
-                false,
-                false
-              );
-            }
-
-            return next;
-          });
-        }
-        finishPendingRequest(targetKey);
-        setError(targetKey, errorText);
-        log(errorText, "error");
-      }
+      });
     }
 
     useEffect(() => {

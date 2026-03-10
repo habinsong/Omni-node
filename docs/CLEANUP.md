@@ -30,6 +30,7 @@
 |---|---|---|
 | `workspace/coding/venv/` | 재생성 가능한 캐시 | 필요 없으면 삭제 가능 |
 | `node_modules/` | 재생성 가능한 캐시 | `npm ci`로 복구 가능 |
+| `output/playwright/` | 재생성 가능한 회귀 스크린샷 | 필요 없으면 삭제 가능 |
 | `apps/omninode-middleware/bin/` | 빌드 산출물 | 삭제 가능 |
 | `apps/omninode-middleware/obj/` | 빌드 산출물 | 삭제 가능 |
 | `workspace/.runtime/` | 회귀 결과/임시 분석물 | 보관 이유가 없으면 정리 가능 |
@@ -97,9 +98,9 @@ Omni-node 상태는 세 층으로 기억하면 덜 헷갈립니다.
 
 1. 기본 워크스페이스 예시를 `workspace/coding` 하나로만 쓰고 있는지 본다.
 2. `workspace/.runtime/`, `workspace/runtime/`에 남겨둘 이유 없는 임시 산출물이 쌓였는지 본다.
-3. `node_modules/`, `bin/`, `obj/`, `venv/`처럼 다시 만들 수 있는 캐시가 과하게 커졌는지 본다.
+3. `node_modules/`, `output/playwright/`, `bin/`, `obj/`, `venv/`처럼 다시 만들 수 있는 캐시가 과하게 커졌는지 본다.
 4. 지우기 전에 `~/.omninode`, `workspace/coding/runs/`, `workspace/coding/routines/` 중 무엇을 보존해야 하는지 먼저 판단한다.
-5. 점검은 `부팅 검증 -> readyz/WS roundtrip 확인 -> 기본 건강검진(npm test 가능 시) -> 샌드박스 직접 실행` 순서로 기억한다.
+5. 점검은 `부팅 검증 -> readyz/WS roundtrip 확인 -> 기본 건강검진(npm test 가능 시, repo hygiene gate 포함) -> 샌드박스 직접 실행` 순서로 기억한다.
 6. `~/.omninode/doctor/history/`는 보관 이유가 없을 때만 정리하고, 최신 진단이 필요하면 `last-report.json`은 남긴다.
 7. `~/.omninode/plans/`는 재생성 캐시가 아니라 계획 원본이므로, 진행 중인 작업을 다시 열 가능성이 있으면 지우지 않는다.
 8. `~/.omninode/tasks/`와 `workspace/.runtime/tasks/`는 Task graph 재개 근거가 되므로, 세션 복구가 필요하면 지우지 않는다.
