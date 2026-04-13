@@ -2,8 +2,6 @@ name: guard-alert-dispatch-regression
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "10 * * * *"
 
 jobs:
   guard-alert-dispatch:

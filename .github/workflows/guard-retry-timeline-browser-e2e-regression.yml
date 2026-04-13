@@ -2,8 +2,6 @@ name: guard-retry-timeline-browser-e2e-regression
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "25 * * * *"
 
 jobs:
   guard-retry-timeline-browser-e2e:
