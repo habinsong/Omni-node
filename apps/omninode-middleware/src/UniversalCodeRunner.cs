@@ -6,11 +6,15 @@ public sealed class UniversalCodeRunner
 {
     private readonly string _runsRootDir;
     private readonly int _timeoutSec;
+    private readonly string _pythonBinary;
 
-    public UniversalCodeRunner(string runsRootDir, int timeoutSec)
+    public UniversalCodeRunner(string runsRootDir, int timeoutSec, string? pythonBinary = null)
     {
         _runsRootDir = Path.GetFullPath(runsRootDir);
         _timeoutSec = Math.Max(10, timeoutSec);
+        _pythonBinary = string.IsNullOrWhiteSpace(pythonBinary)
+            ? (OperatingSystem.IsWindows() ? "python" : "python3")
+            : pythonBinary.Trim();
         Directory.CreateDirectory(_runsRootDir);
     }
 
@@ -22,11 +26,11 @@ public sealed class UniversalCodeRunner
 
         return normalizedLanguage switch
         {
-            "python" => await RunScriptAsync(runDir, "main.py", code, "python3 main.py", normalizedLanguage, cancellationToken),
+            "python" => await RunScriptAsync(runDir, "main.py", code, $"{QuoteShellCommand(_pythonBinary)} main.py", normalizedLanguage, cancellationToken),
             "javascript" => await RunScriptAsync(runDir, "main.js", code, "node main.js", normalizedLanguage, cancellationToken),
             "bash" => await RunScriptAsync(runDir, "main.sh", code, "bash main.sh", normalizedLanguage, cancellationToken, chmodX: true),
-            "c" => await RunCompiledAsync(runDir, "main.c", code, "cc -O2 main.c -o app", "./app", normalizedLanguage, cancellationToken),
-            "cpp" => await RunCompiledAsync(runDir, "main.cpp", code, "c++ -O2 -std=c++17 main.cpp -o app", "./app", normalizedLanguage, cancellationToken),
+            "c" => await RunCompiledAsync(runDir, "main.c", code, BuildNativeCompileCommand("cc", "main.c"), BuildNativeRunCommand(), normalizedLanguage, cancellationToken),
+            "cpp" => await RunCompiledAsync(runDir, "main.cpp", code, BuildNativeCompileCommand("c++", "main.cpp", "-std=c++17"), BuildNativeRunCommand(), normalizedLanguage, cancellationToken),
             "csharp" => await RunCSharpAsync(runDir, code, cancellationToken),
             "java" => await RunCompiledAsync(runDir, "Main.java", code, "javac Main.java", "java Main", normalizedLanguage, cancellationToken),
             "kotlin" => await RunCompiledAsync(runDir, "Main.kt", code, "kotlinc Main.kt -include-runtime -d app.jar", "java -jar app.jar", normalizedLanguage, cancellationToken),
@@ -247,6 +251,41 @@ public sealed class UniversalCodeRunner
 
             return new ShellRunResult(124, stdout, string.IsNullOrWhiteSpace(stderr) ? "execution timed out" : stderr, true);
         }
+    }
+
+    private static string BuildNativeCompileCommand(string compiler, string sourceFile, string? standardFlag = null)
+    {
+        var output = OperatingSystem.IsWindows() ? "app.exe" : "app";
+        var parts = new List<string> { compiler, "-O2" };
+        if (!string.IsNullOrWhiteSpace(standardFlag))
+        {
+            parts.Add(standardFlag);
+        }
+
+        parts.Add(sourceFile);
+        parts.Add("-o");
+        parts.Add(output);
+        return string.Join(" ", parts);
+    }
+
+    private static string BuildNativeRunCommand()
+    {
+        return OperatingSystem.IsWindows() ? "app.exe" : "./app";
+    }
+
+    private static string QuoteShellCommand(string value)
+    {
+        if (!value.Any(char.IsWhiteSpace))
+        {
+            return value;
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            return "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
+        }
+
+        return "'" + value.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
     }
 
     private static string NormalizeLanguage(string raw)

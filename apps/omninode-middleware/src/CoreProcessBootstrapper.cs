@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 
 namespace OmniNode.Middleware;
 
@@ -28,13 +29,20 @@ public sealed class CoreProcessBootstrapper
         }
 
         var workingDirectory = Path.GetDirectoryName(binaryPath) ?? Directory.GetCurrentDirectory();
-        using var launchProcess = Process.Start(new ProcessStartInfo
+        var startInfo = new ProcessStartInfo
         {
             FileName = binaryPath,
             UseShellExecute = false,
             CreateNoWindow = true,
             WorkingDirectory = workingDirectory
-        });
+        };
+        startInfo.Environment["OMNINODE_CORE_SOCKET_PATH"] = _config.CoreSocketPath;
+        if (UdsCoreClient.TryGetTcpPort(_config.CoreSocketPath, out var port))
+        {
+            startInfo.Environment["OMNINODE_CORE_TCP_PORT"] = port.ToString(CultureInfo.InvariantCulture);
+        }
+
+        using var launchProcess = Process.Start(startInfo);
         if (launchProcess == null)
         {
             Console.Error.WriteLine($"[core-bootstrap] failed to start core binary: {binaryPath}");
@@ -47,13 +55,13 @@ public sealed class CoreProcessBootstrapper
             await Task.Delay(250, cancellationToken);
             if (await IsCoreResponsiveAsync(cancellationToken))
             {
-                Console.WriteLine($"[core-bootstrap] core ready socket={_config.CoreSocketPath}");
+                Console.WriteLine($"[core-bootstrap] core ready endpoint={_config.CoreSocketPath}");
                 return;
             }
         }
 
         Console.Error.WriteLine(
-            $"[core-bootstrap] core start attempted but socket is still unavailable (socket={_config.CoreSocketPath}, binary={binaryPath})"
+            $"[core-bootstrap] core start attempted but endpoint is still unavailable (endpoint={_config.CoreSocketPath}, binary={binaryPath})"
         );
     }
 
@@ -76,12 +84,13 @@ public sealed class CoreProcessBootstrapper
     {
         var baseDir = AppContext.BaseDirectory;
         var cwd = Directory.GetCurrentDirectory();
+        var binaryName = OperatingSystem.IsWindows() ? "omninode_core.exe" : "omninode_core";
         var candidates = new[]
         {
-            Path.GetFullPath(Path.Combine(cwd, "apps/omninode-core/omninode_core")),
-            Path.GetFullPath(Path.Combine(cwd, "omninode-core/omninode_core")),
-            Path.GetFullPath(Path.Combine(baseDir, "../../../../../apps/omninode-core/omninode_core")),
-            Path.GetFullPath(Path.Combine(baseDir, "../../../../omninode-core/omninode_core"))
+            Path.GetFullPath(Path.Combine(cwd, "apps", "omninode-core", binaryName)),
+            Path.GetFullPath(Path.Combine(cwd, "omninode-core", binaryName)),
+            Path.GetFullPath(Path.Combine(baseDir, "../../../../../apps/omninode-core", binaryName)),
+            Path.GetFullPath(Path.Combine(baseDir, "../../../../omninode-core", binaryName))
         };
 
         return candidates.FirstOrDefault(File.Exists);

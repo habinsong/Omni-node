@@ -20,7 +20,7 @@ public sealed class GuardRetryTimelineStore
     public GuardRetryTimelineStore(string statePath, int maxEntries = DefaultMaxEntries)
     {
         _statePath = string.IsNullOrWhiteSpace(statePath)
-            ? Path.GetFullPath("/tmp/omninode_guard_retry_timeline.json")
+            ? Path.GetFullPath(Path.Combine(Path.GetTempPath(), "omninode_guard_retry_timeline.json"))
             : Path.GetFullPath(statePath);
         _maxEntries = Math.Clamp(maxEntries, 64, 4096);
         LoadFromDisk();

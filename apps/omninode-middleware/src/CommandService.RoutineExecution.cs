@@ -660,8 +660,7 @@ public sealed partial class CommandService
         var toolProfile = NormalizeRoutineAgentToolProfile(routine.AgentToolProfile, routine.AgentUsePlaywright);
         if (toolProfile == RoutineBrowserAgentToolProfileDesktopControl && !IsRoutineDesktopControlSupported())
         {
-            const string unsupportedDesktopControl = "desktop_control 브라우저 에이전트 프로필은 현재 macOS에서만 지원합니다.";
-            return Task.FromResult(new RoutineExecutionOutcome(unsupportedDesktopControl, "error", unsupportedDesktopControl));
+            toolProfile = RoutineBrowserAgentToolProfilePlaywrightOnly;
         }
 
         var startUrl = !string.IsNullOrWhiteSpace(routine.AgentStartUrl)

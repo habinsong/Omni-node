@@ -245,7 +245,7 @@ public sealed partial class CommandService :
         if (string.IsNullOrWhiteSpace(stateBaseDir))
         {
             var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            stateBaseDir = string.IsNullOrWhiteSpace(home) ? "/tmp" : Path.Combine(home, ".omninode");
+            stateBaseDir = string.IsNullOrWhiteSpace(home) ? Path.GetTempPath() : Path.Combine(home, ".omninode");
         }
 
         _routineStatePath = _routineStore.StorePath;

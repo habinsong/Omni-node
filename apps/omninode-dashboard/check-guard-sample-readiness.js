@@ -3,6 +3,7 @@
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 
 const REQUIRED_CHANNELS = ["chat", "coding", "telegram"];
@@ -83,7 +84,7 @@ function resolveStatePath(explicitPath) {
     return path.resolve(envPath);
   }
 
-  return "/tmp/omninode_guard_retry_timeline.json";
+  return path.join(os.tmpdir(), "omninode_guard_retry_timeline.json");
 }
 
 function readJson(filePath, label) {

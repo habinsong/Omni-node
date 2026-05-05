@@ -153,7 +153,7 @@ public sealed class MemoryIndexSchemaBootstrap
             return Path.Combine(home, ".omninode");
         }
 
-        return "/tmp";
+        return Path.GetTempPath();
     }
 
     private static string EscapeSql(string value)

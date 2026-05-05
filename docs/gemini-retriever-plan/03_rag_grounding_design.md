@@ -75,7 +75,7 @@
 ## 8. 보안/키 정책
 - 설정 탭 저장 Gemini 키만 사용
 - macOS: keychain
-- Linux: secure_file_600
+- Windows/Linux: secure_file_600 또는 로컬 secure store
 - 키 평문 로그 금지
 
 ## 9. 완료 기준

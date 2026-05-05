@@ -77,18 +77,32 @@ function ensureAliasTargets() {
     if (!stat) {
       throw new Error(`하위 호환 alias가 없습니다: ${entry.path}`);
     }
-    if (!stat.isSymbolicLink()) {
-      throw new Error(`하위 호환 alias는 심볼릭 링크여야 합니다: ${entry.path}`);
-    }
-
-    const rawTarget = readlinkSync(toAbsolute(entry.path));
-    const normalizedTarget = path.normalize(rawTarget);
     const expectedTarget = path.normalize(entry.target);
-    if (normalizedTarget !== expectedTarget) {
-      throw new Error(`하위 호환 alias 대상이 다릅니다: ${entry.path} -> ${rawTarget} (expected: ${entry.target})`);
+
+    if (stat.isSymbolicLink()) {
+      const rawTarget = readlinkSync(toAbsolute(entry.path));
+      const normalizedTarget = path.normalize(rawTarget);
+      if (normalizedTarget !== expectedTarget) {
+        throw new Error(`하위 호환 alias 대상이 다릅니다: ${entry.path} -> ${rawTarget} (expected: ${entry.target})`);
+      }
+
+      return { path: entry.path, target: normalizedTarget, kind: "symlink" };
     }
 
-    return { path: entry.path, target: normalizedTarget };
+    if (process.platform === "win32") {
+      if (stat.isDirectory()) {
+        return { path: entry.path, target: expectedTarget, kind: "directory_alias" };
+      }
+
+      if (stat.isFile()) {
+        const fileTarget = readFileSync(toAbsolute(entry.path), "utf8").trim();
+        if (path.normalize(fileTarget) === expectedTarget) {
+          return { path: entry.path, target: expectedTarget, kind: "git_symlink_placeholder" };
+        }
+      }
+    }
+
+    throw new Error(`하위 호환 alias는 심볼릭 링크여야 합니다: ${entry.path}`);
   });
 }
 
@@ -129,14 +143,14 @@ function ensureArtifactsAreUntracked() {
 function main() {
   REQUIRED_DIRECTORIES.forEach(ensureDirectory);
   const canonicalDirectories = OPTIONAL_CANONICAL_DIRECTORIES.map(inspectCanonicalDirectory);
-  const aliasSymlinks = ensureAliasTargets();
+  const aliases = ensureAliasTargets();
   ensureGitignorePatterns();
   const trackedArtifactCounts = ensureArtifactsAreUntracked();
 
   console.log(JSON.stringify({
     ok: true,
     canonicalDirectories,
-    aliasSymlinks,
+    aliases,
     trackedArtifactCounts
   }, null, 2));
 }

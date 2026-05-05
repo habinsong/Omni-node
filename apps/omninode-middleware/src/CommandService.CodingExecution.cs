@@ -427,13 +427,22 @@ public sealed partial class CommandService
         CancellationToken cancellationToken
     )
     {
-        var checkResult = await RunWorkspaceCommandAsync("command -v python3 >/dev/null 2>&1 && python3 -m pip --version >/dev/null 2>&1", workDir, cancellationToken);
+        var checkCommand = OperatingSystem.IsWindows()
+            ? "python --version >NUL 2>NUL && python -m pip --version >NUL 2>NUL"
+            : "command -v python3 >/dev/null 2>&1 && python3 -m pip --version >/dev/null 2>&1";
+        var checkResult = await RunWorkspaceCommandAsync(checkCommand, workDir, cancellationToken);
         if (checkResult.ExitCode == 0)
         {
             return true;
         }
 
-        return await InstallPythonRuntimeToolchainAsync("python3", workDir, logs, errors, cancellationToken);
+        return await InstallPythonRuntimeToolchainAsync(
+            OperatingSystem.IsWindows() ? "python" : "python3",
+            workDir,
+            logs,
+            errors,
+            cancellationToken
+        );
     }
 
     private async Task<bool> InstallNodeRuntimeToolchainAsync(
@@ -502,12 +511,16 @@ public sealed partial class CommandService
 
     private static string BuildPipRequirementsInstallCommand(string requirementsPath)
     {
-        return $"python3 -m pip install --disable-pip-version-check --user --break-system-packages -r {EscapeShellArg(requirementsPath)}";
+        var python = OperatingSystem.IsWindows() ? "python" : "python3";
+        var breakSystemPackages = OperatingSystem.IsWindows() ? string.Empty : " --break-system-packages";
+        return $"{python} -m pip install --disable-pip-version-check --user{breakSystemPackages} -r {EscapeShellArg(requirementsPath)}";
     }
 
     private static string BuildPipPackageInstallCommand(IEnumerable<string> packages)
     {
-        return $"python3 -m pip install --disable-pip-version-check --user --break-system-packages {string.Join(" ", packages.Select(EscapeShellArg))}";
+        var python = OperatingSystem.IsWindows() ? "python" : "python3";
+        var breakSystemPackages = OperatingSystem.IsWindows() ? string.Empty : " --break-system-packages";
+        return $"{python} -m pip install --disable-pip-version-check --user{breakSystemPackages} {string.Join(" ", packages.Select(EscapeShellArg))}";
     }
 
     private async Task<bool> InstallPythonRuntimeToolchainAsync(
@@ -546,6 +559,12 @@ public sealed partial class CommandService
             var installResult = await RunWorkspaceCommandAsync(aptInstall, workDir, cancellationToken);
             AppendInstallOutcome($"Python 런타임 설치({program})", aptInstall, installResult, logs, errors);
             return installResult.ExitCode == 0;
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            errors.Add($"Python 런타임 자동 설치 미지원 OS ({program}). Python 3을 설치하고 PATH에 python을 추가하세요.");
+            return false;
         }
 
         errors.Add($"Python 런타임 자동 설치 미지원 OS ({program})");
@@ -1231,6 +1250,11 @@ public sealed partial class CommandService
 
     private static string EscapeShellArg(string value)
     {
+        if (OperatingSystem.IsWindows())
+        {
+            return "\"" + (value ?? string.Empty).Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
+        }
+
         return $"'{(value ?? string.Empty).Replace("'", "'\"'\"'", StringComparison.Ordinal)}'";
     }
 

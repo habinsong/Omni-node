@@ -1,8 +1,9 @@
 import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dashboardDir = path.join(repoRoot, "apps", "omninode-dashboard");
 const dashboardModulesDir = path.join(dashboardDir, "modules");
 

@@ -73,7 +73,7 @@ internal static class Program
         var planStore = new FilePlanStore(pathResolver);
         var taskGraphStore = new FileTaskGraphStore(pathResolver);
         IRunArtifactStore runArtifactStore = new FileRunArtifactStore(config.RoutineRunsRootDir);
-        var codeRunner = new UniversalCodeRunner(config.CodeRunsRootDir, config.CodeExecutionTimeoutSec);
+        var codeRunner = new UniversalCodeRunner(config.CodeRunsRootDir, config.CodeExecutionTimeoutSec, config.PythonBinary);
         var providerRegistry = new ProviderRegistry(llmRouter, copilotWrapper, codexWrapper);
         var routingPolicyStore = new FileRoutingPolicyStore(pathResolver);
         var routingPolicyResolver = new RoutingPolicyResolver(routingPolicyStore);
@@ -272,7 +272,7 @@ internal static class Program
             telegramReplyOutboxStore
         );
 
-        Console.WriteLine($"[middleware] starting (ws={config.WebSocketPort}, uds={config.CoreSocketPath})");
+        Console.WriteLine($"[middleware] starting (ws={config.WebSocketPort}, core={config.CoreSocketPath})");
 
         var webTask = webSocketGateway.RunAsync(cts.Token);
         if (config.EnableGatewayStartupProbe)

@@ -93,7 +93,9 @@ public sealed class CopilotCliWrapper
         _ghBinaryPath = ghBinaryPath;
         _copilotBinaryPath = copilotBinaryPath;
         _selectedModel = NormalizeSelectedModel(defaultModel);
-        _usageStatePath = string.IsNullOrWhiteSpace(usageStatePath) ? "/tmp/omninode_copilot_usage.json" : usageStatePath.Trim();
+        _usageStatePath = string.IsNullOrWhiteSpace(usageStatePath)
+            ? Path.Combine(Path.GetTempPath(), "omninode_copilot_usage.json")
+            : usageStatePath.Trim();
         _requestTimeoutSec = Math.Max(10, requestTimeoutSec);
         LoadState();
     }

@@ -17,7 +17,7 @@ Gemini 검색 리트리버 기반 구조를 Omni-node에 적용하기 위한 실
 - `Evidence Pack` 외부 사실 단정은 금지한다.
 - `fail-closed`와 `count-lock` 정책을 기본 적용한다.
 - 설정 탭 Gemini API Key 저장값만 사용한다.
-- macOS는 Keychain, Linux는 600 권한 저장소 값을 사용한다.
+- macOS는 Keychain, Windows/Linux는 600 권한 파일 또는 로컬 secure store 값을 사용한다.
 - 환경변수 직접 주입 키를 테스트/검증/회귀/실행 경로에서 허용하지 않는다.
 
 ## 문서 목록

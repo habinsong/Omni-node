@@ -29,6 +29,7 @@ PID_FILE="${STATE_DIR}/middleware.pid"
 CORE_PIDS_FILE="${STATE_DIR}/core.pids"
 LOG_FILE="${STATE_DIR}/middleware.log"
 META_FILE="${STATE_DIR}/last-start.env"
+SETUP_MARKER_FILE="${STATE_DIR}/setup-complete"
 MIDDLEWARE_PROJECT="${REPO_ROOT}/apps/omninode-middleware/OmniNode.Middleware.csproj"
 CORE_BINARY="${REPO_ROOT}/apps/omninode-core/omninode_core"
 PACKAGE_LOCK="${REPO_ROOT}/package-lock.json"
@@ -38,7 +39,7 @@ DEFAULT_BASE_URL="http://127.0.0.1:${DEFAULT_PORT}"
 usage() {
   cat <<'EOF'
 사용법:
-  Omni-node           서버 시작
+  Omni-node           서버 시작 (첫 실행이면 setup 자동 실행)
   Omni-node shutdown  서버 종료
   Omni-node setup     의존성 설치, 빌드, 검증, 명령 등록
 EOF
@@ -162,6 +163,35 @@ ensure_runtime_commands() {
   fi
 }
 
+has_node_modules() {
+  [ -d "${REPO_ROOT}/node_modules" ]
+}
+
+is_setup_complete() {
+  [ -f "$SETUP_MARKER_FILE" ] || return 1
+  [ -x "$CORE_BINARY" ] || return 1
+  has_node_modules || return 1
+  return 0
+}
+
+write_setup_marker() {
+  ensure_state_dir
+  cat > "$SETUP_MARKER_FILE" <<EOF
+repo=$REPO_ROOT
+script=$SCRIPT_PATH
+completed_at=$(date '+%Y-%m-%d %H:%M:%S %z')
+EOF
+}
+
+ensure_setup_if_needed() {
+  if is_setup_complete; then
+    return 0
+  fi
+
+  info "첫 실행이거나 setup 상태가 없어 자동 setup을 시작합니다."
+  run_setup
+}
+
 ensure_core_binary() {
   if [ -x "$CORE_BINARY" ]; then
     return
@@ -223,6 +253,7 @@ EOF
 start_server() {
   ensure_state_dir
   cleanup_stale_state
+  ensure_setup_if_needed
   ensure_runtime_commands
 
   local current_pid
@@ -422,19 +453,53 @@ brew_install_cask_if_missing() {
   brew list --cask "$cask_name" >/dev/null 2>&1 || brew install --cask "$cask_name"
 }
 
-run_setup() {
-  if [ "$(uname -s)" != "Darwin" ]; then
-    fail "현재 setup 자동 설치는 macOS(Homebrew)만 지원합니다."
+apt_install_packages_if_command_missing() {
+  local command_name="$1"
+  shift
+  local packages=("$@")
+  if command_exists "$command_name"; then
+    return 0
   fi
 
-  command_exists brew || fail "Homebrew가 필요합니다. 먼저 Homebrew를 설치하세요."
-  ensure_macos_build_tools
+  command_exists apt-get || fail "apt-get을 찾지 못했습니다. 필요한 도구를 직접 설치하세요: ${packages[*]}"
+  info "apt-get으로 ${packages[*]} 설치 중"
+  if [ "$(id -u)" -eq 0 ]; then
+    apt-get update
+    apt-get install -y "${packages[@]}"
+    return 0
+  fi
 
-  brew_install_formula_if_missing node node
-  brew_install_formula_if_missing npm node
-  brew_install_formula_if_missing python3 python
-  brew_install_formula_if_missing sqlite3 sqlite
-  brew_install_cask_if_missing dotnet dotnet-sdk
+  command_exists sudo || fail "sudo가 없어 패키지 자동 설치를 할 수 없습니다: ${packages[*]}"
+  sudo -n apt-get update
+  sudo -n apt-get install -y "${packages[@]}"
+}
+
+run_setup() {
+  case "$(uname -s)" in
+    Darwin)
+      command_exists brew || fail "Homebrew가 필요합니다. 먼저 Homebrew를 설치하세요."
+      ensure_macos_build_tools
+
+      brew_install_formula_if_missing node node
+      brew_install_formula_if_missing npm node
+      brew_install_formula_if_missing python3 python
+      brew_install_formula_if_missing sqlite3 sqlite
+      brew_install_cask_if_missing dotnet dotnet-sdk
+      ;;
+    Linux)
+      apt_install_packages_if_command_missing cc build-essential
+      apt_install_packages_if_command_missing make build-essential
+      apt_install_packages_if_command_missing node nodejs
+      apt_install_packages_if_command_missing npm npm
+      apt_install_packages_if_command_missing python3 python3 python3-pip
+      apt_install_packages_if_command_missing sqlite3 sqlite3
+      apt_install_packages_if_command_missing curl curl
+      apt_install_packages_if_command_missing dotnet dotnet-sdk-9.0
+      ;;
+    *)
+      fail "현재 setup 자동 설치는 macOS(Homebrew)와 Linux(apt-get)만 지원합니다. Windows에서는 scripts/Omni-node.ps1을 사용하세요."
+      ;;
+  esac
 
   install_cli_link
 
@@ -453,6 +518,7 @@ run_setup() {
   info "통합 테스트"
   (cd "$REPO_ROOT" && npm test)
 
+  write_setup_marker
   info "setup 완료"
 }
 

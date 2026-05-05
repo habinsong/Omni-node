@@ -275,10 +275,19 @@ internal static class SecretLoader
 
     private static string GetLocalSecureStorePath()
     {
+        if (OperatingSystem.IsWindows())
+        {
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            if (!string.IsNullOrWhiteSpace(appData))
+            {
+                return Path.Combine(appData, "omninode", "secrets.json");
+            }
+        }
+
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         if (string.IsNullOrWhiteSpace(home))
         {
-            return "/tmp/omninode_secrets.json";
+            return Path.Combine(Path.GetTempPath(), "omninode_secrets.json");
         }
 
         return Path.Combine(home, ".config", "omninode", "secrets.json");

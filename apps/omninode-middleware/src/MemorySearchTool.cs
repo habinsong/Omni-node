@@ -179,7 +179,7 @@ public sealed class MemorySearchTool
             return Path.Combine(home, ".omninode");
         }
 
-        return "/tmp";
+        return Path.GetTempPath();
     }
 
     private static int NormalizeMaxResults(int? value)

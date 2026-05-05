@@ -30,7 +30,7 @@
 ## 키 정책 강제 규칙
 - 설정 탭 저장값을 사용한다. 그중, Gemini 관련은 설정탭에 저장된 Gemini API Key(키체인 저장됨) 를 사용한다.
 - macOS는 keychain 저장값을 사용한다.
-- Linux는 600 권한 저장소 값을 사용한다.
+- Windows/Linux는 600 권한 파일 또는 로컬 secure store 값을 사용한다.
 
 ## 실행 방법
 

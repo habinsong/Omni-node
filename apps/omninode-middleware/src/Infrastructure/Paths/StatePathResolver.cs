@@ -202,6 +202,11 @@ public sealed class DefaultStatePathResolver : IStatePathResolver
 
     private static string ResolveDefaultCoreSocketPath()
     {
+        if (OperatingSystem.IsWindows())
+        {
+            return "tcp://127.0.0.1:51808";
+        }
+
         try
         {
             var uid = GetCurrentUnixUid();
@@ -245,7 +250,7 @@ public sealed class DefaultStatePathResolver : IStatePathResolver
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         if (string.IsNullOrWhiteSpace(home))
         {
-            return "/tmp";
+            return Path.Combine(Path.GetTempPath(), "omninode");
         }
 
         return Path.Combine(home, ".omninode");

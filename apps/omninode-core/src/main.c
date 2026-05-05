@@ -1,35 +1,55 @@
+#ifndef _WIN32
 #define _GNU_SOURCE
+#endif
 #include <ctype.h>
 #include <errno.h>
-#include <fcntl.h>
-#include <poll.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
+#include <windows.h>
+#pragma comment(lib, "Ws2_32.lib")
+#else
+#include <fcntl.h>
+#include <poll.h>
 #include <sys/file.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <unistd.h>
+#endif
 
+#ifndef _WIN32
 #define LOCK_PATH_TEMPLATE "/tmp/omninode.%u.lock"
 #define SOCKET_PATH_TEMPLATE "/tmp/omninode_core.%u.sock"
+#endif
+#define WINDOWS_DEFAULT_CORE_PORT 51808
 #define MAX_CLIENTS 64
 #define IO_BUFFER_SIZE 4096
 
 static volatile sig_atomic_t g_should_stop = 0;
+#ifdef _WIN32
+static HANDLE g_lock_handle = NULL;
+#else
 static int g_lock_fd = -1;
 static char g_lock_path[108] = {0};
 static char g_socket_path[108] = {0};
+#endif
 
 static void on_signal(int signo) {
     (void)signo;
     g_should_stop = 1;
 }
 
+#ifndef _WIN32
 static int set_nonblocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags < 0) {
@@ -174,6 +194,100 @@ static bool validate_peer_uid(int client_fd) {
     return true;
 #endif
 }
+#endif
+
+#ifdef _WIN32
+static int set_nonblocking(SOCKET fd) {
+    u_long mode = 1;
+    return ioctlsocket(fd, FIONBIO, &mode) == 0 ? 0 : -1;
+}
+
+static int acquire_single_instance_lock(void) {
+    g_lock_handle = CreateMutexA(NULL, TRUE, "Local\\OmniNodeCore");
+    if (g_lock_handle == NULL) {
+        fprintf(stderr, "failed to create mutex: %lu\n", GetLastError());
+        return -1;
+    }
+
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        fprintf(stderr, "omninode_core is already running (mutex: Local\\OmniNodeCore)\n");
+        CloseHandle(g_lock_handle);
+        g_lock_handle = NULL;
+        return -1;
+    }
+
+    return 0;
+}
+
+static unsigned short parse_port_value(const char *value, unsigned short fallback) {
+    char *endptr = NULL;
+    long parsed = 0;
+    if (value == NULL || *value == '\0') {
+        return fallback;
+    }
+
+    parsed = strtol(value, &endptr, 10);
+    if (endptr == value || parsed <= 0 || parsed > 65535) {
+        return fallback;
+    }
+
+    return (unsigned short)parsed;
+}
+
+static unsigned short resolve_windows_core_port(void) {
+    const char *port_env = getenv("OMNINODE_CORE_TCP_PORT");
+    const char *endpoint_env = getenv("OMNINODE_CORE_SOCKET_PATH");
+    const char *tcp_prefix = "tcp://127.0.0.1:";
+
+    if (port_env != NULL && *port_env != '\0') {
+        return parse_port_value(port_env, WINDOWS_DEFAULT_CORE_PORT);
+    }
+
+    if (endpoint_env != NULL && strncmp(endpoint_env, tcp_prefix, strlen(tcp_prefix)) == 0) {
+        return parse_port_value(endpoint_env + strlen(tcp_prefix), WINDOWS_DEFAULT_CORE_PORT);
+    }
+
+    return WINDOWS_DEFAULT_CORE_PORT;
+}
+
+static SOCKET setup_server_socket(unsigned short port) {
+    SOCKET server_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    struct sockaddr_in addr;
+    BOOL reuse = TRUE;
+
+    if (server_fd == INVALID_SOCKET) {
+        fprintf(stderr, "socket failed: %d\n", WSAGetLastError());
+        return INVALID_SOCKET;
+    }
+
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse, sizeof(reuse));
+
+    if (set_nonblocking(server_fd) != 0) {
+        fprintf(stderr, "ioctlsocket failed: %d\n", WSAGetLastError());
+        closesocket(server_fd);
+        return INVALID_SOCKET;
+    }
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = htons(port);
+
+    if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
+        fprintf(stderr, "bind failed: %d\n", WSAGetLastError());
+        closesocket(server_fd);
+        return INVALID_SOCKET;
+    }
+
+    if (listen(server_fd, 64) != 0) {
+        fprintf(stderr, "listen failed: %d\n", WSAGetLastError());
+        closesocket(server_fd);
+        return INVALID_SOCKET;
+    }
+
+    return server_fd;
+}
+#endif
 
 static bool extract_json_string(const char *json, const char *key, char *out, size_t out_len) {
     char pattern[128];
@@ -247,6 +361,16 @@ static bool extract_json_int64(const char *json, const char *key, long long *val
 }
 
 static long get_mem_free_mb(void) {
+#ifdef _WIN32
+    MEMORYSTATUSEX status;
+    memset(&status, 0, sizeof(status));
+    status.dwLength = sizeof(status);
+    if (!GlobalMemoryStatusEx(&status)) {
+        return -1;
+    }
+
+    return (long)(status.ullAvailPhys / (1024ULL * 1024ULL));
+#else
 #if defined(_SC_AVPHYS_PAGES)
     long pages = sysconf(_SC_AVPHYS_PAGES);
 #elif defined(_SC_PHYS_PAGES)
@@ -261,18 +385,49 @@ static long get_mem_free_mb(void) {
     }
 
     return (long)(((double)pages * (double)page_size) / (1024.0 * 1024.0));
+#endif
 }
 
 static double get_cpu_load_1m(void) {
+#ifdef _WIN32
+    return -1.0;
+#else
     double loadavg[3] = {0.0, 0.0, 0.0};
     if (getloadavg(loadavg, 1) == 1) {
         return loadavg[0];
     }
     return -1.0;
+#endif
 }
 
 static void build_error_response(char *out, size_t out_len, const char *message) {
     snprintf(out, out_len, "{\"status\":\"error\",\"message\":\"%s\"}", message);
+}
+
+static bool terminate_process_by_pid(long long pid, char *error_msg, size_t error_msg_len) {
+#ifdef _WIN32
+    HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE, (DWORD)pid);
+    if (process == NULL) {
+        snprintf(error_msg, error_msg_len, "open process failed: %lu", GetLastError());
+        return false;
+    }
+
+    if (!TerminateProcess(process, 1)) {
+        snprintf(error_msg, error_msg_len, "terminate failed: %lu", GetLastError());
+        CloseHandle(process);
+        return false;
+    }
+
+    CloseHandle(process);
+    return true;
+#else
+    if (kill((pid_t)pid, SIGTERM) != 0) {
+        snprintf(error_msg, error_msg_len, "kill failed: %s", strerror(errno));
+        return false;
+    }
+
+    return true;
+#endif
 }
 
 static void handle_request(const char *request, char *response, size_t response_len) {
@@ -306,9 +461,8 @@ static void handle_request(const char *request, char *response, size_t response_
             build_error_response(response, response_len, "invalid pid");
             return;
         }
-        if (kill((pid_t)pid, SIGTERM) != 0) {
-            char error_msg[128];
-            snprintf(error_msg, sizeof(error_msg), "kill failed: %s", strerror(errno));
+        char error_msg[128];
+        if (!terminate_process_by_pid(pid, error_msg, sizeof(error_msg))) {
             build_error_response(response, response_len, error_msg);
             return;
         }
@@ -320,6 +474,7 @@ static void handle_request(const char *request, char *response, size_t response_
     build_error_response(response, response_len, "unknown action");
 }
 
+#ifndef _WIN32
 static void close_client(struct pollfd *entry) {
     if (entry->fd >= 0) {
         close(entry->fd);
@@ -466,3 +621,147 @@ int main(void) {
     fprintf(stderr, "omninode_core stopped\n");
     return 0;
 }
+#else
+static bool register_windows_client(SOCKET *clients, SOCKET client_fd) {
+    for (int i = 0; i < MAX_CLIENTS; ++i) {
+        if (clients[i] == INVALID_SOCKET) {
+            clients[i] = client_fd;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void close_windows_client(SOCKET *client_fd) {
+    if (*client_fd != INVALID_SOCKET) {
+        closesocket(*client_fd);
+        *client_fd = INVALID_SOCKET;
+    }
+}
+
+int main(void) {
+    WSADATA wsa_data;
+    SOCKET server_fd = INVALID_SOCKET;
+    SOCKET clients[MAX_CLIENTS];
+    unsigned short port = resolve_windows_core_port();
+
+    if (WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0) {
+        fprintf(stderr, "WSAStartup failed\n");
+        return 1;
+    }
+
+    if (acquire_single_instance_lock() != 0) {
+        WSACleanup();
+        return 1;
+    }
+
+    signal(SIGINT, on_signal);
+    signal(SIGTERM, on_signal);
+
+    server_fd = setup_server_socket(port);
+    if (server_fd == INVALID_SOCKET) {
+        if (g_lock_handle != NULL) {
+            CloseHandle(g_lock_handle);
+            g_lock_handle = NULL;
+        }
+        WSACleanup();
+        return 1;
+    }
+
+    for (int i = 0; i < MAX_CLIENTS; ++i) {
+        clients[i] = INVALID_SOCKET;
+    }
+
+    fprintf(stderr, "omninode_core started (tcp=127.0.0.1:%u, lock=Local\\OmniNodeCore)\n", (unsigned int)port);
+
+    while (!g_should_stop) {
+        fd_set read_fds;
+        struct timeval timeout;
+        int ready = 0;
+
+        FD_ZERO(&read_fds);
+        FD_SET(server_fd, &read_fds);
+        for (int i = 0; i < MAX_CLIENTS; ++i) {
+            if (clients[i] != INVALID_SOCKET) {
+                FD_SET(clients[i], &read_fds);
+            }
+        }
+
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 500000;
+        ready = select(0, &read_fds, NULL, NULL, &timeout);
+        if (ready == SOCKET_ERROR) {
+            fprintf(stderr, "select failed: %d\n", WSAGetLastError());
+            break;
+        }
+
+        if (ready == 0) {
+            continue;
+        }
+
+        if (FD_ISSET(server_fd, &read_fds)) {
+            while (true) {
+                SOCKET client_fd = accept(server_fd, NULL, NULL);
+                if (client_fd == INVALID_SOCKET) {
+                    int error_code = WSAGetLastError();
+                    if (error_code == WSAEWOULDBLOCK) {
+                        break;
+                    }
+                    fprintf(stderr, "accept failed: %d\n", error_code);
+                    break;
+                }
+
+                if (set_nonblocking(client_fd) != 0) {
+                    fprintf(stderr, "ioctlsocket(client) failed: %d\n", WSAGetLastError());
+                    closesocket(client_fd);
+                    continue;
+                }
+
+                if (!register_windows_client(clients, client_fd)) {
+                    const char *busy_msg = "{\"status\":\"error\",\"message\":\"server busy\"}\n";
+                    send(client_fd, busy_msg, (int)strlen(busy_msg), 0);
+                    closesocket(client_fd);
+                }
+            }
+        }
+
+        for (int i = 0; i < MAX_CLIENTS; ++i) {
+            char input[IO_BUFFER_SIZE];
+            char output[IO_BUFFER_SIZE];
+            int n = 0;
+
+            if (clients[i] == INVALID_SOCKET || !FD_ISSET(clients[i], &read_fds)) {
+                continue;
+            }
+
+            n = recv(clients[i], input, sizeof(input) - 1, 0);
+            if (n <= 0) {
+                close_windows_client(&clients[i]);
+                continue;
+            }
+
+            input[n] = '\0';
+            memset(output, 0, sizeof(output));
+            handle_request(input, output, sizeof(output));
+            send(clients[i], output, (int)strlen(output), 0);
+            send(clients[i], "\n", 1, 0);
+            close_windows_client(&clients[i]);
+        }
+    }
+
+    for (int i = 0; i < MAX_CLIENTS; ++i) {
+        close_windows_client(&clients[i]);
+    }
+
+    closesocket(server_fd);
+    if (g_lock_handle != NULL) {
+        CloseHandle(g_lock_handle);
+        g_lock_handle = NULL;
+    }
+    WSACleanup();
+
+    fprintf(stderr, "omninode_core stopped\n");
+    return 0;
+}
+#endif

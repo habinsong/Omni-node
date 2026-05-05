@@ -20,7 +20,7 @@ public sealed class AppConfig
     public string CopilotModel { get; init; } = "gpt-5-mini";
     public string CodexBinary { get; init; } = "codex";
     public string CodexModel { get; init; } = "gpt-5.4";
-    public string PythonBinary { get; init; } = "python3";
+    public string PythonBinary { get; init; } = ResolveDefaultPythonBinary();
     public string SandboxExecutorPath { get; init; } = ResolveDefaultSandboxExecutorPath();
     public string DashboardIndexPath { get; init; } = ResolveDefaultDashboardIndexPath();
     public bool EnableDynamicCode { get; init; }
@@ -40,20 +40,20 @@ public sealed class AppConfig
     public string? CodexApiKey { get; init; }
     public decimal GeminiInputPricePerMillionUsd { get; init; } = 0.50m;
     public decimal GeminiOutputPricePerMillionUsd { get; init; } = 3.00m;
-    public string LlmUsageStatePath { get; init; } = "/tmp/omninode_llm_usage.json";
-    public string CopilotUsageStatePath { get; init; } = "/tmp/omninode_copilot_usage.json";
-    public string ConversationStatePath { get; init; } = "/tmp/omninode_conversations.json";
-    public string AuthSessionStatePath { get; init; } = "/tmp/omninode_auth_sessions.json";
-    public string MemoryNotesRootDir { get; init; } = "/tmp/omninode_memory_notes";
+    public string LlmUsageStatePath { get; init; } = ResolveDefaultStateFilePath("llm_usage.json");
+    public string CopilotUsageStatePath { get; init; } = ResolveDefaultStateFilePath("copilot_usage.json");
+    public string ConversationStatePath { get; init; } = ResolveDefaultStateFilePath("conversations.json");
+    public string AuthSessionStatePath { get; init; } = ResolveDefaultStateFilePath("auth_sessions.json");
+    public string MemoryNotesRootDir { get; init; } = ResolveDefaultStateDirectoryPath("memory-notes");
     public int ConversationCompressChars { get; init; } = 12000;
     public int ConversationKeepRecentMessages { get; init; } = 16;
     public int ConversationHistoryMessages { get; init; } = 18;
-    public string CodeRunsRootDir { get; init; } = "/tmp/omninode_code_runs";
+    public string CodeRunsRootDir { get; init; } = ResolveDefaultStateDirectoryPath("code-runs");
     public string RoutineRunsRootDir { get; init; } = Path.Combine(ResolveDefaultWorkspaceRootDir(), "routines");
     public int CodeExecutionTimeoutSec { get; init; } = 120;
     public string WorkspaceRootDir { get; init; } = ResolveDefaultWorkspaceRootDir();
-    public string RoutineStatePath { get; init; } = "/tmp/omninode_routines.json";
-    public string RoutinePromptDir { get; init; } = "/tmp/omninode_routine_prompts";
+    public string RoutineStatePath { get; init; } = ResolveDefaultStateFilePath("routines.json");
+    public string RoutinePromptDir { get; init; } = Path.Combine(ResolveDefaultWorkspaceRootDir(), "_routine_prompts");
     public int CodingAgentMaxIterations { get; init; } = 6;
     public int CodingAgentMaxActionsPerIteration { get; init; } = 8;
     public int CodingCopilotMaxActionsPerIteration { get; init; } = 2;
@@ -72,14 +72,14 @@ public sealed class AppConfig
     public int WebSocketCommandsPerMinute { get; init; } = 30;
     public int MetricsPushIntervalSec { get; init; } = 2;
     public int CommandMaxLength { get; init; } = 800;
-    public string AuditLogPath { get; init; } = "/tmp/omninode_audit.log";
+    public string AuditLogPath { get; init; } = ResolveDefaultStateFilePath("audit.log");
     public string GuardAlertWebhookUrl { get; init; } = string.Empty;
     public string GuardAlertLogCollectorUrl { get; init; } = string.Empty;
     public int GuardAlertDispatchTimeoutMs { get; init; } = 3500;
     public int GuardAlertDispatchMaxAttempts { get; init; } = 2;
-    public string GuardRetryTimelineStatePath { get; init; } = "/tmp/omninode_guard_retry_timeline.json";
-    public string GatewayHealthStatePath { get; init; } = "/tmp/omninode_gateway_health.json";
-    public string GatewayStartupProbeStatePath { get; init; } = "/tmp/omninode_gateway_startup_probe.json";
+    public string GuardRetryTimelineStatePath { get; init; } = ResolveDefaultStateFilePath("guard_retry_timeline.json");
+    public string GatewayHealthStatePath { get; init; } = ResolveDefaultStateFilePath("gateway_health.json");
+    public string GatewayStartupProbeStatePath { get; init; } = ResolveDefaultStateFilePath("gateway_startup_probe.json");
     public bool EnableHealthEndpoint { get; init; } = true;
     public bool EnableGatewayStartupProbe { get; init; }
     public int GatewayStartupProbeDelayMs { get; init; } = 250;
@@ -128,7 +128,7 @@ public sealed class AppConfig
             CopilotModel = GetStringEnv("OMNINODE_COPILOT_MODEL", "gpt-5-mini"),
             CodexBinary = GetStringEnv("OMNINODE_CODEX_BIN", "codex"),
             CodexModel = GetStringEnv("OMNINODE_CODEX_MODEL", "gpt-5.4"),
-            PythonBinary = GetStringEnv("OMNINODE_PYTHON_BIN", "python3"),
+            PythonBinary = GetStringEnv("OMNINODE_PYTHON_BIN", ResolveDefaultPythonBinary()),
             SandboxExecutorPath = GetStringEnv("OMNINODE_SANDBOX_EXECUTOR", ResolveDefaultSandboxExecutorPath()),
             DashboardIndexPath = GetStringEnv("OMNINODE_DASHBOARD_INDEX", pathResolver.DashboardIndexPath),
             EnableDynamicCode = GetBoolEnv("OMNINODE_ENABLE_DYNAMIC_CODE", false),
@@ -212,7 +212,7 @@ public sealed class AppConfig
             WebSocketCommandsPerMinute = GetIntEnv("OMNINODE_WS_COMMANDS_PER_MINUTE", 30),
             MetricsPushIntervalSec = GetIntEnv("OMNINODE_METRICS_PUSH_INTERVAL_SEC", 2),
             CommandMaxLength = GetIntEnv("OMNINODE_COMMAND_MAX_LENGTH", 800),
-            AuditLogPath = GetStringEnv("OMNINODE_AUDIT_LOG_PATH", "/tmp/omninode_audit.log"),
+            AuditLogPath = GetStringEnv("OMNINODE_AUDIT_LOG_PATH", pathResolver.ResolveStateFilePath("audit.log")),
             GuardAlertWebhookUrl = GetStringEnv("OMNINODE_GUARD_ALERT_WEBHOOK_URL", string.Empty),
             GuardAlertLogCollectorUrl = GetStringEnv("OMNINODE_GUARD_ALERT_LOG_COLLECTOR_URL", string.Empty),
             GuardAlertDispatchTimeoutMs = Math.Clamp(GetIntEnv("OMNINODE_GUARD_ALERT_DISPATCH_TIMEOUT_MS", 3500), 500, 120000),
@@ -268,6 +268,21 @@ public sealed class AppConfig
         return value.Equals("1", StringComparison.OrdinalIgnoreCase)
             || value.Equals("true", StringComparison.OrdinalIgnoreCase)
             || value.Equals("yes", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ResolveDefaultPythonBinary()
+    {
+        return OperatingSystem.IsWindows() ? "python" : "python3";
+    }
+
+    private static string ResolveDefaultStateFilePath(string fileName)
+    {
+        return DefaultStatePathResolver.CreateDefault().ResolveStateFilePath(fileName);
+    }
+
+    private static string ResolveDefaultStateDirectoryPath(string directoryName)
+    {
+        return DefaultStatePathResolver.CreateDefault().ResolveStateDirectoryPath(directoryName);
     }
 
     private static string ResolveDefaultDashboardIndexPath()

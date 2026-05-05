@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 
@@ -12,6 +13,26 @@ public sealed class UdsCoreClient
         _socketPath = socketPath;
     }
 
+    public static bool IsTcpEndpoint(string endpoint)
+    {
+        return Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
+            && uri.Scheme.Equals("tcp", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool TryGetTcpPort(string endpoint, out int port)
+    {
+        port = 0;
+        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
+            || !uri.Scheme.Equals("tcp", StringComparison.OrdinalIgnoreCase)
+            || uri.Port <= 0)
+        {
+            return false;
+        }
+
+        port = uri.Port;
+        return true;
+    }
+
     public Task<string> GetMetricsAsync(CancellationToken cancellationToken)
     {
         return RequestAsync("{\"action\":\"get_metrics\"}", cancellationToken);
@@ -24,8 +45,7 @@ public sealed class UdsCoreClient
 
     public async Task<string> RequestAsync(string jsonRequest, CancellationToken cancellationToken)
     {
-        using var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-        var endpoint = new UnixDomainSocketEndPoint(_socketPath);
+        using var socket = CreateSocket(_socketPath, out var endpoint);
 
         await socket.ConnectAsync(endpoint, cancellationToken);
 
@@ -52,5 +72,19 @@ public sealed class UdsCoreClient
 
         return builder.ToString().Trim();
     }
-}
 
+    private static Socket CreateSocket(string endpointText, out EndPoint endpoint)
+    {
+        if (IsTcpEndpoint(endpointText))
+        {
+            var uri = new Uri(endpointText);
+            var host = string.IsNullOrWhiteSpace(uri.Host) ? IPAddress.Loopback.ToString() : uri.Host;
+            var address = IPAddress.TryParse(host, out var parsedAddress) ? parsedAddress : IPAddress.Loopback;
+            endpoint = new IPEndPoint(address, uri.Port);
+            return new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        }
+
+        endpoint = new UnixDomainSocketEndPoint(endpointText);
+        return new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+    }
+}

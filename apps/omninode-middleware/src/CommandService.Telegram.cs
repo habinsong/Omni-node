@@ -1700,17 +1700,18 @@ public sealed partial class CommandService
         }
 
         var snapshotSingleModel = ResolveModel(snapshotSingleProvider, snapshot.SingleModel);
-        var resolvedWebUrls = ResolveWebUrls(text, webUrls, webSearchEnabled);
+        var effectiveTopicInput = BuildTelegramFollowupAwareInput(telegramThread, text);
+        var resolvedWebUrls = ResolveWebUrls(effectiveTopicInput, webUrls, webSearchEnabled);
         if (resolvedWebUrls.Count > 0 && snapshot.Mode == "single" && _llmRouter.HasGeminiApiKey())
         {
-            var allowMarkdownTable = LooksLikeTableRenderRequest(text);
+            var allowMarkdownTable = LooksLikeTableRenderRequest(effectiveTopicInput);
             var memoryHint = BuildSafeWebMemoryPreferenceHint(
                 session.SessionId,
-                text,
+                effectiveTopicInput,
                 session.LinkedMemoryNotes
             );
             var urlSingle = await GenerateGeminiUrlContextAnswerDetailedAsync(
-                text,
+                effectiveTopicInput,
                 resolvedWebUrls,
                 memoryHint,
                 allowMarkdownTable,
@@ -1745,34 +1746,34 @@ public sealed partial class CommandService
                 decisionPath = "heuristic_explicit_web";
                 shouldUseGeminiWeb = true;
             }
-            else if (LooksLikeRealtimeQuestion(text))
+            else if (LooksLikeRealtimeQuestion(effectiveTopicInput))
             {
                 decisionPath = "heuristic_web";
                 shouldUseGeminiWeb = true;
             }
-            else if (!LooksLikeClearlyNonWebQuestion(text))
+            else if (!LooksLikeClearlyNonWebQuestion(effectiveTopicInput))
             {
                 var webDecision = await DecideNeedWebBySelectedProviderAsync(
-                    text,
+                    effectiveTopicInput,
                     snapshotSingleProvider,
                     snapshotSingleModel,
                     cancellationToken
                 );
-                shouldFallbackToGeminiWeb = !webDecision.DecisionSucceeded && LooksLikeRealtimeQuestion(text);
+                shouldFallbackToGeminiWeb = !webDecision.DecisionSucceeded && LooksLikeRealtimeQuestion(effectiveTopicInput);
                 shouldUseGeminiWeb = webDecision.NeedWeb || shouldFallbackToGeminiWeb;
                 decisionPath = webDecision.DecisionSucceeded ? "llm" : "heuristic_fallback";
             }
 
             if (shouldUseGeminiWeb)
             {
-                var allowMarkdownTable = LooksLikeTableRenderRequest(text);
+                var allowMarkdownTable = LooksLikeTableRenderRequest(effectiveTopicInput);
                 var memoryHint = BuildSafeWebMemoryPreferenceHint(
                     session.SessionId,
-                    text,
+                    effectiveTopicInput,
                     session.LinkedMemoryNotes
                 );
                 var webSingle = await ComposeGroundedWebAnswerWithFallbackAsync(
-                    text,
+                    effectiveTopicInput,
                     memoryHint,
                     shouldFallbackToGeminiWeb,
                     allowMarkdownTable,
@@ -1801,7 +1802,7 @@ public sealed partial class CommandService
         var effectiveWebSearchEnabled = snapshot.Mode == "single" ? false : webSearchEnabled;
         var normalizedAttachments = NormalizeAttachments(attachments);
         var sharedPrepared = await PrepareSharedInputAsync(
-            text,
+            effectiveTopicInput,
             normalizedAttachments,
             resolvedWebUrls,
             effectiveWebSearchEnabled,
@@ -2055,6 +2056,23 @@ public sealed partial class CommandService
             cancellationToken,
             ResolveSingleChatMaxOutputTokens(text)
         );
+        if (!_config.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(text, single.Text))
+        {
+            var historyBypassInput = BuildHistoryBypassInput(providerInput.Text);
+            var recovered = await ChatSingleAsync(
+                historyBypassInput,
+                snapshot.SingleProvider,
+                snapshot.SingleModel,
+                "telegram",
+                cancellationToken,
+                ResolveSingleChatMaxOutputTokens(text)
+            );
+            if (!string.IsNullOrWhiteSpace(recovered.Text)
+                && !ShouldRetrySingleChatWithoutHistory(text, recovered.Text))
+            {
+                single = recovered;
+            }
+        }
         var singleCitationBundle = BuildAndLogCitationMappings(
             "telegram",
             "telegram-single",
@@ -2094,6 +2112,171 @@ public sealed partial class CommandService
             "Telegram",
             "연동",
             new[] { "telegram-link", "shared" }
+        );
+    }
+
+    private string BuildTelegramFollowupAwareInput(ConversationThreadView thread, string input)
+    {
+        var normalized = (input ?? string.Empty).Trim();
+        if (normalized.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var anchor = FindTelegramAnchorUserMessage(thread, normalized);
+        if (string.IsNullOrWhiteSpace(anchor))
+        {
+            return normalized;
+        }
+
+        if (LooksLikeExplicitWebLookupQuestion(normalized) && IsTelegramWeakFollowupInput(normalized))
+        {
+            return $"""
+                    [직전 주제]
+                    {anchor}
+
+                    [현재 요청]
+                    위 주제에 대해 웹에서 검색해서 근거 중심으로 다시 설명해줘.
+                    사용자 추가 요청: {normalized}
+                    """;
+        }
+
+        if (IsTelegramCorrectionFollowup(normalized))
+        {
+            return $"""
+                    [직전 주제]
+                    {anchor}
+
+                    [정정 요청]
+                    {normalized}
+
+                    위 정정을 반영해서, 이전에 잘못 잡은 대상이 있으면 바로잡아 다시 답해줘.
+                    """;
+        }
+
+        if (IsTelegramExhaustedFeedback(normalized))
+        {
+            var latestAssistant = thread.Messages
+                .LastOrDefault(msg => msg.Role.Equals("assistant", StringComparison.OrdinalIgnoreCase))
+                ?.Text?.Trim();
+            var assistantBlock = string.IsNullOrWhiteSpace(latestAssistant)
+                ? string.Empty
+                : $"""
+
+                  [직전 답변 요약]
+                  {latestAssistant}
+                  """;
+            return $"""
+                    [직전 주제]
+                    {anchor}{assistantBlock}
+
+                    [사용자 추가 피드백]
+                    {normalized}
+
+                    사용자는 앞서 제안한 기본 조치를 이미 시도했다고 본다.
+                    같은 해결책을 반복하지 말고, 남은 원인 후보와 확인 순서를 더 좁혀서 답해줘.
+                    """;
+        }
+
+        return normalized;
+    }
+
+    private static string? FindTelegramAnchorUserMessage(ConversationThreadView thread, string currentInput)
+    {
+        if (thread.Messages.Count == 0)
+        {
+            return null;
+        }
+
+        foreach (var message in thread.Messages
+                     .Where(msg => msg.Role.Equals("user", StringComparison.OrdinalIgnoreCase))
+                     .Reverse())
+        {
+            var text = (message.Text ?? string.Empty).Trim();
+            if (text.Length == 0 || text.Equals(currentInput, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (IsTelegramWeakFollowupInput(text)
+                || IsTelegramCorrectionFollowup(text)
+                || IsTelegramExhaustedFeedback(text))
+            {
+                continue;
+            }
+
+            return text;
+        }
+
+        return thread.Messages
+            .Where(msg => msg.Role.Equals("user", StringComparison.OrdinalIgnoreCase))
+            .Select(msg => (msg.Text ?? string.Empty).Trim())
+            .LastOrDefault(text => text.Length > 0 && !text.Equals(currentInput, StringComparison.Ordinal));
+    }
+
+    private static bool IsTelegramWeakFollowupInput(string input)
+    {
+        var normalized = Regex.Replace((input ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+
+        if (normalized.Length <= 18
+            && (LooksLikeExplicitWebLookupQuestion(normalized)
+                || normalized is "그건?" or "이건?" or "왜?" or "진짜?" or "다시"))
+        {
+            return true;
+        }
+
+        return normalized is "검색해서 말해"
+            or "검색해줘"
+            or "검색해 줘"
+            or "웹에서 찾아줘"
+            or "웹에서 말해줘"
+            or "그거 검색해줘"
+            or "그거 검색해서 말해줘";
+    }
+
+    private static bool IsTelegramCorrectionFollowup(string input)
+    {
+        var normalized = Regex.Replace((input ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+
+        return normalized.Contains("아니라", StringComparison.Ordinal)
+               || normalized.Contains("말한게 아니라", StringComparison.Ordinal)
+               || normalized.Contains("말한 게 아니라", StringComparison.Ordinal)
+               || normalized.Contains("정정", StringComparison.Ordinal)
+               || normalized.Contains("오타", StringComparison.Ordinal)
+               || normalized.Contains("p2s 라고", StringComparison.Ordinal)
+               || normalized.Contains("h2s 가 아니라", StringComparison.Ordinal);
+    }
+
+    private static bool IsTelegramExhaustedFeedback(string input)
+    {
+        var normalized = Regex.Replace((input ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+
+        return ContainsAny(
+            normalized,
+            "다했다고",
+            "다 했다고",
+            "다해도",
+            "다 해도",
+            "해봤는데",
+            "해 봤는데",
+            "이미 해봤",
+            "이미 해 봤",
+            "너가 말한거 다했다고",
+            "너가 말한 거 다했다고",
+            "다 했는데도",
+            "했는데도"
         );
     }
 
@@ -3904,7 +4087,7 @@ public sealed partial class CommandService
         if (string.IsNullOrWhiteSpace(baseDir))
         {
             var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            baseDir = string.IsNullOrWhiteSpace(home) ? "/tmp" : Path.Combine(home, ".omninode");
+            baseDir = string.IsNullOrWhiteSpace(home) ? Path.GetTempPath() : Path.Combine(home, ".omninode");
         }
 
         return Path.Combine(baseDir, "telegram_upgrade_quota.state");

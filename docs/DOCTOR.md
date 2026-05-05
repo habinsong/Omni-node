@@ -1,6 +1,6 @@
 # Omni-node Doctor 가이드
 
-업데이트 기준: 2026-03-13
+업데이트 기준: 2026-05-05
 
 이 문서는 `doctor` 진단 기능의 실행 방법, 점검 항목, 결과 저장 위치를 정리한다.
 
@@ -22,7 +22,7 @@ dotnet run --project apps/omninode-middleware/OmniNode.Middleware.csproj -- doct
 
 현재 doctor는 아래 항목을 점검한다.
 
-- `core_socket`: 코어 UDS 소켓 응답, lock 경로, 감사 로그 부모 경로
+- `core_socket`: 코어 IPC 응답(macOS/Linux UDS, Windows 로컬 TCP), lock 경로, 감사 로그 부모 경로
 - `workspace`: `OMNINODE_WORKSPACE_ROOT`, `workspace/.runtime`, `~/.omninode/doctor` 쓰기 가능 여부
 - `sandbox`: Python sandbox smoke (`print('ok')`)
 - `sqlite`: `sqlite3 --version` 실행 가능 여부
@@ -34,8 +34,8 @@ dotnet run --project apps/omninode-middleware/OmniNode.Middleware.csproj -- doct
 
 `core_socket` 해석 주의:
 
-- stale socket 파일만 남아 있거나 `Connection refused`가 나오던 상태는 현재 미들웨어 시작 시 자동 부트스트랩으로 먼저 복구를 시도한다.
-- `apps/omninode-core/omninode_core` 바이너리가 있고 실행 권한이 정상이면 doctor 전에 `core_socket`이 자동으로 `ok`까지 회복될 수 있다.
+- macOS/Linux에서 stale socket 파일만 남아 있거나 `Connection refused`가 나오던 상태는 현재 미들웨어 시작 시 자동 부트스트랩으로 먼저 복구를 시도한다.
+- `apps/omninode-core/omninode_core` 또는 Windows `apps/omninode-core/omninode_core.exe` 바이너리가 있으면 doctor 전에 `core_socket`이 자동으로 `ok`까지 회복될 수 있다.
 
 ## 3. 대시보드와 텔레그램
 

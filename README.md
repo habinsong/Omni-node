@@ -233,7 +233,7 @@ Omni-node는 이 지점을 운영 가능한 구조로 바꾼다.
 - 브라우저 에이전트는 가능하면 `시작 URL`을 함께 주는 방식이 가장 안정적이다
 - 현재 브라우저 에이전트 모델은 `gpt-5.4`를 사용한다
 - 도구 프로필은 `playwright_only`, `desktop_control` 두 가지다
-- `desktop_control`은 macOS 전용이며, Playwright 우선 + 필요 시 데스크톱 제어를 추가로 사용하고 로그인/다운로드를 허용한다
+- `desktop_control`은 macOS에서만 실제 데스크톱 제어를 사용하고, Windows/Linux에서는 `playwright_only`로 낮춰 실행한다
 - 브라우저 에이전트의 스크린샷과 다운로드 파일은 `workspace/coding/routines/<routine-id>/assets/<runTs>/` 아래에 저장된다
 - 루틴별 `텔레그램 봇 응답` on/off를 지원하며 기본값은 `켜짐`이다
 - 예약 실행 시 텔레그램 응답이 켜진 루틴만 자동 전송된다
@@ -329,10 +329,11 @@ canonical 루트는 `apps/`, `docs/`, `workspace/`다. 루트 `coding`, `runtime
 
 ### 1. 필수 도구
 
-- `make`
-- `.NET SDK 9`
-- `node` + `npm`
-- `python3`
+| OS | 필수 도구 |
+| --- | --- |
+| macOS | `cc`, `make`, `.NET SDK 9`, `node` + `npm`, `python3` |
+| Linux | `build-essential` 또는 동등한 `cc`/`make`, `.NET SDK 9`, `node` + `npm`, `python3` |
+| Windows | Visual Studio Build Tools `cl` 또는 `gcc`, `.NET SDK 9`, `node` + `npm`, Python 3 |
 
 권장:
 
@@ -342,22 +343,40 @@ canonical 루트는 `apps/`, `docs/`, `workspace/`다. 루트 `coding`, `runtime
 
 ### 2. 원커맨드 시작
 
-전역 명령이 등록된 상태라면 아래 세 개만 기억하면 된다.
+macOS/Linux에서 전역 명령이 등록된 상태라면 아래 명령만 기억하면 된다.
 
 ```bash
-Omni-node setup
 Omni-node
 Omni-node shutdown
 ```
 
-- `Omni-node setup`: 의존성 확인, Homebrew 기반 설치, `npm ci`, 코어 빌드, .NET 빌드, 샌드박스 smoke, `npm test`, 전역 명령 등록까지 한 번에 수행
-- `Omni-node`: 서버 시작. 미들웨어가 코어를 자동 부트스트랩하고 `http://127.0.0.1:8080/` 준비 상태까지 기다린 뒤 URL과 로그 경로를 출력
+- `Omni-node`: 서버 시작 전 setup 상태를 확인한다. 첫 실행이면 macOS는 Homebrew, Linux는 `apt-get` 기준으로 가능한 의존성 설치를 시도하고, `npm ci`, 코어 빌드, .NET 빌드, 샌드박스 smoke, `npm test`, 명령 등록까지 수행한 뒤 URL과 로그 경로를 출력한다
 - `Omni-node shutdown`: CLI가 관리하는 미들웨어와 이 과정에서 새로 띄운 코어를 함께 종료
 
-전역 명령이 아직 등록되지 않은 첫 실행이라면 저장소 안에서 한 번만 아래처럼 실행하면 된다.
+Windows에서는 PowerShell 진입점을 사용한다.
+
+```powershell
+.\scripts\Omni-node.ps1
+.\scripts\Omni-node.ps1 shutdown
+```
+
+전역 명령이 아직 등록되지 않은 첫 실행이라면 저장소 안에서 아래처럼 실행하면 된다.
+
+```bash
+./scripts/Omni-node
+```
+
+처음 실행하면 `setup`이 자동으로 돌면서 의존성 설치, 빌드, 검증, 명령 등록까지 진행한다.
+수동으로 먼저 준비만 하고 싶으면 아래 명령을 써도 된다.
 
 ```bash
 ./scripts/Omni-node setup
+```
+
+Windows에서 수동 setup만 먼저 실행하려면:
+
+```powershell
+.\scripts\Omni-node.ps1 setup
 ```
 
 CLI 상태 파일은 `~/.omninode/cli/` 아래에 남는다.
@@ -368,10 +387,22 @@ CLI 상태 파일은 `~/.omninode/cli/` 아래에 남는다.
 make -C apps/omninode-core
 ```
 
+Windows:
+
+```powershell
+.\apps\omninode-core\build.ps1
+```
+
 수동 실행:
 
 ```bash
 ./apps/omninode-core/omninode_core
+```
+
+Windows 수동 실행:
+
+```powershell
+.\apps\omninode-core\omninode_core.exe
 ```
 
 ### 4. 미들웨어 실행
@@ -404,6 +435,15 @@ dotnet run --project apps/omninode-middleware/OmniNode.Middleware.csproj -- doct
 make -C apps/omninode-core
 python3 apps/omninode-sandbox/executor.py --code "print('ok')"
 dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj
+npm test
+```
+
+Windows:
+
+```powershell
+.\apps\omninode-core\build.ps1
+python apps\omninode-sandbox\executor.py --code "print('ok')"
+dotnet build apps\omninode-middleware\OmniNode.Middleware.csproj
 npm test
 ```
 
@@ -532,7 +572,8 @@ Omni-node는 `상태 원본`과 `작업 산출물`을 분리한다.
 | `workspace/.runtime/logic/` | 로직 그래프 실행별 `graph.json`, `snapshot.json`, `events.log` |
 | `workspace/.runtime/refactor-preview/` | Safe Refactor preview 저장 |
 | `~/.omninode/cli/` | `Omni-node` 전역 실행기 PID, 로그, 최근 시작 메타데이터 |
-| `/tmp/omninode_core.<uid>.sock` | 코어 UDS 소켓 |
+| `/tmp/omninode_core.<uid>.sock` | macOS/Linux 코어 UDS 소켓 |
+| `tcp://127.0.0.1:51808` | Windows 코어 로컬 TCP 엔드포인트 |
 
 이 구조 덕분에 아래를 다시 추적할 수 있다.
 

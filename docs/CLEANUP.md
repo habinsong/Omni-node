@@ -1,6 +1,6 @@
 # Omni-node 정리 기준
 
-업데이트 기준: 2026-03-13
+업데이트 기준: 2026-05-05
 
 이 문서는 나중에 저장소를 다시 열었을 때 `무엇을 지워도 되는지`, `무엇을 보존해야 하는지`, `어떤 경로를 기준으로 기억할지`를 빠르게 판단하기 위한 위생 기준표입니다.
 
@@ -16,7 +16,7 @@
 
 하위 호환 alias:
 
-- 루트 `coding`, `runtime`, `omninode-*`, 루트 문서 파일은 하위 호환용 심볼릭 링크입니다.
+- 루트 `coding`, `runtime`, `omninode-*`, 루트 문서 파일은 하위 호환 alias입니다. macOS/Linux에서는 심볼릭 링크를 기본으로 보고, Windows에서는 Git 설정에 따라 symlink placeholder나 디렉터리 alias로 보일 수 있습니다.
 - 기본 예시, 쉘 export 예시, 운영 메모에서는 alias 대신 canonical 경로만 씁니다.
 
 ## 2. 두 줄 규칙
@@ -36,9 +36,10 @@
 | `workspace/.runtime/` | 회귀 결과/임시 분석물 | 보관 이유가 없으면 정리 가능 |
 | `workspace/.runtime/logic/` | 로직 그래프 실행 스냅샷과 이벤트 로그 | 과거 로직 실행 추적이 필요 없으면 정리 가능 |
 | `workspace/runtime/` | 현재 세션 상태 스냅샷 | 세션 종료 후 필요 없으면 정리 가능 |
-| `/tmp/omninode_core.<uid>.sock` | 임시 실행 상태 | 프로세스가 내려간 뒤 꼬였을 때만 정리 |
-| `/tmp/omninode.<uid>.lock` | 임시 실행 상태 | 프로세스가 내려간 뒤 꼬였을 때만 정리 |
-| `/tmp/omninode_audit.log` | 임시 로그 | 필요 없으면 정리 가능 |
+| `/tmp/omninode_core.<uid>.sock` | macOS/Linux 임시 실행 상태 | 프로세스가 내려간 뒤 꼬였을 때만 정리 |
+| `/tmp/omninode.<uid>.lock` | macOS/Linux 임시 실행 상태 | 프로세스가 내려간 뒤 꼬였을 때만 정리 |
+| `tcp://127.0.0.1:51808` | Windows 코어 IPC | 파일 청소 대상이 아니라 포트 충돌 여부만 확인 |
+| `~/.omninode/audit.log` | 감사 로그 | 필요 없으면 정리 가능 |
 | `workspace/coding/runs/` | 코딩 실행 생성 파일 | 과거 생성 파일이 필요 없을 때만 정리 |
 | `workspace/coding/routines/` | 실행 결과 이력 | 과거 실행 기록이 필요 없을 때만 정리 |
 | `~/.omninode/code-runs/` | 실행 결과 이력 | 코드 실행 기록이 필요 없을 때만 정리 |
@@ -75,7 +76,7 @@ Omni-node 상태는 세 층으로 기억하면 덜 헷갈립니다.
 |---|---|---|
 | 영속 상태 | `~/.omninode` | 설정, 세션, 대화, 루틴 정의의 원본 |
 | 작업 산출물 | `workspace/` | 루틴 결과, 회귀 아티팩트, 작업 대상 파일 |
-| 임시 실행 상태 | `/tmp`, `workspace/.runtime`, `workspace/runtime` | 소켓, 락, 임시 스냅샷 |
+| 임시 실행 상태 | macOS/Linux `/tmp`, Windows 로컬 TCP, `workspace/.runtime`, `workspace/runtime` | 소켓, 락, 포트, 임시 스냅샷 |
 
 루틴은 특히 아래처럼 봅니다.
 

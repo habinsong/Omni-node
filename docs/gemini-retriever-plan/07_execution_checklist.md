@@ -10,7 +10,7 @@
 
 ## 2. 키 정책 체크
 - [ ] macOS keychain Gemini 키 존재 확인
-- [ ] Linux secure_file_600 Gemini 키 존재 확인
+- [ ] Windows/Linux secure_file_600 또는 로컬 secure store Gemini 키 존재 확인
 - [ ] 환경변수 직접 키 주입 차단 확인
 - [ ] 키 미존재 시 즉시 실패 경로 확인
 - [ ] 로그 키 마스킹 확인
