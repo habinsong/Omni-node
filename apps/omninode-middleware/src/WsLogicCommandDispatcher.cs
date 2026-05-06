@@ -152,6 +152,7 @@ internal sealed class WsLogicCommandDispatcher
             var result = await _logicService.RunLogicGraphAsync(
                 message.GraphId.Trim(),
                 "web",
+                string.IsNullOrWhiteSpace(message.LogicRunInput) ? null : message.LogicRunInput.Trim(),
                 evt => _ = _sendLogicRunEventAsync(socket, sendLock, evt, cancellationToken),
                 cancellationToken
             );

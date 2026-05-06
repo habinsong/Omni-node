@@ -62,7 +62,7 @@ export function renderDoctorPanel(props) {
   const checks = report && Array.isArray(report.checks) ? report.checks : [];
   const disabled = !authed || doctorState.pending || doctorState.loading;
 
-  return e("section", { className: "panel span2 ops-panel doctor-panel" },
+  return e("section", { className: "panel settings-optimized-panel settings-doctor-panel doctor-panel" },
     e("div", { className: "doctor-panel-head" },
       e("div", null,
         e("h2", null, "환경 진단"),

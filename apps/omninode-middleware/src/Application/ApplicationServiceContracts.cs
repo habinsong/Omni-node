@@ -101,6 +101,7 @@ public interface ILogicApplicationService
     Task<LogicRunActionResult> RunLogicGraphAsync(
         string graphId,
         string source,
+        string? runInput,
         Action<LogicRunEvent>? eventCallback,
         CancellationToken cancellationToken
     );

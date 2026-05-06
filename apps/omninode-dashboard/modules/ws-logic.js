@@ -27,8 +27,8 @@ export function requestLogicGraphDelete(send, graphId, options = {}) {
   return send({ type: "logic_graph_delete", graphId }, options)
 }
 
-export function requestLogicGraphRun(send, graphId, options = {}) {
-  return send({ type: "logic_graph_run", graphId }, options)
+export function requestLogicGraphRun(send, graphId, runInput, options = {}) {
+  return send({ type: "logic_graph_run", graphId, logicRunInput: runInput || "" }, options)
 }
 
 export function requestLogicGraphRunGet(send, runId, options = {}) {

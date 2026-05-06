@@ -69,7 +69,7 @@ export function renderNotebooksPanel(props) {
   const notebook = snapshot?.notebook || null;
   const disabled = !authed || notebooksState.pending || notebooksState.loading;
 
-  return e("section", { className: "panel span2 ops-panel notebooks-panel" },
+  return e("section", { className: "panel settings-optimized-panel settings-notebooks-panel notebooks-panel" },
     e("div", { className: "plans-panel-head" },
       e("div", null,
         e("h2", null, "Notebook / Handoff"),

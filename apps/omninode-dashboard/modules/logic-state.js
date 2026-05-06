@@ -10,6 +10,7 @@ export const LOGIC_NODE_LIBRARY = [
     items: [
       ["start", "시작"],
       ["end", "끝내기"],
+      ["output", "출력"],
       ["if", "조건 갈래"],
       ["delay", "잠깐 기다리기"],
       ["parallel_split", "동시에 시작"],
@@ -85,6 +86,7 @@ export const LOGIC_NODE_MAX_SIZE = Object.freeze({
 const LOGIC_NODE_MIN_SIZE_BY_TYPE = Object.freeze({
   start: { width: 176, height: 186 },
   end: { width: 184, height: 156 },
+  output: { width: 280, height: 260 },
   if: { width: 238, height: 198 },
   delay: { width: 190, height: 186 },
   parallel_split: { width: 198, height: 156 },
@@ -276,13 +278,18 @@ function field(key, label, control, extras = {}) {
 
 const LOGIC_NODE_INSPECTOR_DEFINITIONS = {
   start: {
-    description: "흐름이 여기서 시작됩니다. 바깥에서 받은 입력값을 그대로 다음 단계에 넘깁니다.",
-    example: "예: 사용자가 넣은 주문 번호나 질문을 그대로 다음 노드로 전달",
+    description: "흐름이 여기서 시작됩니다. 입력값을 적으면 첫 번째 단계에 그대로 넘깁니다.",
+    example: "예: 분석할 주문 번호, 질문, 또는 처리할 텍스트",
     outputs: [
       "다음 노드로 넘길 원본 입력 (`text`)",
       "입력값 복사본 (`data.input`)"
     ],
-    fields: []
+    fields: [
+      field("input", "시작 입력", "textarea", {
+        rows: 4,
+        placeholder: "흐름 실행 시 시작 노드에 전달할 입력값을 적으세요.\n예: 오늘 회의 내용을 요약해 줘."
+      })
+    ]
   },
   end: {
     description: "마지막 결과를 사람이 읽기 좋은 형태로 정리합니다. 비워 두면 바로 앞 단계 결과를 그대로 씁니다.",
@@ -295,6 +302,20 @@ const LOGIC_NODE_INSPECTOR_DEFINITIONS = {
       field("result", "마무리 문장", "textarea", {
         rows: 4,
         placeholder: "회의 요약:\n1. 오늘 결정한 내용\n2. 다음 할 일\n3. 담당자"
+      })
+    ]
+  },
+  output: {
+    description: "앞 단계에서 넘어온 출력 텍스트를 생략 없이 확인합니다. 비워 두면 연결된 입력을 그대로 보여줍니다.",
+    example: "예: 최종 답변 전문, 생성된 코드 전문, 수집된 결과 전문을 그대로 표시",
+    outputs: [
+      "화면에 보여줄 출력 전문 (`text`)",
+      "저장된 출력 전문 (`data.result`)"
+    ],
+    fields: [
+      field("result", "출력 텍스트", "textarea", {
+        rows: 6,
+        placeholder: "비워 두면 연결된 입력 텍스트를 그대로 출력합니다."
       })
     ]
   },
@@ -1199,6 +1220,7 @@ export function getLogicNodeInspectorDefinition(type) {
 function defaultNodeConfig(type) {
   switch (type) {
     case "end":
+    case "output":
       return {
         result: ""
       };

@@ -246,14 +246,13 @@ import {
   const DEFAULT_GEMINI_WORKER_MODEL = "gemini-3-flash-preview";
   const GEMINI_MODEL_CHOICES = [
     { id: "gemini-3-flash-preview", label: "Gemini 기본: gemini-3-flash-preview" },
+    { id: "gemini-3.1-pro-preview", label: "Gemini: gemini-3.1-pro-preview" },
     { id: "gemini-3.1-flash-lite-preview", label: "Gemini: gemini-3.1-flash-lite-preview" }
   ];
   const DEFAULT_CEREBRAS_MODEL = "gpt-oss-120b";
   const CEREBRAS_MODEL_CHOICES = [
     { id: DEFAULT_CEREBRAS_MODEL, label: `Cerebras 기본: ${DEFAULT_CEREBRAS_MODEL}` },
-    { id: "zai-glm-4.7", label: "Cerebras: zai-glm-4.7 (preview)" },
-    { id: "qwen-3-235b-a22b-instruct-2507", label: "Cerebras: qwen-3-235b-a22b-instruct-2507" },
-    { id: "llama3.1-8b", label: "Cerebras: llama3.1-8b" }
+    { id: "zai-glm-4.7", label: "Cerebras: zai-glm-4.7 (preview)" }
   ];
   const CONVERSATION_STATE_DEFAULTS = createConversationState();
   const CHAT_STATE_DEFAULTS = createChatState({
@@ -576,6 +575,12 @@ import {
     const [logicConnectionPreview, setLogicConnectionPreview] = useState(null);
     const [logicMeasuredNodeMinimumById, setLogicMeasuredNodeMinimumById] = useState(() => ({}));
     const [logicPathBrowser, setLogicPathBrowser] = useState(() => createEmptyLogicPathBrowserState());
+    const [logicRunOutputExpanded, setLogicRunOutputExpanded] = useState(false);
+    const [logicRunPreview, setLogicRunPreview] = useState(() => ({
+      open: false,
+      title: "",
+      content: ""
+    }));
     const [groqUsageWindowBaseByModel, setGroqUsageWindowBaseByModel] = useState(() => ({ ...ROUTINE_STATE_DEFAULTS.groqUsageWindowBaseByModel }));
     const [viewportSize, setViewportSize] = useState(() => getViewportSnapshot());
     const [mainShellViewportTop, setMainShellViewportTop] = useState(0);
@@ -651,7 +656,7 @@ import {
     const currentWorkspacePane = mobilePaneByTab[responsiveWorkspaceKey]
       || (currentConversationId ? "thread" : "list");
     const currentRoutinePane = mobilePaneByTab.routine || (routineSelectedId ? "detail" : "overview");
-    const currentLogicPane = mobilePaneByTab.logic || "canvas";
+    const currentLogicPane = mobilePaneByTab.logic || (isPortraitMobileLayout ? "canvas" : "selection");
     const currentSettingsPane = mobilePaneByTab.settings || "auth";
 
     useEffect(() => {
@@ -4159,45 +4164,10 @@ import {
             return;
           }
 
-          const computed = window.getComputedStyle(card);
-          const paddingX = (
-            parseFloat(computed.paddingLeft || "0")
-            + parseFloat(computed.paddingRight || "0")
-            + parseFloat(computed.borderLeftWidth || "0")
-            + parseFloat(computed.borderRightWidth || "0")
-          );
-          const paddingY = (
-            parseFloat(computed.paddingTop || "0")
-            + parseFloat(computed.paddingBottom || "0")
-            + parseFloat(computed.borderTopWidth || "0")
-            + parseFloat(computed.borderBottomWidth || "0")
-          );
-          const dragHandle = card.querySelector(".logic-node-drag-handle");
-          const body = card.querySelector(".logic-node-body");
-          const actions = card.querySelector(".logic-node-actions");
-          const frame = card.querySelector(".logic-node-frame");
           const baseMinimum = getLogicNodeMinimumSize(nodeType);
-          const requiredWidth = Math.ceil(
-            Math.max(
-              dragHandle?.scrollWidth || 0,
-              body?.scrollWidth || 0,
-              actions?.scrollWidth || 0,
-              frame?.scrollWidth || 0
-            )
-            + paddingX
-            + 4
-          );
-          const requiredHeight = Math.ceil(
-            (dragHandle?.scrollHeight || 0)
-            + (body?.scrollHeight || 0)
-            + (actions?.scrollHeight || 0)
-            + paddingY
-            + 12
-          );
-
           nextMeasured[nodeId] = {
-            width: Math.max(baseMinimum.width, requiredWidth),
-            height: Math.max(baseMinimum.height, requiredHeight)
+            width: baseMinimum.width,
+            height: baseMinimum.height
           };
         });
 
@@ -4220,6 +4190,40 @@ import {
 
       return () => window.cancelAnimationFrame(frameId);
     }, [rootTab, currentLogicPane, isPortraitMobileLayout, logicCanvasGesture, logicDraftGraph, logicRunSnapshot, viewportSize.width, viewportSize.height]);
+
+    useEffect(() => {
+      if (rootTab !== "logic" || typeof window === "undefined") {
+        return undefined;
+      }
+
+      function isEditableLogicTarget(target) {
+        return !!target?.closest?.("input, textarea, select, option, label, [contenteditable='true'], [contenteditable='']");
+      }
+
+      function handleLogicSelectionKeyDown(event) {
+        if (!event || event.defaultPrevented) {
+          return;
+        }
+        if (event.key !== "Backspace" && event.key !== "Delete") {
+          return;
+        }
+        if (isEditableLogicTarget(event.target)) {
+          return;
+        }
+        if (logicSelectedNodeId) {
+          event.preventDefault();
+          deleteLogicNode(logicSelectedNodeId);
+          return;
+        }
+        if (logicSelectedEdgeId) {
+          event.preventDefault();
+          deleteLogicEdge(logicSelectedEdgeId);
+        }
+      }
+
+      window.addEventListener("keydown", handleLogicSelectionKeyDown);
+      return () => window.removeEventListener("keydown", handleLogicSelectionKeyDown);
+    }, [rootTab, logicSelectedNodeId, logicSelectedEdgeId]);
 
     useEffect(() => {
       if (typeof window === "undefined") {
@@ -4907,6 +4911,7 @@ import {
       setLogicSelectedEdgeId("");
       closeLogicPathBrowser();
       resetLogicConnectionState();
+      setLogicRunOutputExpanded(false);
       logicAutoFrameKeyRef.current = "";
       if (graphId) {
         requestLogicGraphDetail(graphId);
@@ -4934,6 +4939,7 @@ import {
       setLogicRunSnapshot(null);
       setLogicRunEvents([]);
       setLogicActiveRunId("");
+      setLogicRunOutputExpanded(false);
       setLogicLastMessage("새 작업 흐름 초안을 만들었습니다.");
       setLogicDirty(true);
     }
@@ -4965,16 +4971,25 @@ import {
       const visibleCenterY = rect?.height
         ? ((rect.height * 0.42) - currentViewport.y) / currentViewport.zoom
         : 220;
+      let nextNodeId = "";
       mutateLogicDraft((draft) => {
         const offsetIndex = draft.nodes.length % 6;
-        draft.nodes.push(createLogicNode(type, {
+        const nextNode = createLogicNode(type, {
           position: {
             x: Math.max(72, Math.round(visibleCenterX - 90 + ((offsetIndex % 3) * 140))),
             y: Math.max(72, Math.round(visibleCenterY - 54 + (Math.floor(offsetIndex / 3) * 120)))
           }
-        }));
+        });
+        nextNodeId = nextNode.nodeId;
+        draft.nodes.push(nextNode);
         return draft;
       });
+      if (nextNodeId) {
+        setLogicSelectedNodeId(nextNodeId);
+        setLogicSelectedEdgeId("");
+        closeLogicPathBrowser();
+        setResponsivePane("logic", "selection");
+      }
     }
 
     function deleteLogicNode(nodeId) {
@@ -5103,12 +5118,14 @@ import {
       setLogicSelectedNodeId(nodeId || "");
       setLogicSelectedEdgeId("");
       closeLogicPathBrowser();
+      setResponsivePane("logic", "selection");
     }
 
     function selectLogicEdge(edgeId) {
       setLogicSelectedEdgeId(edgeId || "");
       setLogicSelectedNodeId("");
       closeLogicPathBrowser();
+      setResponsivePane("logic", "selection");
     }
 
     function deleteLogicEdge(edgeId) {
@@ -5354,10 +5371,14 @@ import {
         return;
       }
       setError("logic:main", "");
-      const ok = requestLogicGraphRun(send, targetGraphId);
+      const startNode = (draftGraph?.nodes || []).find((n) => n.type === "start");
+      const runInput = (startNode?.config?.input || "").trim();
+      const ok = requestLogicGraphRun(send, targetGraphId, runInput);
       if (!ok) {
         setError("logic:main", "오류: WebSocket 연결이 끊어졌습니다.");
+        return;
       }
+      setLogicRunOutputExpanded(true);
     }
 
     function runLogicGraphById(graphId) {
@@ -5366,10 +5387,12 @@ import {
         return;
       }
       setError("logic:main", "");
-      const ok = requestLogicGraphRun(send, targetGraphId);
+      const ok = requestLogicGraphRun(send, targetGraphId, ((logicDraftGraphRef.current?.nodes || []).find((n) => n.type === "start")?.config?.input || "").trim());
       if (!ok) {
         setError("logic:main", "오류: WebSocket 연결이 끊어졌습니다.");
+        return;
       }
+      setLogicRunOutputExpanded(true);
     }
 
     function cancelLogicGraphRun(runId) {
@@ -6439,6 +6462,7 @@ import {
         activeRunId: logicActiveRunId,
         runSnapshot: logicRunSnapshot,
         runEvents: logicRunEvents,
+        runOutputExpanded: logicRunOutputExpanded,
         viewport: normalizeLogicViewport(logicDraftGraph?.viewport),
         canvasGesture: logicCanvasGesture,
         resolveNodeSize: (node) => normalizeRuntimeLogicNodeSize(node?.size, node || null, node?.type || ""),
@@ -6499,8 +6523,10 @@ import {
         onSelectNodeType: addLogicNode,
         onRun: runLogicGraph,
         onRunGraph: runLogicGraphById,
+        onRunOutputExpandedChange: setLogicRunOutputExpanded,
         onCancelRun: cancelLogicGraphRun,
         onSave: saveLogicGraph,
+        onOpenRunPreview: setLogicRunPreview,
         onRefresh: () => {
           refreshLogicGraphs();
           if (logicActiveRunId) {
@@ -6759,6 +6785,21 @@ import {
               )
               : null,
             e("pre", { className: "modal-content" }, routineOutputPreview.content || "출력 없음")
+          )
+        )
+        : null,
+      logicRunPreview.open
+        ? e("div", { className: "modal logic-run-preview-modal" },
+          e("div", { className: "modal-card logic-run-preview-card" },
+            e("div", { className: "modal-head" },
+              e("strong", null, logicRunPreview.title || "실행 상세"),
+              e("button", {
+                className: "btn ghost logic-run-preview-close",
+                type: "button",
+                onClick: () => setLogicRunPreview({ open: false, title: "", content: "" })
+              }, "X")
+            ),
+            e("pre", { className: "modal-content logic-run-preview-content" }, logicRunPreview.content || "표시할 내용이 없습니다.")
           )
         )
         : null

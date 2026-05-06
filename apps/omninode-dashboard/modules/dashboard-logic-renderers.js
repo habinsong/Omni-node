@@ -41,6 +41,9 @@ const LOGIC_REFERENCE_OUTPUTS_BY_TYPE = {
   end: [
     { value: "data.result", label: "마무리 결과" }
   ],
+  output: [
+    { value: "data.result", label: "출력 결과" }
+  ],
   if: [
     { value: "data.branch", label: "선택된 갈래" }
   ],
@@ -274,16 +277,39 @@ function buildLogicCurvePath(start, end) {
 }
 
 function renderSectionTabs(e, renderResponsiveSectionTabs, currentPane, setResponsivePane) {
+  const activePane = normalizeLogicPaneKey(currentPane, true)
   return renderResponsiveSectionTabs(
     [
-      { key: "list", label: "목록" },
       { key: "canvas", label: "캔버스" },
-      { key: "palette", label: "팔레트" },
-      { key: "inspector", label: "인스펙터" }
+      { key: "flow", label: "흐름" },
+      { key: "nodes", label: "노드" },
+      { key: "selection", label: "선택" },
+      { key: "run", label: "실행" },
+      { key: "json", label: "JSON" }
     ],
-    currentPane,
+    activePane,
     (pane) => setResponsivePane("logic", pane)
   )
+}
+
+function normalizeLogicPaneKey(paneKey, allowCanvas = false) {
+  const normalized = `${paneKey || ""}`.trim().toLowerCase()
+  if (allowCanvas && normalized === "canvas") {
+    return "canvas"
+  }
+  if (["flow", "nodes", "selection", "run", "json"].includes(normalized)) {
+    return normalized
+  }
+  if (normalized === "list") {
+    return "flow"
+  }
+  if (normalized === "palette") {
+    return "nodes"
+  }
+  if (normalized === "inspector") {
+    return "selection"
+  }
+  return allowCanvas ? "canvas" : "selection"
 }
 
 function getStageMetrics(nodes, resolveNodeSize = null) {
@@ -774,10 +800,13 @@ function buildLogicNodeMetaChips(node, graph = null) {
   const chips = []
   switch (`${node?.type || ""}`.trim()) {
     case "start":
-      appendMetaChip(chips, "입력", "시작 입력")
+      appendMetaChip(chips, "입력", config.input ? getLogicFieldDisplayValue(graph, node, "input", config.input) : "시작 입력")
       break
     case "end":
       appendMetaChip(chips, "결과", getLogicFieldDisplayValue(graph, node, "result", config.result || ""))
+      break
+    case "output":
+      appendMetaChip(chips, "출력", getLogicFieldDisplayValue(graph, node, "result", config.result || "연결 입력"))
       break
     case "if":
       appendMetaChip(chips, "왼쪽", getLogicFieldDisplayValue(graph, node, "leftRef", config.leftRef || ""))
@@ -883,11 +912,13 @@ function buildLogicNodeMetaChips(node, graph = null) {
 }
 
 function buildLogicNodePreviewText(node, runtime, definition, graph = null) {
+  const nodeType = `${node?.type || ""}`.trim()
   if (runtime?.result?.text) {
-    return truncateText(runtime.result.text, 140)
+    return nodeType === "output" ? runtime.result.text : truncateText(runtime.result.text, 140)
   }
   const config = node?.config || {}
   const preview = [
+    getLogicFieldDisplayValue(graph, node, "result", config.result || ""),
     getLogicFieldDisplayValue(graph, node, "template", config.template || ""),
     getLogicFieldDisplayValue(graph, node, "input", config.input || ""),
     getLogicFieldDisplayValue(graph, node, "query", config.query || ""),
@@ -900,9 +931,10 @@ function buildLogicNodePreviewText(node, runtime, definition, graph = null) {
     config.action
   ].find((item) => `${item || ""}`.trim())
   if (preview) {
-    return truncateText(preview, 140)
+    return nodeType === "output" ? preview : truncateText(preview, 140)
   }
-  return truncateText(definition?.example || definition?.description || "노드를 놓고 아래 설정에서 내용을 채워 주세요.", 140)
+  const fallback = definition?.example || definition?.description || "노드를 놓고 아래 설정에서 내용을 채워 주세요."
+  return nodeType === "output" ? fallback : truncateText(fallback, 140)
 }
 
 function buildInspectorFieldGroups(fields) {
@@ -1251,6 +1283,8 @@ function renderCanvas(props) {
     onDeleteNode,
     onDuplicateNode,
     activeRunSnapshot,
+    runOutputExpanded,
+    onRunOutputExpandedChange,
     resolveNodeSize
   } = props
 
@@ -1498,7 +1532,7 @@ function renderCanvas(props) {
         },
         renderMetaChipList(e, chips),
         e("div", {
-          className: `logic-node-preview ${runtime?.result?.text ? "" : "muted"}`
+          className: `logic-node-preview ${node.type === "output" ? "logic-node-preview-full" : ""} ${runtime?.result?.text ? "" : "muted"}`
         }, buildLogicNodePreviewText(node, runtime, definition, draftGraph))),
         e("div", { className: "logic-node-actions" },
           e("button", {
@@ -1533,8 +1567,236 @@ function renderCanvas(props) {
         onPointerDown: stopLogicCanvasEvent,
         onClick: () => onDeleteEdge(selectedEdgeId)
       }, "선택 연결 삭제")
-      : null
+      : null,
+    renderLogicRunOutputPanel({
+      ...props,
+      runSnapshot: activeRunSnapshot,
+      expanded: runOutputExpanded,
+      onExpandedChange: onRunOutputExpandedChange
+    })
     )
+  )
+}
+
+function buildLogicRunNodeMap(runSnapshot) {
+  const map = {}
+  if (runSnapshot && Array.isArray(runSnapshot.nodes)) {
+    runSnapshot.nodes.forEach((item) => {
+      if (item?.nodeId) {
+        map[item.nodeId] = item
+      }
+    })
+  }
+  return map
+}
+
+function getLogicRunResultText(runtime) {
+  return `${runtime?.result?.text || ""}`.trim()
+}
+
+function getLogicRunResultDataRows(runtime) {
+  const data = runtime?.result?.data || {}
+  if (!data || typeof data !== "object") {
+    return []
+  }
+  return Object.entries(data)
+    .filter(([, value]) => `${value || ""}`.trim())
+    .map(([key, value]) => ({
+      label: `data.${key}`,
+      value: `${value}`
+    }))
+}
+
+function resolveLogicEdgeOutputText(edge, runtimeMap) {
+  const sourceRuntime = runtimeMap[edge.sourceNodeId]
+  if (!sourceRuntime?.result) {
+    return ""
+  }
+  const port = `${edge.sourcePort || "main"}`.trim()
+  if (port.startsWith("data.")) {
+    return `${sourceRuntime.result.data?.[port.slice(5)] || ""}`.trim()
+  }
+  return getLogicRunResultText(sourceRuntime)
+}
+
+function buildLogicNodeInputRows(node, graph, runtimeMap) {
+  const incomingEdges = (Array.isArray(graph?.edges) ? graph.edges : [])
+    .filter((edge) => edge.targetNodeId === node.nodeId)
+  if (incomingEdges.length > 0) {
+    return incomingEdges
+      .map((edge) => {
+        const sourceNode = (graph?.nodes || []).find((item) => item.nodeId === edge.sourceNodeId)
+        const sourceLabel = sourceNode?.title || getPaletteLibraryItem(sourceNode?.type)?.label || edge.sourceNodeId
+        const targetPort = `${edge.targetPort || "main"}`.trim()
+        return {
+          label: targetPort === "main" ? sourceLabel : `${sourceLabel} · ${targetPort}`,
+          value: resolveLogicEdgeOutputText(edge, runtimeMap)
+        }
+      })
+      .filter((row) => `${row.value || ""}`.trim())
+  }
+
+  const config = node?.config || {}
+  const configInputKeys = [
+    "input",
+    "query",
+    "content",
+    "message",
+    "text",
+    "task",
+    "template",
+    "value",
+    "result",
+    "leftRef"
+  ]
+  return configInputKeys
+    .filter((key) => `${config[key] || ""}`.trim())
+    .map((key) => ({
+      label: key,
+      value: getLogicFieldDisplayValue(graph, node, key, config[key])
+    }))
+}
+
+function buildLogicNodeProviderRows(node) {
+  const config = node?.config || {}
+  const rows = []
+  const append = (label, value) => {
+    const text = `${value || ""}`.trim()
+    if (text && text.toLowerCase() !== "none") {
+      rows.push({ label, value: text })
+    }
+  }
+  append("공급자", config.provider || config.summaryProvider)
+  append("모델", config.model || config.summaryModel)
+  append("Groq", config.groqModel)
+  append("Gemini", config.geminiModel)
+  append("Cerebras", config.cerebrasModel)
+  append("Copilot", config.copilotModel)
+  append("Codex", config.codexModel)
+  return rows
+}
+
+function buildLogicNodeWebReferenceRows(node, runtime) {
+  const config = node?.config || {}
+  const rows = []
+  const append = (label, value) => {
+    const text = `${value || ""}`.trim()
+    if (text) {
+      rows.push({ label, value: text })
+    }
+  }
+  ;(runtime?.result?.links || []).forEach((link, index) => append(`참고 ${index + 1}`, link));
+  `${config.webUrls || ""}`
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .forEach((url, index) => append(`설정 URL ${index + 1}`, url))
+  if (`${node?.type || ""}`.trim().startsWith("web_")) {
+    append("웹 대상", config.url || config.query)
+  }
+  return rows
+}
+
+function renderLogicRunValueRows(e, rows) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return null
+  }
+  return rows.map((row, index) => e("div", {
+    key: `${row.label}-${index}`,
+    className: "logic-run-output-row"
+  },
+  e("span", null, row.label),
+  e("pre", null, row.value)))
+}
+
+function renderLogicRunOutputPanel(props) {
+  const {
+    e,
+    draftGraph,
+    runSnapshot,
+    expanded,
+    onExpandedChange
+  } = props
+  const nodes = Array.isArray(draftGraph?.nodes) ? draftGraph.nodes : []
+  const runtimeMap = buildLogicRunNodeMap(runSnapshot)
+  const visibleNodes = nodes.filter((node) => runtimeMap[node.nodeId]?.result)
+  const finalOutput = `${runSnapshot?.resultText || ""}`.trim()
+  const hasFinalOutput = finalOutput && ["completed", "error", "canceled"].includes(`${runSnapshot?.status || ""}`.trim())
+  const isExpanded = Boolean(expanded)
+  const setExpanded = (nextValue) => {
+    if (typeof onExpandedChange === "function") {
+      onExpandedChange(nextValue)
+    }
+  }
+
+  return e("section", {
+    className: `logic-run-output-panel ${isExpanded ? "expanded" : "collapsed"}`,
+    onPointerDown: stopLogicCanvasEvent,
+    onWheel: (event) => event.stopPropagation()
+  },
+    e("div", { className: "logic-run-output-head" },
+      e("div", null,
+        e("div", { className: "routine-head-kicker" }, "실행 결과"),
+        e("strong", null, "노드 입출력")
+      ),
+      e("div", { className: "logic-run-output-head-actions" },
+        runSnapshot
+          ? e("span", { className: `pill ${getLogicStatusTone(runSnapshot.status || "-")}` }, getLogicStatusLabel(runSnapshot.status || "-"))
+          : e("span", { className: "pill idle" }, "대기"),
+        e("button", {
+          className: "btn ghost tiny-btn",
+          type: "button",
+          onClick: () => setExpanded(!isExpanded)
+        }, isExpanded ? "최소화" : "펼치기"))
+    ),
+    isExpanded
+      ? e("div", { className: "logic-run-output-scroll" },
+        hasFinalOutput
+          ? e("article", { className: "logic-run-output-final" },
+            e("strong", null, "최종 출력"),
+            e("pre", null, finalOutput))
+          : null,
+        visibleNodes.length > 0
+          ? visibleNodes.map((node) => {
+            const runtime = runtimeMap[node.nodeId]
+            const paletteItem = getPaletteLibraryItem(node.type)
+            const inputs = buildLogicNodeInputRows(node, draftGraph, runtimeMap)
+            const outputText = getLogicRunResultText(runtime)
+            const outputData = getLogicRunResultDataRows(runtime)
+            const providerRows = buildLogicNodeProviderRows(node)
+            const webRows = buildLogicNodeWebReferenceRows(node, runtime)
+            return e("article", {
+              key: node.nodeId,
+              className: `logic-run-output-card ${node.type === "output" ? "logic-run-output-card-full" : ""}`
+            },
+            e("div", { className: "logic-run-output-card-head" },
+              e("strong", null, node.title || paletteItem.label || node.type),
+              e("span", { className: `pill ${getLogicStatusTone(runtime.status || "-")}` }, getLogicStatusLabel(runtime.status || "-"))
+            ),
+            inputs.length > 0
+              ? e("div", { className: "logic-run-output-section" },
+                e("span", { className: "logic-run-output-section-title" }, "입력"),
+                renderLogicRunValueRows(e, inputs))
+              : null,
+            outputText || outputData.length > 0
+              ? e("div", { className: "logic-run-output-section" },
+                e("span", { className: "logic-run-output-section-title" }, "출력"),
+                outputText ? e("pre", { className: "logic-run-output-text" }, outputText) : null,
+                renderLogicRunValueRows(e, outputData))
+              : null,
+            providerRows.length > 0
+              ? e("div", { className: "logic-run-output-section" },
+                e("span", { className: "logic-run-output-section-title" }, "공급자 / 모델"),
+                renderLogicRunValueRows(e, providerRows))
+              : null,
+            webRows.length > 0
+              ? e("div", { className: "logic-run-output-section" },
+                e("span", { className: "logic-run-output-section-title" }, "웹 참고"),
+                renderLogicRunValueRows(e, webRows))
+              : null)
+          })
+          : (hasFinalOutput ? null : e("div", { className: "logic-detail-empty" }, "실행 후 각 노드의 입력과 출력이 여기에 표시됩니다.")))
+      : null
   )
 }
 
@@ -2358,6 +2620,626 @@ function renderInspector(props) {
   )
 }
 
+function getLogicWorkbenchStatus(props) {
+  const {
+    draftGraph,
+    dirty,
+    activeRunId,
+    runSnapshot
+  } = props
+  if (activeRunId && runSnapshot) {
+    return runSnapshot.status || "running"
+  }
+  if (!draftGraph?.graphId) {
+    return dirty ? "unsaved" : "idle"
+  }
+  return dirty ? "unsaved" : "saved"
+}
+
+function buildLogicSectionItems(props) {
+  const {
+    graphs,
+    draftGraph,
+    selectedNode,
+    selectedEdge,
+    runEvents,
+    jsonBuffer
+  } = props
+  const nodeCount = Array.isArray(draftGraph?.nodes) ? draftGraph.nodes.length : 0
+  const edgeCount = Array.isArray(draftGraph?.edges) ? draftGraph.edges.length : 0
+  const eventCount = Array.isArray(runEvents) ? runEvents.length : 0
+  return [
+    {
+      key: "nodes",
+      icon: "□",
+      label: "노드",
+      description: "노드 라이브러리",
+      metric: `${LOGIC_NODE_LIBRARY.reduce((sum, group) => sum + group.items.length, 0)}`
+    },
+    {
+      key: "run",
+      icon: "▶",
+      label: "실행",
+      description: "실행 상태와 기록",
+      metric: `${eventCount}`
+    },
+    {
+      key: "json",
+      icon: "{}",
+      label: "JSON",
+      description: "흐름 JSON 편집",
+      metric: jsonBuffer?.trim() ? "편집" : `${nodeCount}/${edgeCount}`
+    }
+  ]
+}
+
+function renderLogicCommandBar(props, activeSection, onSectionChange) {
+  const {
+    e,
+    draftGraph,
+    dirty,
+    activeRunId,
+    runSnapshot,
+    onCreateNewGraph,
+    onSave,
+    onRun
+  } = props
+  const nodes = Array.isArray(draftGraph?.nodes) ? draftGraph.nodes : []
+  const edges = Array.isArray(draftGraph?.edges) ? draftGraph.edges : []
+  const status = getLogicWorkbenchStatus(props)
+  const statusText = activeRunId && runSnapshot
+    ? `${activeRunId} · ${getLogicStatusLabel(runSnapshot.status || "running")}`
+    : (dirty ? "저장 필요" : getLogicStatusLabel(status))
+
+  return e("header", { className: "logic-command-bar" },
+    e("div", { className: "logic-command-title" },
+      e("button", {
+        type: "button",
+        className: "logic-command-section-button",
+        onClick: () => onSectionChange("flow")
+      }, "로직"),
+      e("div", { className: "logic-command-divider" }),
+      e("button", {
+        type: "button",
+        className: "logic-command-graph-button",
+        onClick: () => onSectionChange(activeSection === "flow" ? "selection" : "flow")
+      },
+      e("span", null, draftGraph?.title || "새 작업 흐름"),
+      e("span", { className: "logic-command-caret" }, "▾")),
+      e("span", { className: `logic-command-status ${getLogicStatusTone(status)}` }, statusText)
+    ),
+    e("div", { className: "logic-command-meta" },
+      e("span", null, `${nodes.length}개 노드`),
+      e("span", null, `${edges.length}개 연결`),
+      draftGraph?.graphId
+        ? e("span", null, formatLogicGraphListId(draftGraph.graphId))
+        : e("span", null, "초안")
+    ),
+    e("div", { className: "logic-command-actions" },
+      e("button", {
+        className: "btn ghost",
+        type: "button",
+        onClick: onCreateNewGraph
+      }, "새 흐름"),
+      e("button", {
+        className: "btn secondary",
+        type: "button",
+        onClick: onSave
+      }, "저장"),
+      e("button", {
+        className: "btn primary",
+        type: "button",
+        onClick: onRun,
+        disabled: !draftGraph?.graphId
+      }, "실행"))
+  )
+}
+
+function renderLogicSectionNav(props, activeSection, onSectionChange) {
+  const {
+    e,
+    graphs,
+    selectedGraphId,
+    draftGraph,
+    paletteGroup,
+    onSelectGraph,
+    onRunGraph,
+    onPaletteGroupChange
+  } = props
+  const currentGraphId = `${draftGraph?.graphId || selectedGraphId || ""}`.trim()
+  const sections = buildLogicSectionItems(props).filter((item) => item.key !== "nodes")
+
+  const renderSectionItem = (item) => e("button", {
+    key: item.key,
+    type: "button",
+    className: `logic-section-nav-item ${activeSection === item.key ? "active" : ""}`,
+    onClick: () => onSectionChange(item.key)
+  },
+  e("span", { className: "logic-section-icon" }, item.icon),
+  e("span", { className: "logic-section-copy" },
+    e("span", { className: "logic-section-label" }, item.label),
+    e("span", { className: "logic-section-description" }, item.description)
+  ),
+  e("span", { className: "logic-section-metric" }, item.metric))
+
+  return e("aside", { className: "logic-section-nav" },
+    e("div", { className: "logic-section-block logic-section-category-block" },
+      e("div", { className: "logic-section-block-head" },
+        e("strong", null, "노드 카테고리"),
+        e("span", { className: "tiny" }, "바로가기")
+      ),
+      e("div", { className: "logic-section-category-list" },
+        LOGIC_NODE_LIBRARY.map((group) => {
+          const meta = getLogicCategoryMeta(group.key)
+          return e("button", {
+            key: group.key,
+            type: "button",
+            className: `logic-section-category logic-section-category-${meta.className} ${paletteGroup === group.key ? "active" : ""}`,
+            onClick: () => {
+              onPaletteGroupChange(group.key)
+              onSectionChange("nodes")
+            }
+          },
+          e("span", null, group.label),
+          e("span", null, `${group.items.length}`))
+        }))
+    ),
+    e("div", { className: "logic-section-nav-list" },
+      sections.map(renderSectionItem)
+    ),
+    e("div", { className: "logic-section-block" },
+      e("div", { className: "logic-section-block-head" },
+        e("strong", null, "저장된 흐름"),
+        e("span", { className: "tiny" }, `${Array.isArray(graphs) ? graphs.length : 0}`)
+      ),
+      e("div", { className: "logic-section-flow-list" },
+        Array.isArray(graphs) && graphs.length > 0
+          ? graphs.map((item) => {
+            const isActive = currentGraphId === item.graphId
+            return e("div", {
+              key: item.graphId,
+              className: `logic-section-flow-row ${isActive ? "active" : ""}`
+            },
+            e("button", {
+              type: "button",
+              className: "logic-section-flow-main",
+              onClick: () => {
+                onSelectGraph(item.graphId)
+                onSectionChange("flow")
+              }
+            },
+            e("strong", null, item.title || item.graphId),
+            e("span", { className: "tiny" }, `${item.nodeCount || 0}개 노드 · ${item.edgeCount || 0}개 연결`)),
+            e("button", {
+              type: "button",
+              className: "btn ghost tiny-btn",
+              onClick: () => onRunGraph(item.graphId),
+              disabled: !item.graphId
+            }, "실행"))
+          })
+          : e("div", { className: "logic-section-empty tiny" }, "저장된 흐름 없음"))
+    )
+  )
+}
+
+function renderFlowDetail(props) {
+  const {
+    e,
+    graphs,
+    selectedGraphId,
+    draftGraph,
+    dirty,
+    activeRunId,
+    runSnapshot,
+    lastMessage,
+    onSelectGraph,
+    onCreateNewGraph,
+    onDeleteGraph,
+    onGraphFieldChange,
+    onScheduleFieldChange,
+    onRun,
+    onRunGraph,
+    onCancelRun,
+    onSave,
+    onRefresh
+  } = props
+  const summary = summarizeLogicGraph(draftGraph)
+  const status = getLogicWorkbenchStatus(props)
+  const currentGraphId = `${draftGraph?.graphId || selectedGraphId || ""}`.trim()
+
+  return e("div", { className: "logic-detail-stack" },
+    e("section", { className: "logic-detail-card" },
+      e("div", { className: "logic-detail-section-head" },
+        e("div", null,
+          e("strong", null, "현재 흐름"),
+          e("span", { className: "tiny" }, lastMessage || summary || "초안")
+        ),
+        e("span", { className: `pill ${getLogicStatusTone(status)}` }, getLogicStatusLabel(status))
+      ),
+      e("label", { className: "routine-field" },
+        e("span", { className: "routine-field-label" }, "제목"),
+        e("input", {
+          className: "input",
+          value: draftGraph?.title || "",
+          onChange: (event) => onGraphFieldChange("title", event.target.value)
+        })
+      ),
+      e("label", { className: "routine-field" },
+        e("span", { className: "routine-field-label" }, "설명 / 시작 입력"),
+        e("textarea", {
+          className: "input logic-inspector-textarea",
+          value: draftGraph?.description || "",
+          onChange: (event) => onGraphFieldChange("description", event.target.value)
+        })
+      ),
+      e("div", { className: "routine-form-grid routine-form-grid-tight" },
+        e("label", { className: "routine-field" },
+          e("span", { className: "routine-field-label" }, "활성화"),
+          e("select", {
+            className: "input",
+            value: draftGraph?.enabled === false ? "false" : "true",
+            onChange: (event) => onGraphFieldChange("enabled", event.target.value === "true")
+          },
+          e("option", { value: "true" }, "활성"),
+          e("option", { value: "false" }, "비활성"))
+        ),
+        e("label", { className: "routine-field" },
+          e("span", { className: "routine-field-label" }, "스케줄"),
+          e("select", {
+            className: "input",
+            value: draftGraph?.schedule?.enabled === true ? "true" : "false",
+            onChange: (event) => onScheduleFieldChange("enabled", event.target.value === "true")
+          },
+          e("option", { value: "false" }, "수동"),
+          e("option", { value: "true" }, "사용"))
+        ),
+        e("label", { className: "routine-field" },
+          e("span", { className: "routine-field-label" }, "주기"),
+          e("select", {
+            className: "input",
+            value: draftGraph?.schedule?.scheduleKind || "daily",
+            onChange: (event) => onScheduleFieldChange("scheduleKind", event.target.value)
+          },
+          e("option", { value: "daily" }, "매일"),
+          e("option", { value: "weekly" }, "주간"),
+          e("option", { value: "monthly" }, "월간"))
+        ),
+        e("label", { className: "routine-field" },
+          e("span", { className: "routine-field-label" }, "시간"),
+          e("input", {
+            className: "input",
+            type: "time",
+            value: draftGraph?.schedule?.scheduleTime || "08:00",
+            onChange: (event) => onScheduleFieldChange("scheduleTime", event.target.value)
+          })
+        )
+      ),
+      e("div", { className: "logic-detail-actions" },
+        e("button", { className: "btn secondary", type: "button", onClick: onSave }, "저장"),
+        e("button", { className: "btn primary", type: "button", onClick: onRun, disabled: !draftGraph?.graphId }, "실행"),
+        activeRunId
+          ? e("button", { className: "btn ghost", type: "button", onClick: () => onCancelRun(activeRunId) }, "취소")
+          : null,
+        e("button", { className: "btn ghost", type: "button", onClick: onRefresh }, "새로고침"),
+        e("button", {
+          className: "btn danger",
+          type: "button",
+          onClick: () => onDeleteGraph(currentGraphId),
+          disabled: !currentGraphId
+        }, "삭제"))
+    ),
+    e("section", { className: "logic-detail-card" },
+      e("div", { className: "logic-detail-section-head" },
+        e("strong", null, "흐름 목록"),
+        e("button", { className: "btn ghost tiny-btn", type: "button", onClick: onCreateNewGraph }, "새 흐름")
+      ),
+      e("div", { className: "logic-detail-list" },
+        Array.isArray(graphs) && graphs.length > 0
+          ? graphs.map((item) => {
+            const isActive = currentGraphId === item.graphId
+            return e("div", {
+              key: item.graphId,
+              className: `logic-detail-list-row ${isActive ? "active" : ""}`
+            },
+            e("button", {
+              type: "button",
+              className: "logic-detail-list-main",
+              onClick: () => onSelectGraph(item.graphId)
+            },
+            e("strong", null, item.title || item.graphId),
+            e("span", { className: "tiny" }, `${item.nodeCount || 0}개 노드 · ${item.edgeCount || 0}개 연결`)),
+            e("button", {
+              type: "button",
+              className: "btn ghost tiny-btn",
+              onClick: () => onRunGraph(item.graphId),
+              disabled: !item.graphId
+            }, "실행"))
+          })
+          : e("div", { className: "logic-detail-empty" }, "저장된 흐름이 없습니다.")
+      ),
+      activeRunId && runSnapshot
+        ? e("div", { className: "logic-run-summary" },
+          e("span", { className: `pill ${getLogicStatusTone(runSnapshot.status || "-")}` }, getLogicStatusLabel(runSnapshot.status || "-")),
+          e("span", { className: "tiny" }, `실행 중: ${activeRunId}`))
+        : null
+    )
+  )
+}
+
+function renderNodeLibraryDetail(props) {
+  const {
+    e,
+    paletteGroup,
+    onPaletteGroupChange,
+    onSelectNodeType
+  } = props
+  const activeGroup = getPaletteLibraryGroup(paletteGroup)
+
+  return e("div", { className: "logic-detail-stack" },
+    e("section", { className: "logic-detail-card" },
+      e("div", { className: "logic-detail-section-head" },
+        e("div", null,
+          e("strong", null, "노드 라이브러리"),
+          e("span", { className: "tiny" }, activeGroup?.label || "흐름")
+        ),
+        e("span", { className: "pill idle" }, `${activeGroup?.items?.length || 0}`)
+      ),
+      e("div", { className: "logic-node-category-tabs" },
+        LOGIC_NODE_LIBRARY.map((group) => {
+          const meta = getLogicCategoryMeta(group.key)
+          return e("button", {
+            key: group.key,
+            type: "button",
+            className: `logic-node-category-tab logic-node-category-tab-${meta.className} ${activeGroup?.key === group.key ? "active" : ""}`,
+            onClick: () => onPaletteGroupChange(group.key)
+          }, group.label)
+        })
+      ),
+      e("div", { className: "logic-node-library-list" },
+        activeGroup.items.map(([type, label]) => {
+          const definition = getLogicNodeInspectorDefinition(type)
+          const meta = getLogicCategoryMeta(type)
+          const themeVars = buildLogicThemeVars(type)
+          return e("button", {
+            key: type,
+            type: "button",
+            className: `logic-node-library-item logic-node-library-item-${meta.className}`,
+            style: themeVars,
+            onClick: () => onSelectNodeType(type)
+          },
+          e("span", {
+            className: `logic-node-kind-badge logic-node-kind-badge-${meta.className}`,
+            style: themeVars
+          }, meta.label),
+          e("span", { className: "logic-node-library-copy" },
+            e("strong", null, label),
+            e("span", null, truncateText(definition?.description || definition?.example || label, 72))
+          ))
+        }))
+    )
+  )
+}
+
+function renderSelectionDetail(props) {
+  const {
+    e,
+    selectedNode,
+    selectedEdge
+  } = props
+  if (selectedNode) {
+    return e("div", { className: "logic-detail-stack" },
+      renderSelectedNodeCard(props)
+    )
+  }
+  if (selectedEdge) {
+    return e("div", { className: "logic-detail-stack" },
+      renderSelectedEdgeCard(props)
+    )
+  }
+  return e("div", { className: "logic-detail-stack" },
+    e("section", { className: "logic-detail-card logic-detail-empty-state" },
+      e("strong", null, "선택 없음"),
+      e("div", { className: "tiny" }, "캔버스에서 노드나 연결을 선택하면 상세 설정이 여기에 표시됩니다.")
+    )
+  )
+}
+
+function renderRunDetail(props) {
+  const {
+    e,
+    draftGraph,
+    activeRunId,
+    runSnapshot,
+    runEvents,
+    onRun,
+    onCancelRun,
+    onOpenRunPreview,
+    onRefresh
+  } = props
+  const events = Array.isArray(runEvents) ? runEvents : []
+  const openRunPreview = typeof onOpenRunPreview === "function" ? onOpenRunPreview : null
+  const runStatusContent = [
+    `실행 ID: ${activeRunId || "-"}`,
+    `상태: ${getLogicStatusLabel(runSnapshot?.status || "-")}`,
+    `결과: ${runSnapshot?.resultText || "-"}`,
+    `오류: ${runSnapshot?.error || "-"}`,
+    "",
+    JSON.stringify(runSnapshot || {}, null, 2)
+  ].join("\n")
+
+  return e("div", { className: "logic-detail-stack" },
+    e("section", { className: "logic-detail-card" },
+      e("div", { className: "logic-detail-section-head" },
+        e("div", null,
+          e("strong", null, "실행 상태"),
+          e("span", { className: "tiny" }, activeRunId || "대기 중")
+        ),
+        runSnapshot
+          ? e("span", { className: `pill ${getLogicStatusTone(runSnapshot.status || "-")}` }, getLogicStatusLabel(runSnapshot.status || "-"))
+          : e("span", { className: "pill idle" }, "대기")
+      ),
+      e("button", {
+        className: "logic-run-summary logic-run-preview-trigger",
+        type: "button",
+        onClick: () => openRunPreview?.({
+          open: true,
+          title: "실행 상태",
+          content: runStatusContent
+        })
+      },
+        e("span", { className: "tiny" }, runSnapshot?.resultText || runSnapshot?.error || "최근 실행 결과가 없습니다.")
+      ),
+      e("div", { className: "logic-detail-actions" },
+        e("button", { className: "btn primary", type: "button", onClick: onRun, disabled: !draftGraph?.graphId }, "실행"),
+        activeRunId
+          ? e("button", { className: "btn ghost", type: "button", onClick: () => onCancelRun(activeRunId) }, "취소")
+          : null,
+        e("button", { className: "btn secondary", type: "button", onClick: onRefresh }, "새로고침"))
+    ),
+    e("section", { className: "logic-detail-card" },
+      e("div", { className: "logic-detail-section-head" },
+        e("strong", null, "실행 로그"),
+        e("span", { className: "tiny" }, `${events.length}`)
+      ),
+      e("div", { className: "logic-run-log-list logic-detail-run-list" },
+        events.length > 0
+          ? events.slice(0, 36).map((event, index) => {
+            const eventTitle = getLogicEventLabel(event.kind || "event")
+            const eventContent = [
+              `이벤트: ${eventTitle}`,
+              `노드: ${event.nodeId || "-"}`,
+              `메시지: ${event.message || "-"}`,
+              `실행 ID: ${event.runId || activeRunId || "-"}`,
+              "",
+              JSON.stringify(event || {}, null, 2)
+            ].join("\n")
+            return e("button", {
+            key: `${event.runId || "run"}-${event.kind || "event"}-${index}`,
+            className: "logic-run-log-item logic-run-preview-trigger",
+            type: "button",
+            onClick: () => openRunPreview?.({
+              open: true,
+              title: `실행 로그 · ${eventTitle}`,
+              content: eventContent
+            })
+          },
+          e("strong", null, eventTitle),
+          e("span", { className: "tiny" }, event.nodeId || "-"),
+          e("div", { className: "tiny" }, event.message || "-"))
+          })
+          : e("div", { className: "logic-detail-empty" }, "실행 기록이 없습니다."))
+    )
+  )
+}
+
+function renderJsonDetail(props) {
+  const {
+    e,
+    draftGraph,
+    selectedGraphId,
+    jsonBuffer,
+    activeRunId,
+    runSnapshot,
+    onExportGraph,
+    onJsonBufferChange,
+    onImportGraph
+  } = props
+  return e("div", { className: "logic-detail-stack" },
+    e("section", { className: "logic-detail-card" },
+      e("div", { className: "logic-detail-section-head" },
+        e("div", null,
+          e("strong", null, "JSON"),
+          e("span", { className: "tiny" }, draftGraph?.graphId || selectedGraphId || "초안")
+        ),
+        e("span", { className: "pill idle" }, draftGraph?.version || "logic.graph.v1")
+      ),
+      e("textarea", {
+        className: "input logic-json-textarea logic-detail-json-textarea",
+        value: jsonBuffer,
+        placeholder: "logic.graph.v1 JSON을 붙여넣으면 이 작업 흐름으로 바뀝니다.",
+        onChange: (event) => onJsonBufferChange(event.target.value)
+      }),
+      e("div", { className: "logic-detail-actions" },
+        e("button", {
+          className: "btn secondary",
+          type: "button",
+          onClick: onExportGraph,
+          disabled: !draftGraph
+        }, "JSON 내보내기"),
+        e("button", {
+          className: "btn primary",
+          type: "button",
+          onClick: onImportGraph,
+          disabled: !jsonBuffer.trim()
+        }, "JSON 불러오기"))
+    ),
+    activeRunId && runSnapshot
+      ? e("section", { className: "logic-detail-card" },
+        e("div", { className: "logic-run-summary" },
+          e("span", { className: `pill ${getLogicStatusTone(runSnapshot.status || "-")}` }, getLogicStatusLabel(runSnapshot.status || "-")),
+          e("span", { className: "tiny" }, `실행 중: ${activeRunId}`))
+      )
+      : null
+  )
+}
+
+function getLogicDetailTitle(activeSection, selectedNode, selectedEdge) {
+  if (activeSection === "flow") {
+    return ["흐름", "작업 흐름 설정"]
+  }
+  if (activeSection === "nodes") {
+    return ["노드", "노드 추가"]
+  }
+  if (activeSection === "run") {
+    return ["실행", "상태와 기록"]
+  }
+  if (activeSection === "json") {
+    return ["JSON", "가져오기 / 내보내기"]
+  }
+  if (selectedNode) {
+    return ["선택", selectedNode.title || getPaletteLibraryItem(selectedNode.type)?.label || "선택 노드"]
+  }
+  if (selectedEdge) {
+    return ["선택", "연결 상세"]
+  }
+  return ["선택", "선택 없음"]
+}
+
+function renderLogicDetailPanel(props, activeSection) {
+  const {
+    e,
+    selectedNode,
+    selectedEdge,
+    dirty
+  } = props
+  const [kicker, title] = getLogicDetailTitle(activeSection, selectedNode, selectedEdge)
+  let content = null
+  if (activeSection === "flow") {
+    content = renderFlowDetail(props)
+  } else if (activeSection === "nodes") {
+    content = renderNodeLibraryDetail(props)
+  } else if (activeSection === "run") {
+    content = renderRunDetail(props)
+  } else if (activeSection === "json") {
+    content = renderJsonDetail(props)
+  } else {
+    content = renderSelectionDetail(props)
+  }
+
+  return e("aside", { className: `logic-detail-pane logic-detail-pane-${activeSection}` },
+    e("div", { className: "logic-detail-head" },
+      e("div", null,
+        e("div", { className: "routine-head-kicker" }, kicker),
+        e("strong", null, title)
+      ),
+      dirty
+        ? e("span", { className: "pill warn" }, "저장 필요")
+        : e("span", { className: "pill ok" }, "저장됨")
+    ),
+    e("div", { className: "logic-detail-scroll" }, content)
+  )
+}
+
 export function renderLogicTab(props) {
   const {
     e,
@@ -2366,33 +3248,36 @@ export function renderLogicTab(props) {
     renderResponsiveSectionTabs,
     setResponsivePane
   } = props
+  const activeSection = normalizeLogicPaneKey(currentLogicPane, isPortraitMobileLayout)
+  const detailSection = activeSection === "canvas" ? "selection" : activeSection
+  const setLogicSection = (section) => setResponsivePane("logic", section)
 
   if (isPortraitMobileLayout) {
     const tabs = renderSectionTabs(e, renderResponsiveSectionTabs, currentLogicPane, setResponsivePane)
-    if (currentLogicPane === "list") {
-      return e("div", { className: "logic-tab-shell mobile" }, tabs, renderGraphList(props))
-    }
-    if (currentLogicPane === "palette") {
-      return e("div", { className: "logic-tab-shell mobile" }, tabs, renderPalettePanel(props))
-    }
-    if (currentLogicPane === "inspector") {
-      return e("div", { className: "logic-tab-shell mobile" }, tabs, renderInspector(props))
-    }
-    return e("div", { className: "logic-tab-shell mobile" }, tabs, renderCanvas({
-      ...props,
-      activeRunSnapshot: props.runSnapshot
-    }))
+    return e("div", { className: "logic-tab-shell mobile" },
+      tabs,
+      activeSection === "canvas"
+        ? e("div", { className: "logic-canvas-mobile-workspace" },
+          renderCanvas({
+            ...props,
+            activeRunSnapshot: props.runSnapshot
+          })
+        )
+        : renderLogicDetailPanel(props, detailSection)
+    )
   }
 
   return e("div", { className: "logic-tab-shell" },
-    e("div", { className: "logic-top-grid" },
-      renderGraphList(props),
-      renderCanvas({
-        ...props,
-        activeRunSnapshot: props.runSnapshot
-      }),
-      renderPalettePanel(props)
-    ),
-    renderInspector(props)
+    renderLogicCommandBar(props, detailSection, setLogicSection),
+    e("div", { className: "logic-workbench-grid" },
+      renderLogicSectionNav(props, detailSection, setLogicSection),
+      e("div", { className: "logic-canvas-workspace" },
+        renderCanvas({
+          ...props,
+          activeRunSnapshot: props.runSnapshot
+        })
+      ),
+      renderLogicDetailPanel(props, detailSection)
+    )
   )
 }

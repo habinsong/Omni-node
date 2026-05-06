@@ -40,9 +40,11 @@ export const DEFAULT_CODEX_MODEL = "gpt-5.4";
 
 export const CODEX_MODEL_CHOICES = [
   { id: DEFAULT_CODEX_MODEL, label: DEFAULT_CODEX_MODEL },
+  { id: "gpt-5.5", label: "gpt-5.5" },
+  { id: "gpt-5.4-mini", label: "gpt-5.4-mini" },
   { id: "gpt-5.3-codex", label: "gpt-5.3-codex" },
-  { id: "gpt-5.2", label: "gpt-5.2" },
-  { id: "gpt-5.2-codex", label: "gpt-5.2-codex" }
+  { id: "gpt-5.2-codex", label: "gpt-5.2-codex" },
+  { id: "gpt-5.2", label: "gpt-5.2" }
 ];
 
 export const DEFAULT_MOBILE_PANES = {

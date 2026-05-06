@@ -3372,6 +3372,7 @@ public sealed partial class WebSocketGateway
             string? graphId = null;
             string? logicGraphJson = null;
             string? logicRunId = null;
+            string? logicRunInput = null;
             string? taskId = null;
             string? previewId = null;
             string? language = null;
@@ -3733,6 +3734,11 @@ public sealed partial class WebSocketGateway
             if (doc.RootElement.TryGetProperty("runId", out var runIdElement))
             {
                 logicRunId = runIdElement.GetString();
+            }
+
+            if (doc.RootElement.TryGetProperty("logicRunInput", out var logicRunInputElement))
+            {
+                logicRunInput = logicRunInputElement.GetString();
             }
 
             if (doc.RootElement.TryGetProperty("taskId", out var taskIdElement))
@@ -4471,6 +4477,7 @@ public sealed partial class WebSocketGateway
                 GraphId = graphId,
                 LogicGraphJson = logicGraphJson,
                 LogicRunId = logicRunId,
+                LogicRunInput = logicRunInput,
                 TaskId = taskId,
                 PreviewId = previewId,
                 Language = language,

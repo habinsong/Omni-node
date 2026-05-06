@@ -76,7 +76,7 @@ export function renderTaskGraphPanel(props) {
   const selectedPlanId = taskGraphState.createPlanId || plansState?.selectedPlanId || plansState?.snapshot?.plan?.planId || "";
   const selectedTask = tasks.find((task) => task.taskId === selectedTaskId) || tasks[0] || null;
 
-  return e("section", { className: "panel span2 ops-panel task-graph-panel" },
+  return e("section", { className: "panel settings-optimized-panel settings-task-graph-panel task-graph-panel" },
     e("div", { className: "plans-panel-head" },
       e("div", null,
         e("h2", null, "Background Task Graph"),

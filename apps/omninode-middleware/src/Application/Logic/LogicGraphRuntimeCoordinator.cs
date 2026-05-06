@@ -9,19 +9,21 @@ public sealed class LogicGraphRuntimeCoordinator
     private readonly Dictionary<string, LogicRunState> _runs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _activeRunByGraphId = new(StringComparer.Ordinal);
 
-    private Func<string, string, string, Action<LogicRunEvent>?, CancellationToken, Task<LogicRunSnapshot>>? _executor;
+    private Func<string, string, string, string, Action<LogicRunEvent>?, CancellationToken, Task<LogicRunSnapshot>>? _executor;
 
     private sealed class LogicRunState
     {
-        public LogicRunState(string graphId, string runId, LogicRunSnapshot snapshot)
+        public LogicRunState(string graphId, string runId, string runInput, LogicRunSnapshot snapshot)
         {
             GraphId = graphId;
             RunId = runId;
+            RunInput = runInput;
             Snapshot = snapshot;
         }
 
         public string GraphId { get; }
         public string RunId { get; }
+        public string RunInput { get; }
         public LogicRunSnapshot Snapshot { get; set; }
         public CancellationTokenSource CancellationSource { get; } = new();
         public List<Action<LogicRunEvent>> Subscribers { get; } = new();
@@ -35,7 +37,7 @@ public sealed class LogicGraphRuntimeCoordinator
     }
 
     public void ConfigureExecutor(
-        Func<string, string, string, Action<LogicRunEvent>?, CancellationToken, Task<LogicRunSnapshot>> executor
+        Func<string, string, string, string, Action<LogicRunEvent>?, CancellationToken, Task<LogicRunSnapshot>> executor
     )
     {
         _executor = executor;
@@ -44,6 +46,7 @@ public sealed class LogicGraphRuntimeCoordinator
     public LogicRunActionResult RunGraph(
         string graphId,
         string source,
+        string? runInput,
         Action<LogicRunEvent>? eventCallback
     )
     {
@@ -94,7 +97,7 @@ public sealed class LogicGraphRuntimeCoordinator
             Array.Empty<string>(),
             Array.Empty<LogicNodeRunState>()
         );
-        var runState = new LogicRunState(normalizedGraphId, runId, initialSnapshot);
+        var runState = new LogicRunState(normalizedGraphId, runId, runInput ?? string.Empty, initialSnapshot);
         if (eventCallback != null)
         {
             runState.Subscribers.Add(eventCallback);
@@ -227,6 +230,7 @@ public sealed class LogicGraphRuntimeCoordinator
                 state.GraphId,
                 state.RunId,
                 source,
+                state.RunInput,
                 evt => HandleEvent(state.RunId, evt),
                 state.CancellationSource.Token
             ).ConfigureAwait(false);

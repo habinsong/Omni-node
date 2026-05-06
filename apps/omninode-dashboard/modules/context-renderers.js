@@ -132,7 +132,7 @@ export function renderContextPanel(props) {
   const disabled = !authed || contextState.loading || contextState.loadingSkills || contextState.loadingCommands;
   const instructionText = `${instructions?.combinedText || ""}`.trim();
 
-  return e("section", { className: "panel span2 ops-panel" },
+  return e("section", { className: "panel settings-optimized-panel settings-context-panel" },
     e("div", { className: "plans-panel-head" },
       e("div", null,
         e("h2", null, "프로젝트 문맥"),

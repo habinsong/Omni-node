@@ -15,6 +15,34 @@ import {
   renderCodingComposerPanel as renderCodingComposerPanelModule
 } from "./dashboard-composer-renderers.js";
 
+function startWorkspaceResize(event) {
+  if (event.button !== 0) return;
+  const grid = event.currentTarget.closest(".workspace-grid");
+  if (!grid) return;
+  event.preventDefault();
+
+  const bounds = grid.getBoundingClientRect();
+  const minWidth = 220;
+  const maxWidth = Math.min(560, Math.max(260, bounds.width * 0.42));
+  const setWidth = (clientX) => {
+    const nextWidth = Math.min(maxWidth, Math.max(minWidth, clientX - bounds.left));
+    grid.style.setProperty("--conversation-column-width", `${Math.round(nextWidth)}px`);
+  };
+  const handlePointerMove = (moveEvent) => setWidth(moveEvent.clientX);
+  const handlePointerUp = () => {
+    document.removeEventListener("pointermove", handlePointerMove);
+    document.removeEventListener("pointerup", handlePointerUp);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  };
+
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+  setWidth(event.clientX);
+  document.addEventListener("pointermove", handlePointerMove);
+  document.addEventListener("pointerup", handlePointerUp, { once: true });
+}
+
 export function renderGlobalNav(props) {
   const {
     e,
@@ -298,6 +326,13 @@ export function renderWorkspace(props) {
     "div",
     { className: "workspace-grid" },
     renderConversationPanel(),
+    e("div", {
+      className: "workspace-resizer",
+      role: "separator",
+      "aria-orientation": "vertical",
+      title: "좌우 패널 너비 조절",
+      onPointerDown: startWorkspaceResize
+    }),
     e(
       "section",
       { className: "chat-panel" },

@@ -61,7 +61,7 @@ export function renderRoutingPolicyPanel(props) {
   const lastDecision = snapshot?.lastDecision || null;
   const disabled = !authed || routingPolicyState.loading || routingPolicyState.pending;
 
-  return e("section", { className: "panel span2 ops-panel routing-policy-panel" },
+  return e("section", { className: "panel settings-optimized-panel settings-routing-panel routing-policy-panel" },
     e("div", { className: "plans-panel-head" },
       e("div", null,
         e("h2", null, "카테고리 라우팅 정책"),

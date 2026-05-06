@@ -100,7 +100,7 @@ export function renderPlansPanel(props) {
     ))
     : e("div", { className: "empty plan-empty-state" }, "단계 정보가 없습니다.");
 
-  return e("section", { className: "panel span2 ops-panel plans-panel" },
+  return e("section", { className: "panel settings-optimized-panel settings-plans-panel plans-panel" },
     e("div", { className: "plans-panel-head" },
       e("div", null,
         e("h2", null, "작업 계획"),

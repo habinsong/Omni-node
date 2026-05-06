@@ -21,145 +21,28 @@ import {
   resolveRoutineVisibleExecutionMode
 } from "./routine-utils.js";
 import { renderRoutineRunHistoryPanel } from "./dashboard-workspace-renderers.js";
+import { computeRoutineStats } from "./routine-stats.js";
+import { renderRoutineRetryAndNotifyFields } from "./routine-form-fields.js";
+import { renderRoutineProgressPanel as renderRoutineProgressPanelV2 } from "./routine-progress-renderer.js";
+import {
+  buildDeleteRoutineHandler,
+  renderRoutineTestSplitMenu
+} from "./routine-defensive-ui.js";
+import { createRoutineCreateWizard } from "./routine-create-wizard.js";
 
-const ROUTINE_CREATE_PROGRESS_STAGES = [
-  {
-    key: "request_analysis",
-    title: "요청 분석",
-    compactTitle: "요청 분석",
-    detail: "스케줄과 실행 경로를 확인합니다."
-  },
-  {
-    key: "planning",
-    title: "생성 전략 준비",
-    compactTitle: "전략 준비",
-    detail: "실행 방식과 사용할 생성 경로를 고릅니다."
-  },
-  {
-    key: "implementation",
-    title: "실행 구성 생성",
-    compactTitle: "구성 생성",
-    detail: "스크립트 또는 실행 구성을 만들고 필요한 보정을 적용합니다."
-  },
-  {
-    key: "save",
-    title: "루틴 등록",
-    compactTitle: "루틴 등록",
-    detail: "생성 결과를 저장하고 스케줄에 연결합니다."
-  },
-  {
-    key: "initial_run",
-    title: "초기 실행",
-    compactTitle: "초기 실행",
-    detail: "생성 직후 1회 실행해서 결과를 반영합니다."
-  }
-];
-
-function clampRoutineProgressPercent(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return 0;
-  }
-
-  return Math.max(0, Math.min(100, Math.round(numeric)));
+// Lazy-instantiate the wizard component once. React is a global script tag
+// so we defer creation until first render to ensure React is loaded.
+let RoutineCreateWizardCtor = null;
+function ensureWizardComponent(e) {
+  if (RoutineCreateWizardCtor) return RoutineCreateWizardCtor;
+  RoutineCreateWizardCtor = createRoutineCreateWizard({ React: window.React, e });
+  return RoutineCreateWizardCtor;
 }
 
-function formatRoutineProgressElapsed(progress) {
-  const startedAt = Number(progress && progress.startedAt);
-  if (!Number.isFinite(startedAt) || startedAt <= 0) {
-    return "";
-  }
-
-  const end = progress && progress.active && !progress.done
-    ? Date.now()
-    : (Number(progress && progress.completedAt) > 0
-      ? Number(progress.completedAt)
-      : (Number(progress && progress.updatedAt) > 0 ? Number(progress.updatedAt) : Date.now()));
-  const elapsedMs = Math.max(0, end - startedAt);
-  if (elapsedMs < 1000) {
-    return `${elapsedMs}ms`;
-  }
-
-  return `${(elapsedMs / 1000).toFixed(elapsedMs >= 10000 ? 0 : 1)}초`;
-}
-
-function renderRoutineProgressPanel(e, progress) {
-  const trackingCreate = progress && progress.operation === "create" && (progress.active || progress.done);
-  const percent = trackingCreate
-    ? clampRoutineProgressPercent(progress.done && progress.ok ? 100 : progress.percent)
-    : 0;
-  const elapsed = trackingCreate ? formatRoutineProgressElapsed(progress) : "";
-  const summaryTitle = trackingCreate
-    ? (progress.done
-      ? (progress.ok ? "루틴 생성 완료" : "루틴 생성 실패")
-      : (progress.stageTitle || "루틴 생성 진행 중"))
-    : "루틴 생성 대기";
-  const summaryDetail = trackingCreate
-    ? (progress.stageDetail || progress.message || "루틴 생성 단계를 진행 중입니다.")
-    : "요청 전 대기";
-  const badgeText = trackingCreate
-    ? (progress.done ? (progress.ok ? "완료" : "실패") : "진행 중")
-    : "대기";
-  const badgeClass = trackingCreate
-    ? (progress.done ? (progress.ok ? "ok" : "error") : "working")
-    : "idle";
-  const currentStageIndex = trackingCreate
-    ? Math.max(1, Math.min(ROUTINE_CREATE_PROGRESS_STAGES.length, Number(progress.stageIndex) || 1))
-    : 0;
-  const panelClassName = `routine-progress-panel ${trackingCreate ? "is-tracking" : "is-idle"} ${progress?.done ? (progress.ok ? "is-ok" : "is-error") : ""}`.trim();
-
-  return e("aside", { className: panelClassName },
-    e("div", { className: "routine-progress-head" },
-      e("div", null,
-        e("div", { className: "routine-head-kicker" }, "생성 프로그레스"),
-        e("strong", { className: "routine-progress-title" }, summaryTitle)
-      ),
-      e("div", { className: "routine-progress-head-side" },
-        elapsed ? e("span", { className: "routine-progress-elapsed" }, `경과 ${elapsed}`) : null,
-        e("span", { className: `routine-progress-badge ${badgeClass}` }, badgeText)
-      )
-    ),
-    e("div", { className: "routine-progress-meta" },
-      e("span", { className: "routine-progress-caption" }, summaryDetail),
-      e("span", { className: "routine-progress-percent" }, trackingCreate ? `${percent}%` : "대기")
-    ),
-    e("div", {
-      className: "routine-progress-bar",
-      role: "progressbar",
-      "aria-valuemin": 0,
-      "aria-valuemax": 100,
-      "aria-valuenow": percent
-    },
-      e("div", {
-        className: "routine-progress-bar-fill",
-        style: { width: `${percent}%` }
-      })
-    ),
-    trackingCreate
-      ? e("div", { className: "routine-progress-stage-list" },
-        ROUTINE_CREATE_PROGRESS_STAGES.map((stage, index) => {
-          const stageNumber = index + 1;
-          let status = "pending";
-          if (currentStageIndex > 0) {
-            if (stageNumber < currentStageIndex) {
-              status = "done";
-            } else if (stageNumber === currentStageIndex) {
-              status = progress.done ? (progress.ok ? "done" : "error") : "active";
-            }
-          }
-
-          return e("div", {
-            key: stage.key,
-            className: `routine-progress-stage ${status}`
-          },
-            e("span", { className: "routine-progress-stage-index" }, `${stageNumber}`),
-            e("span", { className: "routine-progress-stage-title" }, stage.compactTitle || stage.title)
-          );
-        })
-      )
-      : null
-  );
-}
+// Progress hero rendering moved to ./routine-progress-renderer.js
+// Stats moved to ./routine-stats.js
+// Shared retry/notify field group moved to ./routine-form-fields.js
+// Confirm-delete + split-menu moved to ./routine-defensive-ui.js
 
 function renderRoutineScheduleBuilder(props) {
   const {
@@ -446,14 +329,11 @@ export function renderRoutineTab(props) {
   const selected = routines.find((item) => item.id === routineSelectedId) || null;
   const selectedRuns = Array.isArray(selected?.runs) ? selected.runs : [];
   const isRoutineCreatePending = !!(routineProgress && routineProgress.active && routineProgress.operation === "create");
-  const enabledCount = routines.filter((item) => !!item.enabled).length;
-  const browserAgentCount = routines.filter((item) =>
-    normalizeRoutineExecutionModeValue(item.resolvedExecutionMode || item.executionMode) === "browser_agent"
-  ).length;
-  const failedCount = routines.filter((item) =>
-    /error|fail|timeout|blocked/i.test(`${item && item.lastStatus ? item.lastStatus : ""}`)
-  ).length;
-  const scheduledCount = routines.filter((item) => `${item && item.nextRunLocal ? item.nextRunLocal : ""}`.trim().length > 0).length;
+  const stats = computeRoutineStats(routines);
+  const enabledCount = stats.enabled;
+  const browserAgentCount = stats.browserAgent;
+  const failedCount = stats.failed;
+  const scheduledCount = stats.scheduled;
   const selectedModeLabel = selected
     ? formatRoutineExecutionModeLabel(selected.resolvedExecutionMode || selected.executionMode || "script")
     : "루틴 선택 대기";
@@ -521,109 +401,20 @@ export function renderRoutineTab(props) {
     )
   );
 
-  const createPanel = e("section", { className: "routine-list-panel routine-create-panel" },
-    e("div", { className: "routine-head" },
-      e("div", null,
-        e("div", { className: "routine-head-kicker" }, "새 루틴"),
-        e("h2", null, "루틴 만들기")
-      )
-    ),
-    e("p", { className: "hint routine-panel-hint" }, "새 루틴은 기본으로 텔레그램 봇 응답이 켜집니다. 상세 패널에서 켜기/끄기를 바로 바꿀 수 있고, 생성 직후에는 즉시 1회 실행합니다."),
-    errorByKey["routine:main"] ? e("div", { className: "error-banner" }, errorByKey["routine:main"]) : null,
-    e("div", { className: "routine-section-card routine-create-card" },
-      e("div", { className: "routine-form-grid routine-form-grid-primary" },
-        e("label", { className: "routine-field" },
-          e("span", { className: "routine-field-label" }, "루틴 이름"),
-          e("input", {
-            className: "input",
-            value: routineCreateForm.title,
-            onChange: (event) => patchRoutineForm("create", { title: event.target.value }),
-            placeholder: "비워두면 요청 기반으로 자동 생성"
-          })
-        ),
-        e("label", { className: "routine-field routine-field-full" },
-          e("span", { className: "routine-field-label" }, "요청 원문"),
-          e("textarea", {
-            className: "textarea routine-input",
-            value: routineCreateForm.request,
-            onChange: (event) => patchRoutineForm("create", { request: event.target.value }),
-            onKeyDown: (event) => onInputKeyDown(event, createRoutineFromUi),
-            placeholder: "예: 매일 오전 8시에 주요 기사와 서버 상태를 요약해줘"
-          })
-        )
-      ),
-      e("div", { className: "routine-execution-config-stack" },
-        renderRoutineExecutionModeBuilder({
-          e,
-          form: routineCreateForm,
-          formType: "create",
-          patchRoutineForm,
-          routineAgentProviderOptions,
-          routineAgentModelOptions
-        }),
-        e("div", { className: "routine-form-grid" },
-          e("label", { className: "routine-field" },
-            e("span", { className: "routine-field-label" }, "실패 재시도"),
-            e("input", {
-              className: "input",
-              type: "number",
-              min: 0,
-              max: 5,
-              value: `${Math.min(5, Math.max(0, Number(routineCreateForm.maxRetries ?? 1) || 0))}`,
-              onChange: (event) => patchRoutineForm("create", { maxRetries: Number(event.target.value) || 0 })
-            })
-          ),
-          e("label", { className: "routine-field" },
-            e("span", { className: "routine-field-label" }, "재시도 간격(초)"),
-            e("input", {
-              className: "input",
-              type: "number",
-              min: 0,
-              max: 300,
-              value: `${Math.min(300, Math.max(0, Number(routineCreateForm.retryDelaySeconds ?? 15) || 0))}`,
-              onChange: (event) => patchRoutineForm("create", { retryDelaySeconds: Number(event.target.value) || 0 })
-            })
-          ),
-          e("label", { className: "routine-field routine-field-full" },
-            e("span", { className: "routine-field-label" }, "텔레그램 봇 응답"),
-            e("select", {
-              className: "input",
-              value: normalizeRoutineNotifyTelegram(routineCreateForm.notifyTelegram, true) ? "on" : "off",
-              onChange: (event) => patchRoutineForm("create", { notifyTelegram: event.target.value === "on" })
-            },
-            e("option", { value: "on" }, "켜기"),
-            e("option", { value: "off" }, "끄기"))
-          ),
-          e("label", { className: "routine-field routine-field-full" },
-            e("span", { className: "routine-field-label" }, "텔레그램 알림"),
-            e("select", {
-              className: "input",
-              value: normalizeRoutineNotifyPolicy(routineCreateForm.notifyPolicy, "always"),
-              onChange: (event) => patchRoutineForm("create", { notifyPolicy: event.target.value })
-            },
-            e("option", { value: "always" }, "항상"),
-            e("option", { value: "on_change" }, "변경 시만"),
-            e("option", { value: "error_only" }, "오류 시만"),
-            e("option", { value: "never" }, "보내지 않음"))
-          )
-        )
-      )
-    ),
-    renderRoutineScheduleBuilder({
-      e,
-      form: routineCreateForm,
-      formType: "create",
-      patchRoutineForm,
-      toggleRoutineWeekday
-    }),
-    e("div", { className: "routine-submit-row" },
-      e("button", {
-        className: "btn primary routine-submit-btn",
-        onClick: createRoutineFromUi,
-        disabled: isRoutineCreatePending
-      }, isRoutineCreatePending ? "생성 중..." : "루틴 생성")
-    )
-  );
+  const RoutineCreateWizard = ensureWizardComponent(e);
+  const createPanel = e(RoutineCreateWizard, {
+    routineCreateForm,
+    patchRoutineForm,
+    toggleRoutineWeekday,
+    createRoutineFromUi,
+    onInputKeyDown,
+    isRoutineCreatePending,
+    routineAgentProviderOptions,
+    routineAgentModelOptions,
+    errorMessage: errorByKey["routine:main"] || "",
+    renderRoutineExecutionModeBuilder,
+    renderRoutineScheduleBuilder
+  });
 
   const listPanel = e("section", { className: "routine-list-panel routine-library-panel" },
     e("div", { className: "routine-head" },
@@ -680,29 +471,52 @@ export function renderRoutineTab(props) {
               e("div", { className: "routine-head-kicker" }, "루틴 상세"),
               e("strong", null, selected.title || selected.id),
               e("div", { className: "routine-item-meta" },
-                e("span", { className: `meta-chip ${selected.enabled ? "ok" : "neutral"}` }, selected.enabled ? "활성" : "비활성"),
+                // Active toggle — chip itself is the control (P2: 1-click defensive UX)
+                e("button", {
+                  type: "button",
+                  className: `meta-chip chip-toggle ${selected.enabled ? "ok" : "neutral"}`,
+                  onClick: () => setRoutineEnabled(selected.id, !selected.enabled),
+                  title: selected.enabled ? "클릭해서 비활성화" : "클릭해서 활성화"
+                }, selected.enabled ? "✓ 활성" : "○ 비활성"),
+                // Telegram-response toggle — same pattern
+                e("button", {
+                  type: "button",
+                  className: `meta-chip chip-toggle ${selectedNotifyTelegram ? "ok" : "neutral"}`,
+                  onClick: () => setRoutineTelegramResponseEnabled(selected.id, !selectedNotifyTelegram),
+                  title: selectedNotifyTelegram ? "클릭해서 텔레그램 응답 끄기" : "클릭해서 텔레그램 응답 켜기"
+                }, selectedNotifyTelegram ? "텔레그램 응답 ON" : "텔레그램 응답 OFF"),
+                // Read-only descriptive chips
                 e("span", { className: "meta-chip neutral" }, formatRoutineExecutionModeLabel(selected.resolvedExecutionMode || selected.executionMode || "script")),
                 normalizeRoutineExecutionModeValue(selected.resolvedExecutionMode || selected.executionMode) === "browser_agent"
                   ? e("span", { className: "meta-chip neutral" }, formatRoutineAgentToolProfileLabel(selected.agentToolProfile))
                   : null,
-                e("span", { className: `meta-chip ${selectedNotifyTelegram ? "ok" : "neutral"}` }, selectedNotifyTelegram ? "텔레그램 응답 ON" : "텔레그램 응답 OFF"),
                 e("span", { className: "meta-chip neutral" }, normalizeRoutineScheduleSourceMode(selected.scheduleSourceMode, "manual") === "auto" ? "자동" : "수동"),
                 e("span", { className: "meta-chip neutral" }, selected.scheduleText || "-"),
                 e("span", { className: "meta-chip neutral" }, selected.language || "-")
               )
             ),
             e("div", { className: "routine-action-row" },
-              e("button", { className: "btn primary", onClick: () => runRoutineNow(selected.id) }, "웹 테스트"),
-              (selected.resolvedExecutionMode || selected.executionMode) === "browser_agent"
-                ? e("button", { className: "btn", onClick: () => testRoutineBrowserAgent(selected.id) }, "브라우저 에이전트 테스트")
-                : null,
-              e("button", { className: "btn", onClick: () => testRoutineTelegram(selected.id) }, "텔레그램 테스트"),
+              // Test split-menu — primary "웹 테스트" + chevron with browser/telegram in popover
+              renderRoutineTestSplitMenu({
+                e,
+                primaryLabel: "웹 테스트",
+                primaryAction: () => runRoutineNow(selected.id),
+                secondaryItems: [
+                  (selected.resolvedExecutionMode || selected.executionMode) === "browser_agent"
+                    ? { key: "browser", label: "브라우저 에이전트 테스트", action: () => testRoutineBrowserAgent(selected.id) }
+                    : null,
+                  { key: "telegram", label: "텔레그램 테스트", action: () => testRoutineTelegram(selected.id) }
+                ].filter(Boolean)
+              }),
+              // Defensive delete — confirm + auto-deselect (P2)
               e("button", {
-                className: `btn ${selectedNotifyTelegram ? "ghost" : ""}`,
-                onClick: () => setRoutineTelegramResponseEnabled(selected.id, !selectedNotifyTelegram)
-              }, selectedNotifyTelegram ? "텔레그램 응답 끄기" : "텔레그램 응답 켜기"),
-              e("button", { className: "btn", onClick: () => setRoutineEnabled(selected.id, !selected.enabled) }, selected.enabled ? "비활성화" : "활성화"),
-              e("button", { className: "btn ghost", onClick: () => deleteRoutineById(selected.id) }, "삭제")
+                className: "btn danger",
+                onClick: buildDeleteRoutineHandler({
+                  routine: selected,
+                  deleteRoutineById,
+                  afterDelete: () => setRoutineSelectedId("")
+                })
+              }, "삭제")
             )
           ),
           e("div", { className: "routine-request-preview" }, selectedRequestPreview)
@@ -748,7 +562,7 @@ export function renderRoutineTab(props) {
             e("div", { className: "routine-section-card routine-edit-card" },
               e("div", { className: "routine-editor-section-head" },
                 e("div", { className: "routine-editor-title" }, "루틴 수정"),
-                e("div", { className: "routine-editor-subtitle" }, "요청이나 스케줄을 바꾸면 실행 코드를 다시 만듭니다.")
+                e("button", { className: "btn primary routine-submit-btn", onClick: updateRoutineFromUi }, "루틴 수정 저장")
               ),
               e("div", { className: "routine-form-grid routine-form-grid-primary" },
                 e("label", { className: "routine-field" },
@@ -778,52 +592,12 @@ export function renderRoutineTab(props) {
                   routineAgentProviderOptions,
                   routineAgentModelOptions
                 }),
-                e("div", { className: "routine-form-grid" },
-                  e("label", { className: "routine-field" },
-                    e("span", { className: "routine-field-label" }, "실패 재시도"),
-                    e("input", {
-                      className: "input",
-                      type: "number",
-                      min: 0,
-                      max: 5,
-                      value: `${Math.min(5, Math.max(0, Number(routineEditForm.maxRetries ?? 1) || 0))}`,
-                      onChange: (event) => patchRoutineForm("edit", { maxRetries: Number(event.target.value) || 0 })
-                    })
-                  ),
-                  e("label", { className: "routine-field" },
-                    e("span", { className: "routine-field-label" }, "재시도 간격(초)"),
-                    e("input", {
-                      className: "input",
-                      type: "number",
-                      min: 0,
-                      max: 300,
-                      value: `${Math.min(300, Math.max(0, Number(routineEditForm.retryDelaySeconds ?? 15) || 0))}`,
-                      onChange: (event) => patchRoutineForm("edit", { retryDelaySeconds: Number(event.target.value) || 0 })
-                    })
-                  ),
-                  e("label", { className: "routine-field routine-field-full" },
-                    e("span", { className: "routine-field-label" }, "텔레그램 봇 응답"),
-                    e("select", {
-                      className: "input",
-                      value: normalizeRoutineNotifyTelegram(routineEditForm.notifyTelegram, true) ? "on" : "off",
-                      onChange: (event) => patchRoutineForm("edit", { notifyTelegram: event.target.value === "on" })
-                    },
-                    e("option", { value: "on" }, "켜기"),
-                    e("option", { value: "off" }, "끄기"))
-                  ),
-                  e("label", { className: "routine-field routine-field-full" },
-                    e("span", { className: "routine-field-label" }, "텔레그램 알림"),
-                    e("select", {
-                      className: "input",
-                      value: normalizeRoutineNotifyPolicy(routineEditForm.notifyPolicy, "always"),
-                      onChange: (event) => patchRoutineForm("edit", { notifyPolicy: event.target.value })
-                    },
-                    e("option", { value: "always" }, "항상"),
-                    e("option", { value: "on_change" }, "변경 시만"),
-                    e("option", { value: "error_only" }, "오류 시만"),
-                    e("option", { value: "never" }, "보내지 않음"))
-                  )
-                )
+                renderRoutineRetryAndNotifyFields({
+                  e,
+                  form: routineEditForm,
+                  formType: "edit",
+                  patchRoutineForm
+                })
               ),
               renderRoutineScheduleBuilder({
                 e,
@@ -831,15 +605,13 @@ export function renderRoutineTab(props) {
                 formType: "edit",
                 patchRoutineForm,
                 toggleRoutineWeekday
-              }),
-              e("div", { className: "routine-submit-row" },
-                e("button", { className: "btn primary routine-submit-btn", onClick: updateRoutineFromUi }, "루틴 수정 저장")
-              )
+              })
             )
           ),
           e("div", { className: "routine-secondary-column" },
-            e("div", { className: "routine-section-card" },
-              e("div", { className: "routine-section-head" },
+            // Run history — kept open (most actionable info)
+            e("details", { className: "routine-section-card routine-detail-disclosure", open: true },
+              e("summary", { className: "routine-section-head" },
                 e("div", { className: "routine-editor-title" }, "실행 이력"),
                 e("div", { className: "routine-editor-subtitle" }, `${selectedRuns.length}건`)
               ),
@@ -851,8 +623,9 @@ export function renderRoutineTab(props) {
                 resendRoutineRunTelegram
               })
             ),
-            e("div", { className: "routine-section-card" },
-              e("div", { className: "routine-section-head" },
+            // Recent output — collapsed by default (P1: verbose KV + pre block)
+            e("details", { className: "routine-section-card routine-detail-disclosure" },
+              e("summary", { className: "routine-section-head" },
                 e("div", { className: "routine-editor-title" }, "최근 실행 출력"),
                 e("div", { className: "routine-editor-subtitle" }, selected.lastStatus || "-")
               ),
@@ -891,7 +664,7 @@ export function renderRoutineTab(props) {
     "section",
     { className: "routine-tab" },
     e("div", { className: "routine-hero" },
-      renderRoutineProgressPanel(e, routineProgress)
+      renderRoutineProgressPanelV2(e, routineProgress)
     ),
     isPortraitMobileLayout
       ? e(
@@ -908,8 +681,10 @@ export function renderRoutineTab(props) {
         null,
         overviewCards,
         e("div", { className: "routine-layout" },
-          listPanel,
-          createPanel,
+          e("div", { className: "routine-left-column" },
+            createPanel,
+            listPanel
+          ),
           detailPanel
         )
       )

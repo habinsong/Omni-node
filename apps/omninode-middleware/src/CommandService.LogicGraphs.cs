@@ -17,6 +17,7 @@ public sealed partial class CommandService
     {
         "start",
         "end",
+        "output",
         "if",
         "delay",
         "parallel_split",
@@ -66,6 +67,7 @@ public sealed partial class CommandService
         new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
         {
             ["end"] = new HashSet<string>(StringComparer.Ordinal) { "result" },
+            ["output"] = new HashSet<string>(StringComparer.Ordinal) { "result" },
             ["if"] = new HashSet<string>(StringComparer.Ordinal) { "leftref" },
             ["set_var"] = new HashSet<string>(StringComparer.Ordinal) { "value" },
             ["template"] = new HashSet<string>(StringComparer.Ordinal) { "template" },
@@ -86,6 +88,7 @@ public sealed partial class CommandService
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["end"] = "result",
+            ["output"] = "result",
             ["if"] = "leftRef",
             ["set_var"] = "value",
             ["template"] = "template",
@@ -333,6 +336,7 @@ public sealed partial class CommandService
     public Task<LogicRunActionResult> RunLogicGraphAsync(
         string graphId,
         string source,
+        string? runInput,
         Action<LogicRunEvent>? eventCallback,
         CancellationToken cancellationToken
     )
@@ -374,6 +378,7 @@ public sealed partial class CommandService
         var result = _logicRuntimeCoordinator.RunGraph(
             normalizedGraphId,
             string.IsNullOrWhiteSpace(source) ? "web" : source,
+            runInput,
             eventCallback
         );
 
@@ -416,6 +421,7 @@ public sealed partial class CommandService
         string graphId,
         string runId,
         string source,
+        string runInput,
         Action<LogicRunEvent>? eventCallback,
         CancellationToken cancellationToken
     )
@@ -590,12 +596,14 @@ public sealed partial class CommandService
                 );
             var startNode = enabledNodes.Values.First(node => node.Type == "start");
             var endNodeIds = enabledNodes.Values
-                .Where(node => node.Type == "end")
+                .Where(node => node.Type == "end" || node.Type == "output")
                 .Select(node => node.NodeId)
                 .ToHashSet(StringComparer.Ordinal);
             var context = new LogicExecutionContext
             {
-                RunInput = ResolveLogicGraphRequestText(graph),
+                RunInput = string.IsNullOrWhiteSpace(runInput)
+                    ? ResolveLogicGraphRequestText(graph)
+                    : runInput.Trim(),
                 RunDirectory = runDirectory
             };
             var queue = new Queue<string>();
@@ -922,6 +930,7 @@ public sealed partial class CommandService
         {
             "start" => ExecuteLogicStartNode(node, context),
             "end" => ExecuteLogicEndNode(node, context, resolvedConfig),
+            "output" => ExecuteLogicOutputNode(node, context, resolvedConfig),
             "template" => ExecuteLogicTemplateNode(node, resolvedConfig),
             "set_var" => ExecuteLogicSetVarNode(node, resolvedConfig, context),
             "delay" => await ExecuteLogicDelayNodeAsync(node, resolvedConfig, cancellationToken).ConfigureAwait(false),
@@ -986,6 +995,30 @@ public sealed partial class CommandService
             config.TryGetValue(LogicResolvedMainInputKey, out var mainInput) ? mainInput : null,
             context.Nodes.Values.LastOrDefault()?.Text,
             "흐름 실행이 끝났습니다."
+        );
+        return new LogicNodeExecutionOutcome(BuildLogicEnvelope(
+            ok: true,
+            type: node.Type,
+            text: text,
+            data: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["result"] = text
+            }
+        ));
+    }
+
+    private LogicNodeExecutionOutcome ExecuteLogicOutputNode(
+        LogicNodeDefinition node,
+        LogicExecutionContext context,
+        IReadOnlyDictionary<string, string> config
+    )
+    {
+        var text = FirstNonEmpty(
+            config.TryGetValue("result", out var resultValue) ? resultValue : null,
+            config.TryGetValue("text", out var textValue) ? textValue : null,
+            config.TryGetValue(LogicResolvedMainInputKey, out var mainInput) ? mainInput : null,
+            context.Nodes.Values.LastOrDefault()?.Text,
+            string.Empty
         );
         return new LogicNodeExecutionOutcome(BuildLogicEnvelope(
             ok: true,
@@ -1165,6 +1198,7 @@ public sealed partial class CommandService
             config.TryGetValue("input", out var rawInput) ? rawInput : null,
             config.TryGetValue("prompt", out var rawPrompt) ? rawPrompt : null,
             config.TryGetValue("text", out var rawText) ? rawText : null,
+            config.TryGetValue(LogicResolvedMainInputKey, out var mainInput) ? mainInput : null,
             graph.Description,
             graph.Title
         );
@@ -1267,6 +1301,7 @@ public sealed partial class CommandService
             config.TryGetValue("input", out var rawInput) ? rawInput : null,
             config.TryGetValue("prompt", out var rawPrompt) ? rawPrompt : null,
             config.TryGetValue("text", out var rawText) ? rawText : null,
+            config.TryGetValue(LogicResolvedMainInputKey, out var mainInput) ? mainInput : null,
             graph.Description,
             graph.Title
         );
@@ -1327,6 +1362,7 @@ public sealed partial class CommandService
             config.TryGetValue("input", out var rawInput) ? rawInput : null,
             config.TryGetValue("prompt", out var rawPrompt) ? rawPrompt : null,
             config.TryGetValue("text", out var rawText) ? rawText : null,
+            config.TryGetValue(LogicResolvedMainInputKey, out var mainInput) ? mainInput : null,
             graph.Description,
             graph.Title
         );
@@ -2621,10 +2657,10 @@ public sealed partial class CommandService
             return new LogicGraphValidationResult(false, "start 노드는 정확히 1개여야 합니다.");
         }
 
-        var endCount = enabledNodes.Count(node => node.Type == "end");
+        var endCount = enabledNodes.Count(node => node.Type == "end" || node.Type == "output");
         if (endCount < 1)
         {
-            return new LogicGraphValidationResult(false, "end 노드가 하나 이상 필요합니다.");
+            return new LogicGraphValidationResult(false, "end 또는 output 노드가 하나 이상 필요합니다.");
         }
 
         var enabledNodeMap = enabledNodes.ToDictionary(node => node.NodeId, node => node, StringComparer.Ordinal);
