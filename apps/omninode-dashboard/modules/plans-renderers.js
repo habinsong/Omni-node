@@ -69,7 +69,21 @@ function normalizeStatusLabel(status) {
     return "-";
   }
 
-  return normalized;
+  const lower = normalized.toLowerCase();
+  const labels = {
+    draft: "작성 중",
+    reviewpending: "검토 필요",
+    approved: "진행 확정",
+    running: "진행 중",
+    completed: "끝남",
+    rejected: "보류",
+    abandoned: "중단"
+  };
+  return labels[lower] || normalized;
+}
+
+function formatPlanModeLabel(mode) {
+  return `${mode || ""}`.toLowerCase() === "interview" ? "질문 먼저" : "빠른 초안";
 }
 
 function trimPlanText(value, maxChars = 220) {
@@ -202,10 +216,10 @@ function renderAutomationRouteEditor(e, options) {
     { value: "copilot", label: "Copilot" }
   ];
   const fixedModelText = provider === "gemini"
-    ? `Gemini 기본 ${geminiModelChoices?.[0]?.label || modelLabel}`
+    ? `Gemini 기본 모델 ${geminiModelChoices?.[0]?.label || modelLabel}`
     : provider === "cerebras"
-      ? `Cerebras 기본 ${cerebrasModelChoices?.[0]?.label || modelLabel}`
-      : `Codex 기본 ${defaultCodexModel || modelLabel}`;
+      ? `Cerebras 기본 모델 ${cerebrasModelChoices?.[0]?.label || modelLabel}`
+      : `Codex 기본 모델 ${defaultCodexModel || modelLabel}`;
   const modelControl = provider === "groq"
     ? e("div", { className: "automation-model-control" },
       e("select", {
@@ -248,7 +262,7 @@ function renderAutomationRouteEditor(e, options) {
       e("span", null, description || categoryKey)
     ),
     e("label", { className: "meta-field automation-provider-field" },
-      e("span", { className: "meta-label" }, "제공자"),
+      e("span", { className: "meta-label" }, "AI 선택"),
       e("select", {
         className: "input",
         value: provider,
@@ -262,11 +276,11 @@ function renderAutomationRouteEditor(e, options) {
     ),
     e("details", { className: "automation-chain-details" },
       e("summary", null,
-        e("span", null, "대체 순서"),
+        e("span", null, "안 될 때 다음 순서"),
         e("strong", null, chainValue || "비어 있음")
       ),
       e("label", { className: "meta-field automation-chain-field" },
-        e("span", { className: "meta-label" }, "대체 순서"),
+        e("span", { className: "meta-label" }, "안 될 때 다음 순서"),
         e("input", {
           className: "input",
           value: chainValue,
@@ -283,8 +297,8 @@ function buildPlanChecklist(plan, review, execution, items) {
   if ((items?.length || 0) === 0) {
     list.push({
       key: "create-first",
-      title: "첫 계획부터 만들어야 합니다.",
-      description: "요청과 제약사항을 먼저 적으면 이후 승인과 실행 흐름이 안정됩니다.",
+      title: "먼저 작업 내용을 적어야 합니다.",
+      description: "무엇을 바꿀지와 하지 말아야 할 일을 적으면 다음 단계가 덜 흔들립니다.",
       action: "draft"
     });
   }
@@ -292,8 +306,8 @@ function buildPlanChecklist(plan, review, execution, items) {
   if (!plan) {
     list.push({
       key: "select",
-      title: "저장된 계획을 하나 선택해 상세를 읽으세요.",
-      description: "리뷰와 실행 전에는 목표, 제약사항, 단계 구성이 먼저 보여야 합니다.",
+      title: "저장된 작업을 하나 골라보세요.",
+      description: "어떤 목표로 만든 작업인지 먼저 봐야 검토하거나 시작할 수 있습니다.",
       action: "browse"
     });
     return list;
@@ -302,8 +316,8 @@ function buildPlanChecklist(plan, review, execution, items) {
   if (!review) {
     list.push({
       key: "review",
-      title: "리뷰를 먼저 돌리세요.",
-      description: "실행 전에 findings, risks, verification gaps를 확인해야 합니다.",
+      title: "시작 전에 한 번 점검하세요.",
+      description: "빠진 일, 위험한 부분, 확인할 일을 먼저 보면 다시 되돌릴 일이 줄어듭니다.",
       action: "review"
     });
   }
@@ -311,8 +325,8 @@ function buildPlanChecklist(plan, review, execution, items) {
   if (review && `${plan.status || ""}`.toLowerCase() !== "approved") {
     list.push({
       key: "approve",
-      title: "리뷰 확인 후 승인 상태를 명확히 하세요.",
-      description: "승인 여부가 남아 있으면 이후 실행 기준이 흔들립니다.",
+      title: "진행할지 확정하세요.",
+      description: "이 작업을 실제로 시작해도 되는지 한 번 눌러 확정합니다.",
       action: "approve"
     });
   }
@@ -320,8 +334,8 @@ function buildPlanChecklist(plan, review, execution, items) {
   if (`${plan.status || ""}`.toLowerCase() === "approved" && !execution) {
     list.push({
       key: "run",
-      title: "승인된 계획은 실행 단계로 넘길 수 있습니다.",
-      description: "실행 전 단계 수와 검증 포인트를 다시 확인한 뒤 시작하세요.",
+      title: "이제 작업을 시작할 수 있습니다.",
+      description: "단계와 확인할 일을 한 번 보고 시작하세요.",
       action: "run"
     });
   }
@@ -329,8 +343,8 @@ function buildPlanChecklist(plan, review, execution, items) {
   if (list.length === 0) {
     list.push({
       key: "fresh",
-      title: "현재 계획 흐름이 갖춰져 있습니다.",
-      description: "새 변경이 생기면 제약사항과 decision log를 먼저 갱신하는 편이 낫습니다.",
+      title: "현재 작업 정리는 갖춰져 있습니다.",
+      description: "새로 바뀐 방향이 생기면 노트북의 방향 정리에 먼저 남기는 편이 좋습니다.",
       action: "browse"
     });
   }
@@ -387,15 +401,15 @@ export function renderPlansPanel(props) {
       e("div", { className: "plan-objective-text" }, step.description || "-"),
       e("div", { className: "plan-step-grid" },
         e("div", null,
-          e("div", { className: "tiny" }, "must do"),
+          e("div", { className: "tiny" }, "해야 할 일"),
           renderStringList(e, "doctor-action-list", step.mustDo)
         ),
         e("div", null,
-          e("div", { className: "tiny" }, "must not do"),
+          e("div", { className: "tiny" }, "하지 말 것"),
           renderStringList(e, "doctor-action-list", step.mustNotDo)
         ),
         e("div", null,
-          e("div", { className: "tiny" }, "verification"),
+          e("div", { className: "tiny" }, "확인할 것"),
           renderStringList(e, "doctor-action-list", step.verification)
         )
       )
@@ -440,12 +454,12 @@ export function renderPlansPanel(props) {
   return e("section", { className: "panel settings-optimized-panel settings-plans-panel plans-panel plans-workbench-panel" },
     e("div", { className: "plans-panel-head plans-panel-head-ux" },
       e("div", null,
-        e("h2", null, "계획"),
-        e("p", { className: "hint" }, "요청을 바로 실행하지 않고, 계획 작성부터 리뷰와 승인까지 단계별로 나눠 관리합니다.")
+        e("h2", null, "작업 정리"),
+        e("p", { className: "hint" }, "바로 시작하기 전에 할 일, 지켜야 할 것, 확인할 일을 한 번 정리합니다.")
       ),
       e("div", { className: "row plans-head-actions" },
-        e("button", { type: "button", className: "btn", disabled, onClick: refreshPlansList }, plansState.loading ? "불러오는 중..." : "목록 새로고침"),
-        e("button", { type: "button", className: "btn primary", disabled, onClick: submitPlanCreate }, plansState.pending ? "처리 중..." : "계획 생성")
+        e("button", { type: "button", className: "btn", disabled, onClick: refreshPlansList }, plansState.loading ? "불러오는 중..." : "목록 다시 읽기"),
+        e("button", { type: "button", className: "btn primary", disabled, onClick: submitPlanCreate }, plansState.pending ? "처리 중..." : "계획 만들기")
       )
     ),
     plansState.lastError
@@ -458,27 +472,27 @@ export function renderPlansPanel(props) {
         plan
           ? `${plan.title || plan.planId || "-"} · ${normalizeStatusLabel(plan.status)} · ${formatPlanRelative(plan.updatedAtUtc)}`
           : items.length > 0
-            ? `${items.length}개의 저장된 계획이 있습니다.`
-            : "저장된 계획이 없습니다."
+            ? `${items.length}개의 저장된 작업이 있습니다.`
+            : "저장된 작업이 없습니다."
       )
     ),
     e("div", { className: "plan-metric-grid" },
-      renderPlanMetricCard(e, "저장된 계획", `${items.length}건`, "목록에서 선택해 상세와 리뷰 상태 확인"),
-      renderPlanMetricCard(e, "승인 완료", `${approvedCount}건`, "즉시 실행 후보가 되는 계획 수"),
-      renderPlanMetricCard(e, "진행 중", `${runningCount}건`, "실행 상태가 살아 있는 계획 수"),
-      renderPlanMetricCard(e, "생성 모드", activeMode, activeMode === "interview" ? "요구사항 확인 중심" : "빠른 초안 생성", activeMode === "interview" ? "neutral" : "")
+      renderPlanMetricCard(e, "저장된 작업", `${items.length}건`, "목록에서 골라 내용과 점검 상태 확인"),
+      renderPlanMetricCard(e, "진행 확정", `${approvedCount}건`, "바로 시작할 수 있는 작업 수"),
+      renderPlanMetricCard(e, "진행 중", `${runningCount}건`, "이미 시작된 작업 수"),
+      renderPlanMetricCard(e, "작성 방식", formatPlanModeLabel(activeMode), activeMode === "interview" ? "질문부터 정리" : "빠른 초안 만들기", activeMode === "interview" ? "neutral" : "")
     ),
     e("div", { className: "plans-workbench-shell" },
       e("div", { className: "plans-primary-column" },
         e("section", { className: "plans-create-card" },
           e("div", { className: "plans-section-head plans-section-head-ux" },
             e("div", null,
-              e("strong", null, "계획 초안 작성"),
-              e("p", null, "요청, 제약, 생성 모드를 먼저 정리한 뒤 계획을 만듭니다.")
+              e("strong", null, "작업 내용 적기"),
+              e("p", null, "무엇을 할지와 지켜야 할 기준을 적으면 계획으로 정리합니다.")
             )
           ),
           e("label", { className: "meta-field plan-field-wide" },
-            e("span", { className: "meta-label" }, "요청"),
+            e("span", { className: "meta-label" }, "할 일"),
             e("textarea", {
               className: "input plan-textarea plan-workbench-textarea",
               value: plansState.createObjective,
@@ -490,7 +504,7 @@ export function renderPlansPanel(props) {
           e("div", { className: "plan-mode-grid" },
             [
               { key: "fast", label: "빠른 초안", helper: "지금 바로 계획을 생성" },
-              { key: "interview", label: "인터뷰 모드", helper: "질문과 리스크부터 정리" }
+              { key: "interview", label: "질문 먼저", helper: "빠진 조건부터 확인" }
             ].map((mode) => e("button", {
               key: mode.key,
               type: "button",
@@ -501,14 +515,14 @@ export function renderPlansPanel(props) {
             e("span", null, mode.helper)))
           ),
           e("div", { className: "plan-template-strip" },
-            e("span", { className: "plan-template-label" }, "빠른 템플릿"),
+            e("span", { className: "plan-template-label" }, "필요하면 시작 문장 넣기"),
             e("button", { type: "button", className: "btn ghost", onClick: () => applyTemplate("feature") }, "기능 개선"),
             e("button", { type: "button", className: "btn ghost", onClick: () => applyTemplate("bugfix") }, "버그 수정"),
             e("button", { type: "button", className: "btn ghost", onClick: () => applyTemplate("interview") }, "요구사항 점검"),
-            e("button", { type: "button", className: "btn ghost", onClick: () => setPlanCreateConstraintsText("") }, "제약 비우기")
+            e("button", { type: "button", className: "btn ghost", onClick: () => setPlanCreateConstraintsText("") }, "기준 비우기")
           ),
           e("label", { className: "meta-field plan-field-wide" },
-            e("span", { className: "meta-label" }, "제약사항"),
+            e("span", { className: "meta-label" }, "지켜야 할 것"),
             e("textarea", {
               className: "input plan-textarea plan-constraints plan-workbench-constraints",
               value: plansState.createConstraintsText,
@@ -518,25 +532,25 @@ export function renderPlansPanel(props) {
             })
           ),
           e("div", { className: "plan-compose-actions" },
-            e("button", { type: "button", className: "btn", disabled, onClick: refreshPlansList }, "목록 새로고침"),
-            e("button", { type: "button", className: "btn primary", disabled, onClick: submitPlanCreate }, plansState.pending ? "생성 중..." : "계획 생성")
+            e("button", { type: "button", className: "btn", disabled, onClick: refreshPlansList }, "목록 다시 읽기"),
+            e("button", { type: "button", className: "btn primary", disabled, onClick: submitPlanCreate }, plansState.pending ? "만드는 중..." : "계획 만들기")
           )
         ),
         e("section", { className: "automation-llm-card" },
           e("div", { className: "plans-section-head plans-section-head-ux" },
             e("div", null,
-              e("strong", null, "계획용 LLM"),
-              e("p", null, "계획 생성과 리뷰는 라우팅 체인과 provider별 모델 상태를 같이 봐야 합니다.")
+              e("strong", null, "계획에 쓸 AI"),
+              e("p", null, "계획을 만들 때 쓸 AI와, 빠진 점을 봐줄 AI를 고릅니다.")
             ),
             e("div", { className: "automation-llm-actions" },
-              e("button", { type: "button", className: "btn", disabled, onClick: refreshRoutingPolicy }, "라우팅 새로고침"),
-              e("button", { type: "button", className: "btn primary", disabled, onClick: saveRoutingPolicy }, routingPolicyState?.pending ? "저장 중..." : "라우팅 저장")
+              e("button", { type: "button", className: "btn", disabled, onClick: refreshRoutingPolicy }, "AI 순서 다시 읽기"),
+              e("button", { type: "button", className: "btn primary", disabled, onClick: saveRoutingPolicy }, routingPolicyState?.pending ? "저장 중..." : "AI 순서 저장")
             )
           ),
           e("div", { className: "automation-route-list" },
             renderAutomationRouteEditor(e, {
-              title: "계획 생성",
-              description: "planner",
+              title: "초안 만들기",
+              description: "할 일을 처음 정리",
               categoryKey: "planner",
               routingPolicyState,
               setRoutingPolicyChain,
@@ -553,8 +567,8 @@ export function renderPlansPanel(props) {
               disabled
             }),
             renderAutomationRouteEditor(e, {
-              title: "계획 리뷰",
-              description: "reviewer",
+              title: "빠진 점 보기",
+              description: "위험한 부분과 확인할 일 찾기",
               categoryKey: "reviewer",
               routingPolicyState,
               setRoutingPolicyChain,
@@ -586,11 +600,11 @@ export function renderPlansPanel(props) {
                 e("p", null, item.description)
               ),
               item.action === "review" && plan
-                ? e("button", { type: "button", className: "btn ghost", disabled, onClick: () => reviewPlan(plan.planId) }, "리뷰")
+                ? e("button", { type: "button", className: "btn ghost", disabled, onClick: () => reviewPlan(plan.planId) }, "점검")
                 : item.action === "approve" && plan
-                  ? e("button", { type: "button", className: "btn ghost", disabled, onClick: () => approvePlan(plan.planId) }, "승인")
+                  ? e("button", { type: "button", className: "btn ghost", disabled, onClick: () => approvePlan(plan.planId) }, "진행 확정")
                   : item.action === "run" && plan
-                    ? e("button", { type: "button", className: "btn ghost", disabled, onClick: () => runPlan(plan.planId) }, "실행")
+                    ? e("button", { type: "button", className: "btn ghost", disabled, onClick: () => runPlan(plan.planId) }, "시작")
                     : e("button", { type: "button", className: "btn ghost", onClick: () => applyTemplate("feature") }, "초안 채우기")
             ))
           )
@@ -599,11 +613,11 @@ export function renderPlansPanel(props) {
       e("div", { className: "plans-browser-shell" },
         e("section", { className: "plans-list-column plan-browser-list" },
           e("div", { className: "plans-section-head" },
-            e("strong", null, "저장된 계획"),
+            e("strong", null, "저장된 작업"),
             e("span", { className: "tiny" }, `${items.length}건`)
           ),
           items.length === 0
-            ? e("div", { className: "empty plan-empty-state" }, "저장된 계획이 없습니다.")
+            ? e("div", { className: "empty plan-empty-state" }, "저장된 작업이 없습니다.")
             : e("div", { className: "plans-list" },
               items.map((item) => {
                 const selected = item.planId === plansState.selectedPlanId;
@@ -619,70 +633,70 @@ export function renderPlansPanel(props) {
                 ),
                 e("div", { className: "tiny" }, item.planId || "-"),
                 e("div", { className: "plan-list-item-objective" }, trimPlanText(item.objective || "-", 120)),
-                e("div", { className: "tiny" }, `updated ${formatPlanTimestamp(item.updatedAtUtc)}`));
+                e("div", { className: "tiny" }, `수정 ${formatPlanTimestamp(item.updatedAtUtc)}`));
               }))
         ),
         e("section", { className: "plans-detail-column plan-browser-detail" },
           !plan
-            ? e("div", { className: "empty plan-empty-state" }, "왼쪽 목록에서 계획을 선택하세요.")
+            ? e("div", { className: "empty plan-empty-state" }, "왼쪽 목록에서 작업을 선택하세요.")
             : e("div", { className: "plan-detail" },
               e("div", { className: "plan-detail-head" },
                 e("div", null,
                   e("div", { className: "tiny" }, plan.planId || "-"),
                   e("h3", null, plan.title || "제목 없음"),
-                  e("div", { className: "tiny" }, `updated ${formatPlanTimestamp(plan.updatedAtUtc)}`)
+                  e("div", { className: "tiny" }, `수정 ${formatPlanTimestamp(plan.updatedAtUtc)}`)
                 ),
                 e("div", { className: "row plan-detail-actions" },
-                  e("button", { type: "button", className: "btn", disabled, onClick: () => loadPlanSnapshot(plan.planId) }, "다시 읽기"),
-                  e("button", { type: "button", className: "btn", disabled, onClick: () => reviewPlan(plan.planId) }, "리뷰"),
-                  e("button", { type: "button", className: "btn", disabled, onClick: () => approvePlan(plan.planId) }, "승인"),
-                  e("button", { type: "button", className: "btn primary", disabled, onClick: () => runPlan(plan.planId) }, "실행")
+                  e("button", { type: "button", className: "btn", disabled, onClick: () => loadPlanSnapshot(plan.planId) }, "새로 읽기"),
+                  e("button", { type: "button", className: "btn", disabled, onClick: () => reviewPlan(plan.planId) }, "점검"),
+                  e("button", { type: "button", className: "btn", disabled, onClick: () => approvePlan(plan.planId) }, "진행 확정"),
+                  e("button", { type: "button", className: "btn primary", disabled, onClick: () => runPlan(plan.planId) }, "시작")
                 )
               ),
               e("div", { className: "plan-summary-grid" },
                 e("div", { className: "doctor-summary-card" },
-                  e("div", { className: "doctor-summary-label" }, "status"),
+                  e("div", { className: "doctor-summary-label" }, "상태"),
                   e("div", { className: "doctor-summary-value plan-status-value" }, normalizeStatusLabel(plan.status))
                 ),
                 e("div", { className: "doctor-summary-card" },
-                  e("div", { className: "doctor-summary-label" }, "steps"),
+                  e("div", { className: "doctor-summary-label" }, "작업 순서"),
                   e("div", { className: "doctor-summary-value plan-status-value" }, String(Array.isArray(plan.steps) ? plan.steps.length : 0))
                 ),
                 e("div", { className: "doctor-summary-card" },
-                  e("div", { className: "doctor-summary-label" }, "review"),
+                  e("div", { className: "doctor-summary-label" }, "점검"),
                   e("div", { className: "doctor-summary-value plan-status-value" }, review ? "있음" : "없음")
                 ),
                 e("div", { className: "doctor-summary-card" },
-                  e("div", { className: "doctor-summary-label" }, "execution"),
-                  e("div", { className: "doctor-summary-value plan-status-value" }, execution?.status || "-")
+                  e("div", { className: "doctor-summary-label" }, "시작 상태"),
+                  e("div", { className: "doctor-summary-value plan-status-value" }, normalizeStatusLabel(execution?.status))
                 )
               ),
               e("article", { className: "plan-detail-card" },
-                e("div", { className: "plans-section-head" }, e("strong", null, "목표")),
+                e("div", { className: "plans-section-head" }, e("strong", null, "하려는 일")),
                 e("div", { className: "plan-objective-text" }, plan.objective || "-")
               ),
               e("article", { className: "plan-detail-card" },
-                e("div", { className: "plans-section-head" }, e("strong", null, "제약사항")),
+                e("div", { className: "plans-section-head" }, e("strong", null, "지켜야 할 것")),
                 renderStringList(e, "doctor-action-list", plan.constraints)
               ),
               review
                 ? e("article", { className: "plan-detail-card plan-review-card" },
                   e("div", { className: "plans-section-head" },
-                    e("strong", null, "리뷰 결과"),
+                    e("strong", null, "점검 결과"),
                     e("span", { className: "tiny" }, `${formatPlanTimestamp(review.reviewedAtUtc)} · ${review.reviewerRoute || "-"}`)
                   ),
                   e("div", { className: "plan-review-summary" }, review.summary || "-"),
                   e("div", { className: "plan-review-grid" },
                     e("div", { className: "plan-review-box" },
-                      e("strong", null, "findings"),
+                      e("strong", null, "확인된 점"),
                       renderStringList(e, "doctor-action-list", review.findings)
                     ),
                     e("div", { className: "plan-review-box" },
-                      e("strong", null, "risks"),
+                      e("strong", null, "위험한 점"),
                       renderStringList(e, "doctor-action-list", review.risks)
                     ),
                     e("div", { className: "plan-review-box" },
-                      e("strong", null, "verification gaps"),
+                      e("strong", null, "아직 확인할 것"),
                       renderStringList(e, "doctor-action-list", review.missingVerification)
                     )
                   )
@@ -691,11 +705,11 @@ export function renderPlansPanel(props) {
               execution
                 ? e("article", { className: "plan-detail-card" },
                   e("div", { className: "plans-section-head" },
-                    e("strong", null, "실행 결과"),
-                    e("span", { className: `tool-status-chip ${resolvePlanTone(execution.status)}` }, execution.status || "-")
+                    e("strong", null, "진행 결과"),
+                    e("span", { className: `tool-status-chip ${resolvePlanTone(execution.status)}` }, normalizeStatusLabel(execution.status))
                   ),
-                  e("div", { className: "tiny" }, `requested ${formatPlanTimestamp(execution.requestedAtUtc)}`),
-                  e("div", { className: "tiny" }, `completed ${formatPlanTimestamp(execution.completedAtUtc)}`),
+                  e("div", { className: "tiny" }, `요청 ${formatPlanTimestamp(execution.requestedAtUtc)}`),
+                  e("div", { className: "tiny" }, `완료 ${formatPlanTimestamp(execution.completedAtUtc)}`),
                   e("div", { className: "plan-objective-text" }, execution.message || "-"),
                   execution.resultSummary
                     ? e("pre", { className: "doctor-check-detail" }, execution.resultSummary)
@@ -703,11 +717,11 @@ export function renderPlansPanel(props) {
                 )
                 : null,
               e("article", { className: "plan-detail-card" },
-                e("div", { className: "plans-section-head" }, e("strong", null, "단계")),
+                e("div", { className: "plans-section-head" }, e("strong", null, "작업 순서")),
                 e("div", { className: "plan-step-list" }, planStepsContent)
               ),
               e("article", { className: "plan-detail-card" },
-                e("div", { className: "plans-section-head" }, e("strong", null, "결정 로그")),
+                e("div", { className: "plans-section-head" }, e("strong", null, "남겨둔 방향")),
                 renderStringList(e, "doctor-action-list", plan.decisionLog)
               )
             )

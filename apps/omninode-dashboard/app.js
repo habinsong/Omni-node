@@ -1139,9 +1139,9 @@ import {
       }
 
       const lines = [
-        "선택한 계획에서 가져온 내용",
+        "선택한 작업 정리에서 가져온 내용",
         "",
-        `계획: ${plan.title || plan.planId || "-"}`,
+        `작업: ${plan.title || plan.planId || "-"}`,
         `상태: ${plan.status || "-"}`,
         `하려던 일: ${plan.objective || "-"}`
       ];
@@ -1156,7 +1156,7 @@ import {
       if (snapshot.review) {
         lines.push(
           "",
-          "리뷰에서 나온 말:",
+          "점검에서 나온 말:",
           `- ${snapshot.review.summary || "-"}`
         );
       }
@@ -1164,12 +1164,12 @@ import {
       if (snapshot.execution) {
         lines.push(
           "",
-          "최근 실행 상태:",
+          "최근 시작 상태:",
           `- ${snapshot.execution.status || "-"}`,
           `- ${snapshot.execution.message || "-"}`
         );
         if (snapshot.execution.resultSummary) {
-          lines.push("", "실행 요약:", trimNotebookEntry(snapshot.execution.resultSummary, 420));
+          lines.push("", "진행 요약:", trimNotebookEntry(snapshot.execution.resultSummary, 420));
         }
       }
 
@@ -1191,9 +1191,9 @@ import {
         || null;
       const output = taskGraphState.output || null;
       const lines = [
-        "태스크 그래프에서 가져온 내용",
+        "작업 묶음에서 가져온 내용",
         "",
-        `그래프 상태: ${graph.status || "-"}`,
+        `작업 묶음 상태: ${graph.status || "-"}`,
         `완료: ${nodes.filter((task) => task.status === "Completed").length}/${nodes.length}`,
         `실패: ${nodes.filter((task) => task.status === "Failed").length}`
       ];
@@ -1220,7 +1220,7 @@ import {
         lines.push("", "출력에서 볼 것:", trimNotebookEntry(output.stdout, 420));
       }
 
-      lines.push("", `참고 ID: ${graph.graphId || "-"} / plan ${graph.sourcePlanId || "-"}`);
+      lines.push("", `참고 ID: ${graph.graphId || "-"} / 기준 계획 ${graph.sourcePlanId || "-"}`);
 
       return lines.join("\n").trim();
     }
@@ -1425,7 +1425,7 @@ import {
       if (!content) {
         setNotebooksState((prev) => ({
           ...prev,
-          lastError: "선택된 Task graph가 없어 확인 내용 초안을 만들 수 없습니다."
+          lastError: "선택한 작업 묶음이 없어 확인 내용 초안을 만들 수 없습니다."
         }));
         return false;
       }
@@ -1570,7 +1570,7 @@ import {
         setPlansState((prev) => ({
           ...prev,
           loading: false,
-          lastError: "오류: 계획 목록 요청을 전송하지 못했습니다."
+          lastError: "오류: 작업 목록 요청을 전송하지 못했습니다."
         }));
       }
 
@@ -1597,7 +1597,7 @@ import {
         setPlansState((prev) => ({
           ...prev,
           loading: false,
-          lastError: "오류: 계획 상세 요청을 전송하지 못했습니다."
+          lastError: "오류: 작업 상세 요청을 전송하지 못했습니다."
         }));
       }
 
@@ -1613,7 +1613,7 @@ import {
       if (!objective) {
         setPlansState((prev) => ({
           ...prev,
-          lastError: "계획 요청을 입력하세요."
+          lastError: "할 일을 입력하세요."
         }));
         return false;
       }
@@ -1641,7 +1641,7 @@ import {
         setPlansState((prev) => ({
           ...prev,
           pending: false,
-          lastError: "오류: 계획 생성 요청을 전송하지 못했습니다."
+          lastError: "오류: 계획 만들기 요청을 전송하지 못했습니다."
         }));
       }
 
@@ -1668,7 +1668,7 @@ import {
         setPlansState((prev) => ({
           ...prev,
           pending: false,
-          lastError: "오류: 계획 리뷰 요청을 전송하지 못했습니다."
+          lastError: "오류: 계획 점검 요청을 전송하지 못했습니다."
         }));
       }
 
@@ -1695,7 +1695,7 @@ import {
         setPlansState((prev) => ({
           ...prev,
           pending: false,
-          lastError: "오류: 계획 승인 요청을 전송하지 못했습니다."
+          lastError: "오류: 진행 확정 요청을 전송하지 못했습니다."
         }));
       }
 
@@ -1722,7 +1722,7 @@ import {
         setPlansState((prev) => ({
           ...prev,
           pending: false,
-          lastError: "오류: 계획 실행 요청을 전송하지 못했습니다."
+          lastError: "오류: 작업 시작 요청을 전송하지 못했습니다."
         }));
       }
 
@@ -1761,7 +1761,7 @@ import {
         setRoutingPolicyState((prev) => ({
           ...prev,
           loading: false,
-          lastError: "오류: 라우팅 정책 요청을 전송하지 못했습니다."
+          lastError: "오류: AI 순서 요청을 전송하지 못했습니다."
         }));
       }
 
@@ -1796,7 +1796,7 @@ import {
         setRoutingPolicyState((prev) => ({
           ...prev,
           pending: false,
-          lastError: "오류: 라우팅 정책 저장 요청을 전송하지 못했습니다."
+          lastError: "오류: AI 순서 저장 요청을 전송하지 못했습니다."
         }));
       }
 
@@ -1821,7 +1821,7 @@ import {
         setRoutingPolicyState((prev) => ({
           ...prev,
           pending: false,
-          lastError: "오류: 라우팅 정책 초기화 요청을 전송하지 못했습니다."
+          lastError: "오류: AI 순서 초기화 요청을 전송하지 못했습니다."
         }));
       }
 
@@ -1835,7 +1835,7 @@ import {
 
       const ok = requestRoutingDecisionGetLast(send, options);
       if (!ok) {
-        log("오류: 마지막 라우팅 결정 요청을 전송하지 못했습니다.", "error");
+        log("오류: 마지막 AI 선택 기록 요청을 전송하지 못했습니다.", "error");
       }
 
       return ok;
@@ -1864,7 +1864,7 @@ import {
         setTaskGraphState((prev) => ({
           ...prev,
           loading: false,
-          lastError: "오류: Task graph 목록 요청을 전송하지 못했습니다."
+          lastError: "오류: 작업 묶음 목록 요청을 전송하지 못했습니다."
         }));
       }
 
@@ -1891,7 +1891,7 @@ import {
         setTaskGraphState((prev) => ({
           ...prev,
           loading: false,
-          lastError: "오류: Task graph 상세 요청을 전송하지 못했습니다."
+          lastError: "오류: 작업 묶음 상세 요청을 전송하지 못했습니다."
         }));
       }
 
@@ -1907,7 +1907,7 @@ import {
       if (!planId) {
         setTaskGraphState((prev) => ({
           ...prev,
-          lastError: "Task graph를 만들 plan id를 입력하세요."
+          lastError: "작업 묶음을 만들 계획 ID를 입력하세요."
         }));
         return false;
       }
@@ -1925,7 +1925,7 @@ import {
         setTaskGraphState((prev) => ({
           ...prev,
           pending: false,
-          lastError: "오류: Task graph 생성 요청을 전송하지 못했습니다."
+          lastError: "오류: 작업 묶음 생성 요청을 전송하지 못했습니다."
         }));
       }
 
@@ -1952,7 +1952,7 @@ import {
         setTaskGraphState((prev) => ({
           ...prev,
           pending: false,
-          lastError: "오류: Task graph 실행 요청을 전송하지 못했습니다."
+          lastError: "오류: 작업 묶음 시작 요청을 전송하지 못했습니다."
         }));
       }
 
@@ -2001,7 +2001,7 @@ import {
         setTaskGraphState((prev) => ({
           ...prev,
           pending: false,
-          lastError: "오류: task cancel 요청을 전송하지 못했습니다."
+          lastError: "오류: 작업 취소 요청을 전송하지 못했습니다."
         }));
       }
 

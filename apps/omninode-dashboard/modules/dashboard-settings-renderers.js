@@ -160,14 +160,14 @@ export function renderAutomationRootPanel(props) {
   const navItems = [
     {
       key: "plans",
-      title: "계획",
-      helper: "생성, 리뷰, 승인",
+      title: "작업 정리",
+      helper: "할 일 정리, 점검, 진행 확정",
       meta: `${planCount}건`
     },
     {
       key: "tasks",
-      title: "태스크 그래프",
-      helper: "그래프 생성, 실행 라우팅",
+      title: "작업 나누기",
+      helper: "작업 묶음 만들기, AI 순서",
       meta: `${graphCount}건`
     }
   ];
@@ -179,13 +179,13 @@ export function renderAutomationRootPanel(props) {
       e("div", { className: "settings-summary" },
         e("div", { className: "settings-summary-head" },
           e("div", null,
-            e("h2", null, "자동화/계획"),
-            e("p", null, "계획 생성부터 태스크 실행 흐름까지 같은 화면에서 관리합니다.")
+            e("h2", null, "작업 계획"),
+            e("p", null, "큰 작업을 먼저 정리하고, 필요하면 작은 실행 단위로 나눠 진행합니다.")
           )
         )
       ),
       e("div", { className: "automation-root-layout" },
-        e("aside", { className: "automation-root-nav", "aria-label": "자동화 작업 선택" },
+        e("aside", { className: "automation-root-nav", "aria-label": "작업 계획 선택" },
           navItems.map((item) => e("button", {
             key: item.key,
             type: "button",
