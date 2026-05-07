@@ -71,7 +71,10 @@ import {
 import {
   requestCommandsList,
   requestContextScan,
-  requestSkillsList
+  requestSkillsList,
+  requestSkillGet,
+  requestSkillSave,
+  requestSkillDelete
 } from "./modules/ws-context.js";
 import {
   requestPlanApprove,
@@ -145,6 +148,8 @@ import {
   renderNotebookRootPanel as renderNotebookRootPanelModule,
   renderSettingsPanel as renderSettingsPanelModule
 } from "./modules/dashboard-settings-renderers.js";
+import { renderSkillsRoot as renderSkillsRootModule } from "./modules/skills-renderers.js";
+import { mapErrorMessage, formatErrorBanner } from "./modules/error-messages.js";
 import {
   attachLatencyMetaToConversation,
   buildConversationAvatarText,
@@ -438,6 +443,9 @@ import {
     const [doctorState, setDoctorState] = useState(() => createDoctorState());
     const [plansState, setPlansState] = useState(() => createPlansState());
     const [contextState, setContextState] = useState(() => createContextState());
+    const [selectedSkillKey, setSelectedSkillKey] = useState("");
+    const [skillEditor, setSkillEditor] = useState(null);
+    const [skillStatus, setSkillStatus] = useState(null);
     const [routingPolicyState, setRoutingPolicyState] = useState(() => createRoutingPolicyState());
     const [taskGraphState, setTaskGraphState] = useState(() => createTaskGraphState());
     const [refactorState, setRefactorState] = useState(() => createRefactorState());
@@ -1030,7 +1038,7 @@ import {
             return;
           }
           setGuardRetryTimelineApiSnapshot(null);
-          setGuardRetryTimelineApiError(error instanceof Error ? error.message : "fetch_failed");
+          setGuardRetryTimelineApiError(mapErrorMessage(error instanceof Error ? error.message : "fetch_failed"));
         } finally {
           if (!cancelled) {
             timerId = window.setTimeout(pollRetryTimeline, GUARD_RETRY_TIMELINE_API_REFRESH_MS);
@@ -3958,6 +3966,10 @@ import {
           setAuthTtlHours,
           setStatus,
           setContextState,
+          setSelectedSkillKey,
+          setSkillEditor,
+          setSkillStatus,
+          refreshSkillsList,
           setRoutingPolicyState,
           setPlansState,
           setTaskGraphState,
@@ -4466,6 +4478,12 @@ import {
     useEffect(() => {
       if (rootTab === "notebook" && authed) {
         refreshNotebook({ silent: true, queueIfClosed: false });
+      }
+    }, [rootTab, authed]);
+
+    useEffect(() => {
+      if (rootTab === "skills" && authed) {
+        refreshSkillsList({ silent: true, queueIfClosed: false });
       }
     }, [rootTab, authed]);
 
@@ -6786,6 +6804,61 @@ import {
       });
     }
 
+    function renderSkillsRoot() {
+      const onLoadSkillDetail = (name, scope) => {
+        setSkillStatus({ kind: "info", message: "불러오는 중..." });
+        const ok = requestSkillGet(send, name, scope);
+        if (!ok) {
+          setSkillStatus({ kind: "error", message: "스킬 요청 전송에 실패했습니다." });
+        }
+      };
+      const onSaveSkill = (editor) => {
+        if (!editor || !editor.name) {
+          setSkillStatus({ kind: "error", message: "이름이 비어 있습니다." });
+          return;
+        }
+        setSkillStatus({ kind: "info", message: "저장 중..." });
+        const ok = requestSkillSave(send, {
+          name: editor.name,
+          scope: editor.scope || "project",
+          description: editor.description || "",
+          body: editor.body || ""
+        });
+        if (!ok) {
+          setSkillStatus({ kind: "error", message: "저장 요청 전송에 실패했습니다." });
+        } else if (editor.isNew) {
+          setSelectedSkillKey(`${editor.scope || "project"}:${editor.name}`);
+        }
+      };
+      const onDeleteSkill = (name, scope) => {
+        setSkillStatus({ kind: "info", message: "삭제 중..." });
+        const ok = requestSkillDelete(send, name, scope);
+        if (!ok) {
+          setSkillStatus({ kind: "error", message: "삭제 요청 전송에 실패했습니다." });
+        }
+      };
+      const onStartNewSkill = () => {
+        setSelectedSkillKey("");
+        setSkillStatus(null);
+        setSkillEditor({ name: "", scope: "project", description: "", body: "", isNew: true });
+      };
+      return renderSkillsRootModule({
+        e,
+        skills: contextState.skills,
+        selectedSkillKey,
+        setSelectedSkillKey,
+        skillEditor,
+        setSkillEditor,
+        skillStatus,
+        skillsBusy: contextState.loadingSkills,
+        onRefreshSkills: () => refreshSkillsList(),
+        onLoadSkillDetail,
+        onSaveSkill,
+        onDeleteSkill,
+        onStartNewSkill
+      });
+    }
+
     function renderAutomationRoot() {
       return renderAutomationRootPanelModule({
         e,
@@ -6838,7 +6911,9 @@ import {
             ? renderRoutine()
             : rootTab === "logic"
               ? renderLogic()
-              : renderWorkspace();
+              : rootTab === "skills"
+                ? renderSkillsRoot()
+                : renderWorkspace();
 
     return e(
       "div",

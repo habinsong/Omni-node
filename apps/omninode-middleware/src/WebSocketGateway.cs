@@ -244,6 +244,7 @@ public sealed partial class WebSocketGateway
         );
         _contextCommandDispatcher = new WsContextCommandDispatcher(
             contextService,
+            new SkillFileService(_config),
             SendProjectContextAsync,
             SendSkillsListAsync,
             SendCommandsListAsync
@@ -3852,6 +3853,27 @@ public sealed partial class WebSocketGateway
                 filePath = filePathElement.GetString();
             }
 
+            string? skillName = null;
+            string? skillScope = null;
+            string? skillDescription = null;
+            string? skillBody = null;
+            if (doc.RootElement.TryGetProperty("skillName", out var skillNameEl))
+            {
+                skillName = skillNameEl.GetString();
+            }
+            if (doc.RootElement.TryGetProperty("skillScope", out var skillScopeEl))
+            {
+                skillScope = skillScopeEl.GetString();
+            }
+            if (doc.RootElement.TryGetProperty("skillDescription", out var skillDescEl))
+            {
+                skillDescription = skillDescEl.GetString();
+            }
+            if (doc.RootElement.TryGetProperty("skillBody", out var skillBodyEl))
+            {
+                skillBody = skillBodyEl.GetString();
+            }
+
             if (doc.RootElement.TryGetProperty("edits", out var editsElement))
             {
                 refactorEditsJson = editsElement.GetRawText();
@@ -4487,6 +4509,10 @@ public sealed partial class WebSocketGateway
                 NoteName = noteName,
                 NewName = newName,
                 FilePath = filePath,
+                SkillName = skillName,
+                SkillScope = skillScope,
+                SkillDescription = skillDescription,
+                SkillBody = skillBody,
                 RoutineId = routineId,
                 ExecutionMode = executionMode,
                 AgentProvider = agentProvider,

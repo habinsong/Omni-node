@@ -352,6 +352,10 @@ public sealed partial class WebSocketGateway
         public string? NoteName { get; set; }
         public string? NewName { get; set; }
         public string? FilePath { get; set; }
+        public string? SkillName { get; set; }
+        public string? SkillScope { get; set; }
+        public string? SkillDescription { get; set; }
+        public string? SkillBody { get; set; }
         public string? RoutineId { get; set; }
         public string? ExecutionMode { get; set; }
         public string? AgentProvider { get; set; }

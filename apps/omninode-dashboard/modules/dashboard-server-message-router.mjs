@@ -1,4 +1,5 @@
 import { createEmptyLogicGraph } from "./logic-state.js";
+import { mapErrorMessage } from "./error-messages.js";
 
 function createItemId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -376,6 +377,63 @@ export function handleDashboardServerMessage(msg, context) {
       lastAction: "skills",
       skills: items
     }))
+    return true
+  }
+
+  if (msg.type === "skill_get_result") {
+    const ok = msg.Ok !== false && msg.ok !== false
+    const name = msg.Name || msg.name || ""
+    const scope = msg.Scope || msg.scope || "project"
+    const description = msg.Description || msg.description || ""
+    const body = msg.Body || msg.body || ""
+    const error = msg.Error || msg.error || null
+    if (typeof setters.setSkillEditor === "function") {
+      if (ok) {
+        setters.setSkillEditor({ name, scope, description, body, isNew: false })
+        setters.setSkillStatus && setters.setSkillStatus({ kind: "ok", message: `'${name}' 스킬을 불러왔습니다.` })
+      } else {
+        setters.setSkillStatus && setters.setSkillStatus({ kind: "error", message: error || "스킬을 불러오지 못했습니다." })
+      }
+    }
+    return true
+  }
+
+  if (msg.type === "skill_save_result") {
+    const ok = msg.Ok !== false && msg.ok !== false
+    const name = msg.Name || msg.name || ""
+    const error = msg.Error || msg.error || null
+    if (typeof setters.setSkillStatus === "function") {
+      setters.setSkillStatus(
+        ok
+          ? { kind: "ok", message: `'${name}' 스킬을 저장했습니다.` }
+          : { kind: "error", message: error || "저장에 실패했습니다." },
+      )
+    }
+    if (ok && typeof setters.refreshSkillsList === "function") {
+      setters.refreshSkillsList()
+    }
+    if (ok && typeof setters.setSkillEditor === "function") {
+      setters.setSkillEditor((prev) => (prev ? { ...prev, isNew: false } : prev))
+    }
+    return true
+  }
+
+  if (msg.type === "skill_delete_result") {
+    const ok = msg.Ok !== false && msg.ok !== false
+    const name = msg.Name || msg.name || ""
+    const error = msg.Error || msg.error || null
+    if (typeof setters.setSkillStatus === "function") {
+      setters.setSkillStatus(
+        ok
+          ? { kind: "ok", message: `'${name}' 스킬을 삭제했습니다.` }
+          : { kind: "error", message: error || "삭제에 실패했습니다." },
+      )
+    }
+    if (ok) {
+      if (typeof setters.setSkillEditor === "function") setters.setSkillEditor(null)
+      if (typeof setters.setSelectedSkillKey === "function") setters.setSelectedSkillKey("")
+      if (typeof setters.refreshSkillsList === "function") setters.refreshSkillsList()
+    }
     return true
   }
 
@@ -1164,7 +1222,8 @@ export function handleDashboardServerMessage(msg, context) {
   }
 
   if (msg.type === "error") {
-    const errorText = `오류: ${msg.message || "-"}`
+    const friendlyMessage = mapErrorMessage(msg.message) || msg.message || "-"
+    const errorText = `오류: ${friendlyMessage}`
     const rawMessage = typeof msg.message === "string" ? msg.message : ""
     const looksLikeLogicError = /(logic|logicgraph|graphid|runid)/i.test(rawMessage)
     const looksLikeOtherDomainError = /(coding|chat|routine|task|plan|refactor|doctor|notebook|settings|sessions_|cron|browser|canvas|nodes|telegram_stub|memory_|web_)/i.test(rawMessage)
