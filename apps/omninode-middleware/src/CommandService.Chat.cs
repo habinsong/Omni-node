@@ -793,6 +793,39 @@ public sealed partial class CommandService
             return null;
         }
 
+        // 사용자가 같은 메시지에 task까지 같이 줬으면 stub으로 가로채지 말고 LLM에 넘김.
+        // 예: "X 스킬 사용해서 Y에 대해 설명해줘" — "사용해서" 연결어미 + 추가 동사/명사가 task 신호.
+        var hasInlineTask = Regex.IsMatch(
+                               normalized,
+                               @"(?i)(사용해서|써서|적용해서|활용해서|이용해서|가지고|using\s+|use\s+\S+\s+to\s+)"
+                           )
+                           || ContainsAny(
+                               normalized,
+                               "설명",
+                               "알려",
+                               "말해",
+                               "정리",
+                               "분석",
+                               "비교",
+                               "원리",
+                               "방법",
+                               "이유",
+                               "어떻게",
+                               "왜",
+                               "도와",
+                               "해줘",
+                               "해 줘",
+                               "explain",
+                               "describe",
+                               "tell",
+                               "summarize",
+                               "compare",
+                               "analyze");
+        if (hasInlineTask)
+        {
+            return null;
+        }
+
         var matchedSkill = snapshot.Skills
             .OrderByDescending(skill => skill.Name.Length)
             .FirstOrDefault(skill => normalized.Contains(skill.Name, StringComparison.OrdinalIgnoreCase));
