@@ -33,7 +33,7 @@ public sealed class SkillCreateDirective
     public SkillCreateDirective(AppConfig config)
     {
         var workspaceRoot = Path.GetFullPath(config.WorkspaceRootDir);
-        _projectRootDir = Path.GetFullPath(Path.Combine(workspaceRoot, ".."));
+        _projectRootDir = ResolveProjectRoot(workspaceRoot);
 
         var stateRoot = Environment.GetEnvironmentVariable("OMNINODE_STATE_DIR");
         if (string.IsNullOrWhiteSpace(stateRoot))
@@ -218,6 +218,28 @@ public sealed class SkillCreateDirective
         {
         }
         return fullPath;
+    }
+
+    private static string ResolveProjectRoot(string workspaceRootDir)
+    {
+        var current = Path.GetFullPath(workspaceRootDir);
+        for (var i = 0; i < 8; i++)
+        {
+            if (Directory.Exists(Path.Combine(current, ".git"))
+                || File.Exists(Path.Combine(current, ".git"))
+                || File.Exists(Path.Combine(current, "AGENTS.md")))
+            {
+                return current;
+            }
+
+            var parent = Directory.GetParent(current);
+            if (parent == null)
+            {
+                break;
+            }
+            current = parent.FullName;
+        }
+        return Path.GetFullPath(Path.Combine(workspaceRootDir, ".."));
     }
 
     private static bool IsPathUnderRoot(string path, string root)
