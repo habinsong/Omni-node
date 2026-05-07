@@ -104,6 +104,9 @@ public sealed partial class CommandService :
     private readonly BrowserTool _browserTool;
     private readonly CanvasTool _canvasTool;
     private readonly NodesTool _nodesTool;
+    private SkillCreateDirective? _skillCreateDirective;
+    private SkillCreateDirective SkillCreateDirective =>
+        _skillCreateDirective ??= new SkillCreateDirective(_config);
     private readonly CopilotCliWrapper _copilotWrapper;
     private readonly CodexCliWrapper _codexWrapper;
     private readonly PythonSandboxClient _sandboxClient;

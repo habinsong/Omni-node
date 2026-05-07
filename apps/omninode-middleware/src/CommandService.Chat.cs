@@ -6,6 +6,21 @@ namespace OmniNode.Middleware;
 
 public sealed partial class CommandService
 {
+    private string ApplySkillCreateDirective(string text, string source)
+    {
+        var result = SkillCreateDirective.Apply(text);
+        if (result.CreatedCount > 0 || result.FailedCount > 0)
+        {
+            _auditLogger.Log(
+                source,
+                "skill_create_directive",
+                result.FailedCount == 0 ? "ok" : "partial",
+                $"created={result.CreatedCount} failed={result.FailedCount}"
+            );
+        }
+        return result.FinalText;
+    }
+
     public Task<ConversationChatResult> ChatSingleWithStateAsync(
         ChatRequest request,
         CancellationToken cancellationToken,
@@ -490,6 +505,7 @@ public sealed partial class CommandService
         );
         var effectiveGuardFailure = preparedInput.GuardFailure;
         var responseText = ApplyListCountFallback(rawInput, generated.Text, preparedInput.Citations);
+        responseText = ApplySkillCreateDirective(responseText, request.Source);
 
         _conversationStore.AppendMessage(thread.Id, "user", rawInput, $"{requestedProvider}:{request.Model ?? "-"}");
         _conversationStore.AppendMessage(thread.Id, "assistant", responseText, $"{generated.Provider}:{generated.Model}");
@@ -1197,6 +1213,7 @@ public sealed partial class CommandService
         );
         var effectiveGuardFailure = basePrepared.GuardFailure;
         var responseText = ApplyListCountFallback(rawInput, generated.Text, basePrepared.Citations);
+        responseText = ApplySkillCreateDirective(responseText, request.Source);
 
         _conversationStore.AppendMessage(thread.Id, "user", rawInput, $"orchestration:{request.Provider ?? "auto"}");
         _conversationStore.AppendMessage(thread.Id, "assistant", responseText, generated.Route);

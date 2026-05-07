@@ -1893,6 +1893,7 @@ public sealed partial class CommandService
             );
             effectiveGuardFailure = sharedPrepared.GuardFailure;
             var orchestratedValidated = ApplyListCountFallback(text, orchestrated.Text, sharedPrepared.Citations);
+            orchestratedValidated = ApplySkillCreateDirective(orchestratedValidated, "telegram");
             responseText = $"[{orchestrated.Route}]\n{FormatTelegramResponse(orchestratedValidated, TelegramMaxResponseChars)}";
             providerForMemory = NormalizeProvider(snapshot.OrchestrationProvider, allowAuto: true);
             if (providerForMemory is "auto" or "none")
@@ -1938,6 +1939,7 @@ public sealed partial class CommandService
             );
             effectiveGuardFailure = sharedPrepared.GuardFailure;
             var multiSummaryValidated = ApplyListCountFallback(text, multi.Summary, sharedPrepared.Citations);
+            multiSummaryValidated = ApplySkillCreateDirective(multiSummaryValidated, "telegram");
             responseText = $"""
                            [Multi 요약]
                            {FormatTelegramResponse(multiSummaryValidated, TelegramMaxResponseChars)}
@@ -2010,7 +2012,8 @@ public sealed partial class CommandService
                 ("text", singleGroq.Text)
             );
             effectiveGuardFailure = sharedPrepared.GuardFailure;
-            responseText = $"[Single {singleGroq.Provider}:{singleGroq.Model}]\n{FormatTelegramResponse(singleGroq.Text, TelegramMaxResponseChars)}";
+            var singleGroqText = ApplySkillCreateDirective(singleGroq.Text, "telegram");
+            responseText = $"[Single {singleGroq.Provider}:{singleGroq.Model}]\n{FormatTelegramResponse(singleGroqText, TelegramMaxResponseChars)}";
             providerForMemory = singleGroq.Provider;
             modelForMemory = singleGroq.Model;
             assistantMeta = $"telegram-single:{singleGroq.Provider}:{singleGroq.Model}";
@@ -2080,7 +2083,8 @@ public sealed partial class CommandService
             ("text", single.Text)
         );
         effectiveGuardFailure = sharedPrepared.GuardFailure;
-        responseText = $"[Single {single.Provider}:{single.Model}]\n{FormatTelegramResponse(single.Text, TelegramMaxResponseChars)}";
+        var singleText = ApplySkillCreateDirective(single.Text, "telegram");
+        responseText = $"[Single {single.Provider}:{single.Model}]\n{FormatTelegramResponse(singleText, TelegramMaxResponseChars)}";
         providerForMemory = single.Provider;
         modelForMemory = single.Model;
         assistantMeta = $"telegram-single:{single.Provider}:{single.Model}";
