@@ -1139,14 +1139,15 @@ import {
       }
 
       const lines = [
-        `plan_id: ${plan.planId || "-"}`,
-        `title: ${plan.title || "-"}`,
-        `status: ${plan.status || "-"}`,
-        `objective: ${plan.objective || "-"}`
+        "선택한 계획에서 가져온 내용",
+        "",
+        `계획: ${plan.title || plan.planId || "-"}`,
+        `상태: ${plan.status || "-"}`,
+        `하려던 일: ${plan.objective || "-"}`
       ];
 
       if (Array.isArray(plan.constraints) && plan.constraints.length > 0) {
-        lines.push("", "constraints:");
+        lines.push("", "주의할 점:");
         plan.constraints.forEach((item) => {
           lines.push(`- ${item}`);
         });
@@ -1155,21 +1156,24 @@ import {
       if (snapshot.review) {
         lines.push(
           "",
-          `review_route: ${snapshot.review.reviewerRoute || "-"}`,
-          `review_summary: ${snapshot.review.summary || "-"}`
+          "리뷰에서 나온 말:",
+          `- ${snapshot.review.summary || "-"}`
         );
       }
 
       if (snapshot.execution) {
         lines.push(
           "",
-          `latest_execution: ${snapshot.execution.status || "-"}`,
-          `latest_message: ${snapshot.execution.message || "-"}`
+          "최근 실행 상태:",
+          `- ${snapshot.execution.status || "-"}`,
+          `- ${snapshot.execution.message || "-"}`
         );
         if (snapshot.execution.resultSummary) {
-          lines.push(trimNotebookEntry(snapshot.execution.resultSummary, 420));
+          lines.push("", "실행 요약:", trimNotebookEntry(snapshot.execution.resultSummary, 420));
         }
       }
+
+      lines.push("", `참고 ID: ${plan.planId || "-"}`);
 
       return lines.join("\n").trim();
     }
@@ -1187,33 +1191,36 @@ import {
         || null;
       const output = taskGraphState.output || null;
       const lines = [
-        `graph_id: ${graph.graphId || "-"}`,
-        `source_plan_id: ${graph.sourcePlanId || "-"}`,
-        `status: ${graph.status || "-"}`,
-        `completed: ${nodes.filter((task) => task.status === "Completed").length}/${nodes.length}`,
-        `failed: ${nodes.filter((task) => task.status === "Failed").length}`
+        "태스크 그래프에서 가져온 내용",
+        "",
+        `그래프 상태: ${graph.status || "-"}`,
+        `완료: ${nodes.filter((task) => task.status === "Completed").length}/${nodes.length}`,
+        `실패: ${nodes.filter((task) => task.status === "Failed").length}`
       ];
 
       if (selectedTask) {
         lines.push(
           "",
-          `selected_task: ${selectedTask.taskId} · ${selectedTask.title || "-"}`,
-          `task_status: ${selectedTask.status || "-"}`,
-          `task_category: ${selectedTask.category || "-"}`
+          "대표 작업:",
+          `- ${selectedTask.title || selectedTask.taskId || "-"}`,
+          `- 상태: ${selectedTask.status || "-"}`,
+          `- 종류: ${selectedTask.category || "-"}`
         );
         if (selectedTask.outputSummary) {
-          lines.push(`task_summary: ${trimNotebookEntry(selectedTask.outputSummary, 280)}`);
+          lines.push("", "작업 요약:", trimNotebookEntry(selectedTask.outputSummary, 280));
         }
         if (selectedTask.error) {
-          lines.push(`task_error: ${trimNotebookEntry(selectedTask.error, 220)}`);
+          lines.push("", "문제:", trimNotebookEntry(selectedTask.error, 220));
         }
       }
 
       if (output?.resultJson) {
-        lines.push("", "[result.json]", trimNotebookEntry(output.resultJson, 420));
+        lines.push("", "결과 파일에서 볼 것:", trimNotebookEntry(output.resultJson, 420));
       } else if (output?.stdout) {
-        lines.push("", "[stdout]", trimNotebookEntry(output.stdout, 420));
+        lines.push("", "출력에서 볼 것:", trimNotebookEntry(output.stdout, 420));
       }
+
+      lines.push("", `참고 ID: ${graph.graphId || "-"} / plan ${graph.sourcePlanId || "-"}`);
 
       return lines.join("\n").trim();
     }
@@ -1228,22 +1235,25 @@ import {
       const failed = checks.filter((item) => `${item.status || ""}`.toLowerCase() === "fail");
       const warned = checks.filter((item) => `${item.status || ""}`.toLowerCase() === "warn");
       const lines = [
-        `report_id: ${report.reportId || "-"}`,
-        `created_at_utc: ${report.createdAtUtc || "-"}`,
-        `ok_count: ${report.okCount || 0}`,
-        `warn_count: ${report.warnCount || 0}`,
-        `fail_count: ${report.failCount || 0}`,
-        `skip_count: ${report.skipCount || 0}`
+        "환경 진단에서 가져온 내용",
+        "",
+        `진단 시간: ${report.createdAtUtc || "-"}`,
+        `정상: ${report.okCount || 0}`,
+        `경고: ${report.warnCount || 0}`,
+        `실패: ${report.failCount || 0}`,
+        `건너뜀: ${report.skipCount || 0}`
       ];
 
       if (failed.length > 0 || warned.length > 0) {
-        lines.push("", "issues:");
+        lines.push("", "봐야 할 항목:");
         failed.concat(warned).slice(0, 8).forEach((item) => {
           lines.push(`- ${item.id || "-"}: ${item.summary || "-"}`);
         });
       } else {
-        lines.push("", "issues:", "- 현재 warn/fail check 없음");
+        lines.push("", "봐야 할 항목:", "- 현재 경고나 실패 항목 없음");
       }
+
+      lines.push("", `참고 ID: ${report.reportId || "-"}`);
 
       return lines.join("\n").trim();
     }
@@ -1258,23 +1268,25 @@ import {
       }
 
       const lines = [
-        `path: ${filePath || "-"}`,
-        `last_action: ${refactorState.lastAction || "-"}`,
-        `last_message: ${refactorState.lastMessage || "-"}`
+        "리팩터 작업에서 가져온 내용",
+        "",
+        `파일: ${filePath || "-"}`,
+        `마지막 작업: ${refactorState.lastAction || "-"}`,
+        `상태: ${refactorState.lastMessage || "-"}`
       ];
 
       if (preview) {
         lines.push(
-          `preview_id: ${preview.previewId || "-"}`,
-          `safe_to_apply: ${preview.safeToApply ? "yes" : "no"}`
+          `미리보기 ID: ${preview.previewId || "-"}`,
+          `바로 적용 가능: ${preview.safeToApply ? "예" : "아니오"}`
         );
         if (preview.unifiedDiff) {
-          lines.push("", "[preview]", trimNotebookEntry(preview.unifiedDiff, 420));
+          lines.push("", "미리보기:", trimNotebookEntry(preview.unifiedDiff, 420));
         }
       }
 
       if (issues.length > 0) {
-        lines.push("", "issues:");
+        lines.push("", "확인할 문제:");
         issues.slice(0, 6).forEach((issue) => {
           lines.push(`- ${issue.startLine || "?"}-${issue.endLine || "?"}: ${issue.reason || "-"}`);
         });
@@ -1385,7 +1397,7 @@ import {
         setNotebooksState((prev) => ({
           ...prev,
           pending: false,
-          lastError: "오류: handoff 생성 요청을 전송하지 못했습니다."
+          lastError: "오류: 이어보기 생성 요청을 전송하지 못했습니다."
         }));
       }
 
@@ -1397,7 +1409,7 @@ import {
       if (!content) {
         setNotebooksState((prev) => ({
           ...prev,
-          lastError: "선택된 계획이 없어 decision 템플릿을 만들 수 없습니다."
+          lastError: "선택된 계획이 없어 방향 정리 초안을 만들 수 없습니다."
         }));
         return false;
       }
@@ -1413,7 +1425,7 @@ import {
       if (!content) {
         setNotebooksState((prev) => ({
           ...prev,
-          lastError: "선택된 Task graph가 없어 verification 템플릿을 만들 수 없습니다."
+          lastError: "선택된 Task graph가 없어 확인 내용 초안을 만들 수 없습니다."
         }));
         return false;
       }
@@ -1429,7 +1441,7 @@ import {
       if (!content) {
         setNotebooksState((prev) => ({
           ...prev,
-          lastError: "최근 doctor 보고서가 없어 verification 템플릿을 만들 수 없습니다."
+          lastError: "최근 doctor 보고서가 없어 확인 내용 초안을 만들 수 없습니다."
         }));
         return false;
       }
@@ -1445,7 +1457,7 @@ import {
       if (!content) {
         setNotebooksState((prev) => ({
           ...prev,
-          lastError: "최근 refactor 상태가 없어 verification 템플릿을 만들 수 없습니다."
+          lastError: "최근 refactor 상태가 없어 확인 내용 초안을 만들 수 없습니다."
         }));
         return false;
       }

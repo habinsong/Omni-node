@@ -1,40 +1,56 @@
 const NOTEBOOK_KIND_META = {
   learning: {
-    label: "배운 점",
+    label: "작업 메모",
     title: "Learnings",
-    empty: "이번 작업에서 반복될 만한 교훈을 남깁니다.",
+    empty: "오늘 작업하면서 나중에 다시 볼 만한 내용을 적어둡니다.",
     template: [
-      "- 상황:",
-      "- 배운 점:",
-      "- 다음 작업에서 유지할 기준:"
+      "오늘 남길 것:",
+      "- ",
+      "",
+      "다음에 써먹을 것:",
+      "- ",
+      "",
+      "주의할 점:",
+      "- "
     ].join("\n")
   },
   decision: {
-    label: "결정",
+    label: "방향 정리",
     title: "Decisions",
-    empty: "왜 이 방향으로 결정했는지 남겨 다음 세션이 흔들리지 않게 합니다.",
+    empty: "이번 작업에서 어떤 방향으로 갔는지 짧게 남겨둡니다.",
     template: [
-      "- 결정 내용:",
-      "- 결정 이유:",
-      "- 영향 범위:",
-      "- 보류한 대안:"
+      "뭐 하기로 했나:",
+      "- ",
+      "",
+      "왜 그렇게 갔나:",
+      "- ",
+      "",
+      "일단 안 한 것:",
+      "- "
     ].join("\n")
   },
   verification: {
-    label: "검증",
+    label: "확인한 내용",
     title: "Verification",
-    empty: "실제로 확인한 결과와 남은 리스크를 정리합니다.",
+    empty: "실제로 눌러봤거나 실행해서 확인한 내용을 적어둡니다.",
     template: [
-      "- 검증 대상:",
-      "- 확인 방법:",
-      "- 결과:",
-      "- 남은 리스크:"
+      "확인한 것:",
+      "- ",
+      "",
+      "어떻게 확인했나:",
+      "- ",
+      "",
+      "결과:",
+      "- ",
+      "",
+      "아직 찝찝한 것:",
+      "- "
     ].join("\n")
   },
   handoff: {
-    label: "인수인계",
+    label: "다음에 이어볼 것",
     title: "Handoff",
-    empty: "다음 세션이 바로 이어받을 수 있는 인수인계 문서입니다."
+    empty: "다음 사람이 바로 이어서 볼 수 있게 현재 상태를 묶어둔 문서입니다."
   }
 };
 
@@ -148,7 +164,7 @@ function buildNotebookChecklist(snapshot) {
       {
         key: "load",
         title: "노트북을 먼저 불러오세요.",
-        description: "현재 프로젝트 기준 문서와 최근 상태를 읽어와야 다음 작업을 정리할 수 있습니다.",
+        description: "현재 프로젝트에 남긴 메모를 먼저 읽어와야 이어서 쓸 수 있습니다.",
         kind: "learning",
         template: NOTEBOOK_KIND_META.learning.template
       }
@@ -159,8 +175,8 @@ function buildNotebookChecklist(snapshot) {
   if (!snapshot.decisions?.exists) {
     items.push({
       key: "decision",
-      title: "기준 결정이 비어 있습니다.",
-      description: "이번 작업의 방향과 제외한 대안을 먼저 남기면 다음 세션이 덜 흔들립니다.",
+      title: "이번 작업 방향이 비어 있습니다.",
+      description: "어디까지 했고 어디는 안 했는지만 남겨도 다음 작업이 훨씬 빨라집니다.",
       kind: "decision",
       template: NOTEBOOK_KIND_META.decision.template
     });
@@ -169,8 +185,8 @@ function buildNotebookChecklist(snapshot) {
   if (!snapshot.verification?.exists) {
     items.push({
       key: "verification",
-      title: "검증 결과가 없습니다.",
-      description: "실행, doctor, refactor 결과 중 실제로 확인한 내용을 verification에 남기세요.",
+      title: "확인한 내용이 없습니다.",
+      description: "직접 눌러본 것, 실행한 것, 아직 못 본 것을 짧게 남기세요.",
       kind: "verification",
       template: NOTEBOOK_KIND_META.verification.template
     });
@@ -179,8 +195,8 @@ function buildNotebookChecklist(snapshot) {
   if (!snapshot.learnings?.exists) {
     items.push({
       key: "learning",
-      title: "재사용할 교훈이 아직 없습니다.",
-      description: "반복 작업에서 다시 써먹을 수 있는 패턴이나 주의점을 learning으로 남기세요.",
+      title: "작업 메모가 아직 없습니다.",
+      description: "반복해서 헷갈린 점이나 다음에 그대로 써먹을 내용을 적어두세요.",
       kind: "learning",
       template: NOTEBOOK_KIND_META.learning.template
     });
@@ -189,8 +205,8 @@ function buildNotebookChecklist(snapshot) {
   if (!snapshot.handoff?.exists) {
     items.push({
       key: "handoff",
-      title: "handoff 문서가 아직 생성되지 않았습니다.",
-      description: "다음 세션을 넘기기 전에 handoff를 생성해 현재 상태를 한 번에 묶어두는 편이 낫습니다.",
+      title: "이어보기 문서가 아직 없습니다.",
+      description: "작업을 넘기기 전에 지금 상태를 한 번에 묶어두면 다음에 바로 시작할 수 있습니다.",
       kind: "handoff",
       template: ""
     });
@@ -199,8 +215,8 @@ function buildNotebookChecklist(snapshot) {
   if (items.length === 0) {
     items.push({
       key: "fresh",
-      title: "현재 문서 구성이 갖춰져 있습니다.",
-      description: "새 변경이 생기면 verification을 먼저 보강하고 handoff를 다시 생성하세요.",
+      title: "지금 필요한 메모는 갖춰져 있습니다.",
+      description: "새로 확인한 내용이 생기면 먼저 적고 이어보기 문서를 다시 만들면 됩니다.",
       kind: "verification",
       template: NOTEBOOK_KIND_META.verification.template
     });
@@ -222,7 +238,7 @@ function renderNotebookDocumentCard(e, options) {
   const meta = NOTEBOOK_KIND_META[kind] || NOTEBOOK_KIND_META.learning;
   const exists = !!(document && document.exists);
   const preview = `${document && document.preview ? document.preview : ""}`.trim();
-  const actionLabel = kind === "handoff" ? "handoff 다시 생성" : `${meta.label} 초안 넣기`;
+  const actionLabel = kind === "handoff" ? "이어보기 다시 만들기" : `${meta.label}로 가져오기`;
   const statusTone = exists ? "ok" : "neutral";
 
   return e("article", { className: `notebook-document-card notebook-document-${kind}` },
@@ -250,7 +266,7 @@ function renderNotebookDocumentCard(e, options) {
           className: "btn",
           disabled,
           onClick: () => createNotebookHandoff()
-        }, isHandoffPending ? "생성 중..." : actionLabel)
+        }, isHandoffPending ? "만드는 중..." : actionLabel)
         : e("button", {
           type: "button",
           className: "btn",
@@ -315,7 +331,7 @@ export function renderNotebooksPanel(props) {
     e("div", { className: "plans-panel-head notebook-panel-head" },
       e("div", null,
         e("h2", null, "노트북"),
-        e("p", { className: "hint" }, "작업 중 배운 점, 결정, 검증 결과, handoff를 한 화면에서 정리합니다.")
+        e("p", { className: "hint" }, "작업 중 남길 말, 바꾼 방향, 확인한 것, 다음에 이어볼 내용을 한 화면에서 정리합니다.")
       ),
       e("div", { className: "row plans-head-actions notebook-panel-actions" },
         e("button", {
@@ -327,7 +343,7 @@ export function renderNotebooksPanel(props) {
           className: "btn primary",
           disabled: !authed || notebooksState.pending,
           onClick: () => createNotebookHandoff()
-        }, isHandoffPending ? "생성 중..." : "handoff 생성")
+        }, isHandoffPending ? "만드는 중..." : "이어보기 만들기")
       )
     ),
     notebooksState.lastError
@@ -347,10 +363,10 @@ export function renderNotebooksPanel(props) {
       )
     ),
     e("div", { className: "notebook-metric-grid" },
-      renderNotebookMetricCard(e, "문서 커버리지", `${coverageCount}/4`, "배운 점, 결정, 검증, handoff 문서 구성"),
+      renderNotebookMetricCard(e, "남긴 문서", `${coverageCount}/4`, "작업 메모, 방향 정리, 확인한 내용, 이어보기"),
       renderNotebookMetricCard(e, "현재 작성 대상", activeKind.label, "왼쪽 작성 작업대의 저장 위치"),
       renderNotebookMetricCard(e, "초안 길이", `${currentDraftLength}자`, "기록 추가 전에 현재 초안 분량 확인"),
-      renderNotebookMetricCard(e, "작성 엔진", "LLM 미사용", "handoff 생성은 현재 규칙 기반으로 동작", "neutral")
+      renderNotebookMetricCard(e, "작성 방식", "직접 작성", "이어보기 만들기는 현재 규칙 기반으로 동작", "neutral")
     ),
     e("div", { className: "notebook-shell" },
       e("div", { className: "notebook-primary-column" },
@@ -358,7 +374,7 @@ export function renderNotebooksPanel(props) {
           e("div", { className: "notebook-section-head" },
             e("div", null,
               e("strong", null, "기록 작성"),
-              e("p", null, "어디에 남길지 먼저 고르고, 템플릿으로 초안을 만든 뒤 바로 저장합니다.")
+              e("p", null, "일기 쓰듯이 남기고, 필요할 때만 템플릿을 불러옵니다.")
             ),
             e("div", { className: "notebook-draft-meta" }, `${currentDraftLength}자`)
           ),
@@ -373,11 +389,11 @@ export function renderNotebooksPanel(props) {
               })
             ),
             e("div", { className: "notebook-project-hint" },
-              e("strong", null, notebook?.projectKey || "자동 결정"),
+              e("strong", null, notebook?.projectKey || "자동 선택"),
               e("span", null, notebook?.rootPath || "현재 프로젝트 루트를 기준으로 저장합니다.")
             )
           ),
-          e("div", { className: "notebook-kind-grid", role: "tablist", "aria-label": "기록 종류" },
+          e("div", { className: "notebook-kind-grid", role: "tablist", "aria-label": "기록 방식" },
             ["learning", "decision", "verification"].map((kind) => {
               const meta = NOTEBOOK_KIND_META[kind];
               const active = notebooksState.appendKind === kind;
@@ -392,7 +408,7 @@ export function renderNotebooksPanel(props) {
             })
           ),
           e("div", { className: "notebook-template-strip" },
-            e("span", { className: "notebook-template-label" }, "빠른 템플릿"),
+            e("span", { className: "notebook-template-label" }, "필요하면 시작 문장 넣기"),
             ["learning", "decision", "verification"].map((kind) => e("button", {
               key: `template-${kind}`,
               type: "button",
@@ -403,15 +419,15 @@ export function renderNotebooksPanel(props) {
               type: "button",
               className: "btn ghost",
               onClick: () => setNotebookAppendText("")
-            }, "초안 비우기")
+            }, "비우기")
           ),
           e("label", { className: "meta-field notebook-text-field" },
-            e("span", { className: "meta-label" }, `${activeKind.label} 내용`),
+            e("span", { className: "meta-label" }, activeKind.label),
             e("textarea", {
               className: "input plan-textarea notebook-textarea",
               rows: 14,
               value: notebooksState.appendText,
-              placeholder: activeKind.template || "이번 세션에서 남겨야 할 핵심 내용을 입력하세요.",
+              placeholder: activeKind.template || "다음에 다시 볼 사람이 이해할 수 있게 현재 상태를 적어두세요.",
               onChange: (event) => setNotebookAppendText(event.target.value)
             })
           ),
@@ -420,19 +436,19 @@ export function renderNotebooksPanel(props) {
               className: "btn primary",
               disabled,
               onClick: () => appendNotebook()
-            }, isAppendPending ? "저장 중..." : `${activeKind.label} 저장`),
+            }, isAppendPending ? "저장 중..." : "저장"),
             e("button", {
               className: "btn",
               disabled: !authed || notebooksState.pending,
               onClick: () => createNotebookHandoff()
-            }, isHandoffPending ? "생성 중..." : "handoff 갱신")
+            }, isHandoffPending ? "만드는 중..." : "이어보기 갱신")
           )
         ),
         e("section", { className: "notebook-source-card" },
           e("div", { className: "notebook-section-head" },
             e("div", null,
               e("strong", null, "빠른 기록"),
-              e("p", null, "다른 패널에서 선택한 결과를 바로 노트북으로 저장합니다.")
+              e("p", null, "다른 화면에서 나온 결과를 사람이 읽을 수 있는 초안으로 가져옵니다.")
             )
           ),
           e("div", { className: "notebook-source-grid" },
@@ -440,22 +456,22 @@ export function renderNotebooksPanel(props) {
               className: "btn",
               disabled: !authed || notebooksState.pending,
               onClick: appendSelectedPlanDecision
-            }, "선택 plan -> decision"),
+            }, "선택한 계획 가져오기"),
             e("button", {
               className: "btn",
               disabled: !authed || notebooksState.pending,
               onClick: appendSelectedTaskVerification
-            }, "선택 graph -> verification"),
+            }, "그래프 결과 가져오기"),
             e("button", {
               className: "btn",
               disabled: !authed || notebooksState.pending,
               onClick: appendDoctorVerification
-            }, "doctor -> verification"),
+            }, "진단 결과 가져오기"),
             e("button", {
               className: "btn",
               disabled: !authed || notebooksState.pending,
               onClick: appendRefactorVerification
-            }, "refactor -> verification")
+            }, "리팩터 결과 가져오기")
           )
         )
       ),
@@ -464,13 +480,13 @@ export function renderNotebooksPanel(props) {
           e("div", { className: "notebook-section-head" },
             e("div", null,
               e("strong", null, "현재 상태"),
-              e("p", null, "어디에 저장되고 무엇이 비어 있는지 바로 확인합니다.")
+              e("p", null, "어디에 저장되는지, 뭐가 아직 비었는지 확인합니다.")
             )
           ),
           e("div", { className: "notebook-status-list" },
             e("div", { className: "notebook-status-row" },
               e("span", null, "project key"),
-              e("strong", null, notebook?.projectKey || notebooksState.projectKeyDraft || "자동 결정")
+              e("strong", null, notebook?.projectKey || notebooksState.projectKeyDraft || "자동 선택")
             ),
             e("div", { className: "notebook-status-row" },
               e("span", null, "저장 루트"),
@@ -481,7 +497,7 @@ export function renderNotebooksPanel(props) {
               e("strong", null, formatNotebookRelative(notebooksState.receivedAt || snapshot?.readAtUtc))
             ),
             e("div", { className: "notebook-status-row" },
-              e("span", null, "handoff 생성 방식"),
+              e("span", null, "이어보기 생성"),
               e("strong", null, "규칙 기반")
             )
           )
@@ -490,7 +506,7 @@ export function renderNotebooksPanel(props) {
           e("div", { className: "notebook-section-head" },
             e("div", null,
               e("strong", null, "다음 액션"),
-              e("p", null, "비어 있는 문서부터 채우도록 권장 작업을 먼저 보여줍니다.")
+              e("p", null, "뭘 먼저 적으면 좋은지 알려줍니다.")
             )
           ),
           e("div", { className: "notebook-next-list" },
@@ -504,12 +520,12 @@ export function renderNotebooksPanel(props) {
                   className: "btn",
                   disabled: !authed || notebooksState.pending,
                   onClick: () => createNotebookHandoff()
-                }, "handoff 생성")
+                }, "이어보기 만들기")
                 : e("button", {
                   className: "btn ghost",
                   type: "button",
                   onClick: () => replaceDraftWithTemplate(item.kind)
-                }, `${NOTEBOOK_KIND_META[item.kind].label} 초안`)
+                }, `${NOTEBOOK_KIND_META[item.kind].label} 시작`)
             ))
           )
         )
@@ -519,7 +535,7 @@ export function renderNotebooksPanel(props) {
       e("div", { className: "notebook-section-head notebook-documents-head" },
         e("div", null,
           e("strong", null, "문서 보기"),
-          e("p", null, "문서 상태를 카드 단위로 분리해 필요한 정보만 바로 읽을 수 있게 정리했습니다.")
+          e("p", null, "나중에 다시 볼 내용을 카드별로 나눠서 보여줍니다.")
         )
       ),
       !snapshot

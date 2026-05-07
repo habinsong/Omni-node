@@ -86,7 +86,7 @@ Omni-node는 아래 같은 과장된 분위기가 싫어서 시작한 프로젝�
 - `코딩 탭`: 단일 완주, 역할 분담형 오케스트레이션, 모델별 독립 완주 비교
 - `루틴 탭`: 스케줄 생성, 실행, 이력, 브라우저 에이전트, 텔레그램 전송
 - `로직 탭`: ComfyUI 스타일 노드 캔버스로 대화/코딩/루틴/도구를 조합하고 저장/실행
-- `노트북 탭`: 배운 점, 결정, 검증 결과, handoff를 한 화면에서 작성하고 문서로 확인
+- `노트북 탭`: 작업 메모, 방향 정리, 확인한 내용, 이어보기를 한 화면에서 작성하고 문서로 확인
 - `자동화/계획 탭`: 계획 생성/리뷰/승인/실행과 task graph 실행 라우팅 관리
 - `설정 탭`: 인증, 제공자 키, 모델/사용량, 프로젝트 문맥, 고급 도구 운영
 - `Safe Refactor`: 줄 범위 교체, 이름 바꾸기, 패턴 치환
@@ -256,13 +256,13 @@ Omni-node는 이 지점을 운영 가능한 구조로 바꾼다.
 
 ### 5. 노트북
 
-- 좌측 루트 메뉴의 `노트북` 탭에서 learnings / decisions / verification / handoff를 관리
-- 상단 요약 카드로 문서 커버리지, 현재 작성 대상, 초안 길이, 작성 엔진을 확인
+- 좌측 루트 메뉴의 `노트북` 탭에서 작업 메모, 방향 정리, 확인한 내용, 이어보기를 관리
+- 상단 요약 카드로 남긴 문서 수, 현재 작성 대상, 초안 길이, 작성 방식을 확인
 - `기록 작성` 작업대에서 프로젝트 키, 저장 루트, 기록 종류, 본문을 한 번에 정리
 - `빠른 기록`은 선택한 plan, graph, doctor, refactor 결과를 바로 노트북 초안으로 변환
-- `다음 액션`은 비어 있는 문서와 handoff 상태를 기준으로 다음에 채울 항목을 제안
-- `문서 보기`는 배운 점/결정/검증/인수인계를 카드로 분리해 보여줌
-- 노트북 append와 handoff 생성은 현재 규칙 기반으로 동작하며, LLM 라우팅을 쓰지 않음
+- `다음 액션`은 비어 있는 문서와 이어보기 상태를 기준으로 다음에 채울 항목을 제안
+- `문서 보기`는 작업 메모/방향 정리/확인한 내용/다음에 이어볼 것을 카드로 분리해 보여줌
+- 노트북 append와 이어보기 생성은 현재 규칙 기반으로 동작하며, LLM 라우팅을 쓰지 않음
 
 ### 6. 자동화/계획
 
@@ -564,11 +564,11 @@ CLI/텔레그램에서는 예를 들어 이렇게 만들 수 있다.
 ### 노트북
 
 1. 노트북 탭에서 프로젝트 키와 저장 루트를 확인
-2. 작성할 문서 종류를 `배운 점`, `결정`, `검증` 중 선택
-3. 본문 입력 영역에 실제로 다음 세션에 필요한 내용을 작성
+2. 작성할 문서 종류를 `작업 메모`, `방향 정리`, `확인한 내용` 중 선택
+3. 본문 입력 영역에 일기 쓰듯이 다음 세션에 필요한 내용을 작성
 4. 필요하면 빠른 기록에서 선택 plan, graph, doctor, refactor 결과를 초안으로 불러오기
-5. 저장 후 문서 보기에서 배운 점/결정/검증/인수인계 카드 상태 확인
-6. 세션을 넘기기 전 `handoff 생성`으로 최신 인수인계 문서 갱신
+5. 저장 후 문서 보기에서 작업 메모/방향 정리/확인한 내용/이어보기 카드 상태 확인
+6. 세션을 넘기기 전 `이어보기 만들기`로 최신 이어보기 문서 갱신
 
 ### 자동화/계획
 
@@ -577,7 +577,7 @@ CLI/텔레그램에서는 예를 들어 이렇게 만들 수 있다.
 3. 계획용 LLM 영역에서 planner/reviewer 라우팅 provider와 모델, fallback chain을 확인
 4. 태스크 그래프 화면에서는 승인된 plan으로 graph를 만들고 실행 상태와 task output을 확인
 5. 그래프 실행 라우팅에서 UI 작업, 빠른 수정, 안전 리팩터 같은 task category가 어떤 provider/model로 실행될지 확인
-6. 작업이 끝나면 노트북 탭에서 decision과 verification으로 결과를 남김
+6. 작업이 끝나면 노트북 탭에서 방향 정리와 확인한 내용을 남김
 
 ### Safe Refactor
 
@@ -620,7 +620,7 @@ Omni-node는 `상태 원본`과 `작업 산출물`을 분리한다.
 | `workspace/.runtime/refactor-preview/` | Safe Refactor preview 저장 |
 | `~/.omninode/plans/` | 계획, 리뷰, 실행 상태 원본 |
 | `~/.omninode/tasks/` | task graph 정의와 상태 원본 |
-| `~/.omninode/notebooks/` | 배운 점, 결정, 검증, handoff 문서 원본 |
+| `~/.omninode/notebooks/` | 작업 메모, 방향 정리, 확인한 내용, 이어보기 문서 원본 |
 | `~/.omninode/routing-policy.json` | category별 provider 라우팅 override |
 | `~/.omninode/cli/` | `Omni-node` 전역 실행기 PID, 로그, 최근 시작 메타데이터 |
 | `/tmp/omninode_core.<uid>.sock` | macOS/Linux 코어 UDS 소켓 |
@@ -646,7 +646,7 @@ Omni-node는 `상태 원본`과 `작업 산출물`을 분리한다.
 - [Safe Refactoring](./docs/SAFE_REFACTORING.md)
 - [Doctor](./docs/DOCTOR.md)
 - [Planning / Tasks](./docs/PLANNING_AND_TASKS.md)
-- [노트북 / Handoff](./docs/NOTEBOOKS_AND_HANDOFF.md)
+- [노트북 / 이어보기](./docs/NOTEBOOKS_AND_HANDOFF.md)
 - [AGENTS / Skills](./docs/AGENTS_AND_SKILLS.md)
 - [도구 통합 패널 사용 가이드](./docs/도구_통합_패널_사용_가이드.md)
 - [기술 스택 정리](./docs/기술스택_정리.md)
