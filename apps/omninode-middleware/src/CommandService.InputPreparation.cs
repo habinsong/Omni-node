@@ -58,10 +58,12 @@ public sealed partial class CommandService
 
         var skipProjectContext = Regex.IsMatch(normalizedInput, @"(?i)(agent\.md|agents\.md)\s*(사용\s*안\s*함|쓰지\s*마|사용하지\s*마|제외|빼|무시)");
         var isSkillListRequested = Regex.IsMatch(normalizedInput, @"(?i)(스킬|skill|skills|skill\.md).*(목록|리스트|뭐|보여|알려|어떤|종류|있어|있니|돼)");
+        var isSkillCreationRequested = LooksLikeSkillCreationRequest(normalizedInput);
         var shouldIncludeProjectContext = !skipProjectContext
             && (TryExtractSessionScope(sessionKey) == "coding"
                 || LooksLikeProjectContextRequest(normalizedInput)
-                || isSkillListRequested);
+                || isSkillListRequested
+                || isSkillCreationRequested);
 
         if (shouldIncludeProjectContext)
         {
@@ -103,6 +105,35 @@ public sealed partial class CommandService
                         }
                         catch { }
                     }
+                }
+
+                if (isSkillCreationRequested)
+                {
+                    contextBuilder.AppendLine("[Skill Creation Mode — 반드시 따를 것]");
+                    contextBuilder.AppendLine("사용자가 새 스킬 생성을 요청했습니다. 응답에 반드시 아래 형식의 디렉티브를 정확히 포함해야 합니다. 디렉티브가 없으면 파일이 만들어지지 않습니다.");
+                    contextBuilder.AppendLine();
+                    contextBuilder.AppendLine("형식 (속성 순서/따옴표/줄바꿈 그대로):");
+                    contextBuilder.AppendLine("<omni:skill name=\"kebab-case-name\" description=\"한 줄 설명\">");
+                    contextBuilder.AppendLine("스킬 본문(markdown). 적용 조건, 출력 형식, 예시를 간결하게.");
+                    contextBuilder.AppendLine("</omni:skill>");
+                    contextBuilder.AppendLine();
+                    contextBuilder.AppendLine("규칙:");
+                    contextBuilder.AppendLine("- name: 소문자/숫자/하이픈만 (예: casual-empathy, pr-summary, coding-for-beginners). 한글·공백·언더스코어 금지.");
+                    contextBuilder.AppendLine("- 사용자가 영문 이름을 안 주면 의도를 짧은 kebab-case로 의역해 정한다.");
+                    contextBuilder.AppendLine("- description: 언제 쓰는지 한 줄로. 큰따옴표 안에 들어가야 함.");
+                    contextBuilder.AppendLine("- 본문은 사용자가 요청한 동작만 적는다. 추측/부풀림 금지.");
+                    contextBuilder.AppendLine("- 디렉티브를 코드블록(```)으로 감싸지 마라.");
+                    contextBuilder.AppendLine("- 사용자 입력과 무관한 잡담/요약/일반 설명을 추가하지 마라. 한 줄 인사 후 바로 디렉티브를 출력한다.");
+                    contextBuilder.AppendLine();
+                    contextBuilder.AppendLine("예시 입력: \"공감하는 일상 대화 스킬 만들어줘\"");
+                    contextBuilder.AppendLine("올바른 응답:");
+                    contextBuilder.AppendLine("스킬 추가했어요.");
+                    contextBuilder.AppendLine("<omni:skill name=\"casual-empathy\" description=\"일상 대화에서 사용자의 감정을 먼저 인정하고 짧게 공감하는 톤으로 답한다.\">");
+                    contextBuilder.AppendLine("- 답변 시작은 사용자의 감정/상황을 한 문장으로 인정한다.");
+                    contextBuilder.AppendLine("- 해결책은 사용자가 원할 때만 짧게 제안한다.");
+                    contextBuilder.AppendLine("- 길이는 3문장 이내를 기본으로 한다.");
+                    contextBuilder.AppendLine("</omni:skill>");
+                    contextBuilder.AppendLine();
                 }
 
                 if (contextBuilder.Length > 0)
@@ -734,6 +765,21 @@ public sealed partial class CommandService
             "skill",
             "skills",
             "skill.md");
+    }
+
+    private static bool LooksLikeSkillCreationRequest(string input)
+    {
+        var normalized = (input ?? string.Empty).Trim();
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+
+        return Regex.IsMatch(
+            normalized,
+            @"(?i)((스킬|skill|skills)\s*(을|를)?\s*(만들|만들어|생성|등록|추가|작성|새로|new)|" +
+            @"(create|make|add|register|build|write)\s+(a\s+|an\s+|new\s+)?(skill|skills))"
+        );
     }
 
     private static string BuildMemorySearchContextBlock(IReadOnlyList<MemorySearchCitationResult> results)
