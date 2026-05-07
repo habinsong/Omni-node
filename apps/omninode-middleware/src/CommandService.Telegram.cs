@@ -1736,9 +1736,13 @@ public sealed partial class CommandService
         }
 
         var skillQueryText = text ?? string.Empty;
+        var hasStickyActiveSkillForTelegram = !string.IsNullOrWhiteSpace(session.SessionId)
+            && _activeSkillByThread.ContainsKey(session.SessionId);
         var isSkillContextQuery = LooksLikeProjectContextRequest(skillQueryText)
             || LooksLikeSkillCreationRequest(skillQueryText)
-            || Regex.IsMatch(skillQueryText, @"(?i)(스킬|skill|skills|skill\.md).*(목록|리스트|뭐|보여|알려|어떤|종류|있어|있니|돼)");
+            || LooksLikeSkillDeactivationRequest(skillQueryText)
+            || Regex.IsMatch(skillQueryText, @"(?i)(스킬|skill|skills|skill\.md).*(목록|리스트|뭐|보여|알려|어떤|종류|있어|있니|돼)")
+            || hasStickyActiveSkillForTelegram;
 
         if (webSearchEnabled && snapshot.Mode == "single" && !isSkillContextQuery)
         {

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net;
@@ -107,6 +108,7 @@ public sealed partial class CommandService :
     private SkillCreateDirective? _skillCreateDirective;
     private SkillCreateDirective SkillCreateDirective =>
         _skillCreateDirective ??= new SkillCreateDirective(_config);
+    private readonly ConcurrentDictionary<string, string> _activeSkillByThread = new(StringComparer.Ordinal);
     private readonly CopilotCliWrapper _copilotWrapper;
     private readonly CodexCliWrapper _codexWrapper;
     private readonly PythonSandboxClient _sandboxClient;

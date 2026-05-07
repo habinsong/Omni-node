@@ -59,11 +59,17 @@ public sealed partial class CommandService
         var skipProjectContext = Regex.IsMatch(normalizedInput, @"(?i)(agent\.md|agents\.md)\s*(사용\s*안\s*함|쓰지\s*마|사용하지\s*마|제외|빼|무시)");
         var isSkillListRequested = Regex.IsMatch(normalizedInput, @"(?i)(스킬|skill|skills|skill\.md).*(목록|리스트|뭐|보여|알려|어떤|종류|있어|있니|돼)");
         var isSkillCreationRequested = LooksLikeSkillCreationRequest(normalizedInput);
+        var isSkillDeactivationRequested = LooksLikeSkillDeactivationRequest(normalizedInput);
+        var threadKeyForActiveSkill = string.IsNullOrWhiteSpace(threadBindingKey) ? sessionKey : threadBindingKey;
+        var hasActiveSkill = !string.IsNullOrWhiteSpace(threadKeyForActiveSkill)
+            && _activeSkillByThread.ContainsKey(threadKeyForActiveSkill);
         var shouldIncludeProjectContext = !skipProjectContext
             && (TryExtractSessionScope(sessionKey) == "coding"
                 || LooksLikeProjectContextRequest(normalizedInput)
                 || isSkillListRequested
-                || isSkillCreationRequested);
+                || isSkillCreationRequested
+                || isSkillDeactivationRequested
+                || hasActiveSkill);
 
         if (shouldIncludeProjectContext)
         {
@@ -90,21 +96,67 @@ public sealed partial class CommandService
                     contextBuilder.AppendLine();
                 }
 
-                foreach (var skill in snapshot.Skills)
+                var threadKey = string.IsNullOrWhiteSpace(threadBindingKey)
+                    ? sessionKey
+                    : threadBindingKey;
+                var deactivationDetected = LooksLikeSkillDeactivationRequest(normalizedInput);
+
+                SkillManifest? explicitlyMentionedSkill = null;
+                foreach (var skill in snapshot.Skills.OrderByDescending(s => s.Name.Length))
                 {
                     if (normalizedInput.Contains(skill.Name, StringComparison.OrdinalIgnoreCase))
                     {
-                        try
-                        {
-                            var skillText = System.IO.File.ReadAllText(skill.Path, Encoding.UTF8);
-                            contextBuilder.AppendLine($"[Active Skill: {skill.Name}]");
-                            contextBuilder.AppendLine($"이 요청은 `{skill.Name}` 스킬을 명시적으로 사용하라는 지시입니다.");
-                            contextBuilder.AppendLine("스킬의 목적과 말투를 우선 적용하고, 무관한 감정 위로/잡담/주제 전환을 하지 마세요.");
-                            contextBuilder.AppendLine(skillText);
-                            contextBuilder.AppendLine();
-                        }
-                        catch { }
+                        explicitlyMentionedSkill = skill;
+                        break;
                     }
+                }
+
+                if (deactivationDetected && explicitlyMentionedSkill == null)
+                {
+                    if (!string.IsNullOrWhiteSpace(threadKey)
+                        && _activeSkillByThread.TryRemove(threadKey, out var clearedSkillName))
+                    {
+                        contextBuilder.AppendLine($"[Skill Deactivated: {clearedSkillName}]");
+                        contextBuilder.AppendLine("사용자가 활성 스킬을 해제했습니다. 이번 응답부터는 일반 대화 톤으로 답하세요.");
+                        contextBuilder.AppendLine();
+                    }
+                }
+
+                SkillManifest? skillToActivate = null;
+                if (explicitlyMentionedSkill != null)
+                {
+                    skillToActivate = explicitlyMentionedSkill;
+                    if (!string.IsNullOrWhiteSpace(threadKey))
+                    {
+                        _activeSkillByThread[threadKey] = explicitlyMentionedSkill.Name;
+                    }
+                }
+                else if (!deactivationDetected
+                    && !string.IsNullOrWhiteSpace(threadKey)
+                    && _activeSkillByThread.TryGetValue(threadKey, out var stickySkillName))
+                {
+                    skillToActivate = snapshot.Skills.FirstOrDefault(s =>
+                        string.Equals(s.Name, stickySkillName, StringComparison.OrdinalIgnoreCase));
+                    if (skillToActivate == null)
+                    {
+                        _activeSkillByThread.TryRemove(threadKey, out _);
+                    }
+                }
+
+                if (skillToActivate != null)
+                {
+                    try
+                    {
+                        var skillText = System.IO.File.ReadAllText(skillToActivate.Path, Encoding.UTF8);
+                        var activationLabel = explicitlyMentionedSkill != null ? "Active Skill (sticky)" : "Active Skill (sticky, persisted)";
+                        contextBuilder.AppendLine($"[{activationLabel}: {skillToActivate.Name}]");
+                        contextBuilder.AppendLine($"이 대화는 `{skillToActivate.Name}` 스킬이 활성화된 상태로 진행됩니다.");
+                        contextBuilder.AppendLine("매 응답마다 스킬의 목적·말투·규칙을 우선 적용하세요. 사용자가 \"스킬 그만 / 종료 / 해제 / off\" 같이 명시적으로 끄기 전까지 계속 적용합니다.");
+                        contextBuilder.AppendLine("스킬과 무관한 감정 위로·잡담·주제 전환을 추가하지 마세요.");
+                        contextBuilder.AppendLine(skillText);
+                        contextBuilder.AppendLine();
+                    }
+                    catch { }
                 }
 
                 if (isSkillCreationRequested)
@@ -779,6 +831,23 @@ public sealed partial class CommandService
             normalized,
             @"(?i)((스킬|skill|skills)\s*(을|를)?\s*(만들|만들어|생성|등록|추가|작성|새로|new)|" +
             @"(create|make|add|register|build|write)\s+(a\s+|an\s+|new\s+)?(skill|skills))"
+        );
+    }
+
+    private static bool LooksLikeSkillDeactivationRequest(string input)
+    {
+        var normalized = (input ?? string.Empty).Trim();
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+
+        return Regex.IsMatch(
+            normalized,
+            @"(?i)((스킬|skill|skills)\s*(을|를|은|는)?\s*(그만|종료|중지|해제|빼|꺼|끄|off|stop|disable|deactivate|exit|end)|" +
+            @"(stop|disable|deactivate|turn\s+off|exit|end)\s+(the\s+)?(skill|skills)|" +
+            @"(스킬|skill)\s*(끝|그만)|" +
+            @"일반\s*(대화|모드)\s*(로|으로)?\s*(돌아|복귀|전환))"
         );
     }
 
