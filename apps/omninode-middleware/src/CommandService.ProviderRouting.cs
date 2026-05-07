@@ -576,6 +576,11 @@ public sealed partial class CommandService
             return "gemini-3.1-flash-lite-preview";
         }
 
+        if (trimmed.Equals(LegacyCerebrasLlamaModel, StringComparison.OrdinalIgnoreCase))
+        {
+            return DefaultCerebrasModel;
+        }
+
         return string.Equals(trimmed, "none", StringComparison.OrdinalIgnoreCase) ? null : trimmed;
     }
 

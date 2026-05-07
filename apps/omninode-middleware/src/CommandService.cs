@@ -16,6 +16,8 @@ public sealed partial class CommandService :
     private const string RoutineModelMaverick = "meta-llama/llama-4-maverick-17b-128e-instruct";
     private const string RoutineModelGptOss = "openai/gpt-oss-120b";
     private const string RoutineModelKimi = "moonshotai/kimi-k2-instruct-0905";
+    private const string DefaultCerebrasModel = "gpt-oss-120b";
+    private const string LegacyCerebrasLlamaModel = "llama3.1-8b";
     private const string DefaultCopilotModel = "gpt-5-mini";
     private const int TelegramUpgradeDailyCap = 100;
     private const int TelegramMaxResponseChars = 3600;

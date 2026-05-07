@@ -55,6 +55,70 @@ public sealed partial class CommandService
         var normalizedAttachments = NormalizeAttachments(attachments);
         var urls = ResolveWebUrls(normalizedInput, webUrls, webSearchEnabled);
         var builder = new StringBuilder();
+
+        var skipProjectContext = Regex.IsMatch(normalizedInput, @"(?i)(agent\.md|agents\.md)\s*(사용\s*안\s*함|쓰지\s*마|사용하지\s*마|제외|빼|무시)");
+        var isSkillListRequested = Regex.IsMatch(normalizedInput, @"(?i)(스킬|skill|skills|skill\.md).*(목록|리스트|뭐|보여|알려|어떤|종류|있어|있니|돼)");
+        var shouldIncludeProjectContext = !skipProjectContext
+            && (TryExtractSessionScope(sessionKey) == "coding"
+                || LooksLikeProjectContextRequest(normalizedInput)
+                || isSkillListRequested);
+
+        if (shouldIncludeProjectContext)
+        {
+            try
+            {
+                var snapshot = _projectContextLoader.LoadSnapshot();
+                var contextBuilder = new StringBuilder();
+
+                if (!string.IsNullOrWhiteSpace(snapshot.Instructions.CombinedText))
+                {
+                    contextBuilder.AppendLine("[System Kernel (AGENTS.md)]");
+                    contextBuilder.AppendLine(snapshot.Instructions.CombinedText);
+                    contextBuilder.AppendLine();
+                }
+
+                if (isSkillListRequested)
+                {
+                    contextBuilder.AppendLine("[Available Skills List]");
+                    foreach (var skill in snapshot.Skills)
+                    {
+                        contextBuilder.AppendLine($"- {skill.Name}: {skill.Description}");
+                    }
+                    contextBuilder.AppendLine("위 스킬 목록을 참조하여, 사용자의 질문에 친절하게 요약해서 답변해주세요.");
+                    contextBuilder.AppendLine();
+                }
+
+                foreach (var skill in snapshot.Skills)
+                {
+                    if (normalizedInput.Contains(skill.Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            var skillText = System.IO.File.ReadAllText(skill.Path, Encoding.UTF8);
+                            contextBuilder.AppendLine($"[Active Skill: {skill.Name}]");
+                            contextBuilder.AppendLine($"이 요청은 `{skill.Name}` 스킬을 명시적으로 사용하라는 지시입니다.");
+                            contextBuilder.AppendLine("스킬의 목적과 말투를 우선 적용하고, 무관한 감정 위로/잡담/주제 전환을 하지 마세요.");
+                            contextBuilder.AppendLine(skillText);
+                            contextBuilder.AppendLine();
+                        }
+                        catch { }
+                    }
+                }
+
+                if (contextBuilder.Length > 0)
+                {
+                    builder.AppendLine("[Project Context]");
+                    builder.AppendLine(contextBuilder.ToString().Trim());
+                    builder.AppendLine("--------------------------------------------------");
+                    builder.AppendLine();
+                }
+            }
+            catch (Exception)
+            {
+                // 스캔 실패 시 무시
+            }
+        }
+
         builder.AppendLine(normalizedInput);
 
         var textAttachmentBlock = BuildTextAttachmentBlock(normalizedAttachments);
@@ -328,39 +392,104 @@ public sealed partial class CommandService
         }
 
         var sections = new List<string>();
+        MemoryGetToolResult? memoryGet = null;
+        var forceMemoryContext = ShouldUseForcedMemoryContext(query);
 
-        var memorySearch = _memorySearchTool.Search(query, maxResults: 4, minScore: ResolveForcedMemoryMinScore(query));
-        var scopedMemoryResults = FilterMemorySearchResultsByScope(memorySearch.Results, normalizedMemoryScope, allowedConversationIds);
-        if (memorySearch.Disabled)
+        if (LooksLikeCasualOrIdentityQuestion(query))
         {
-            memorySearchTrace = CreateForcedToolTrace(
-                "disabled",
-                detail: TrimForAudit(memorySearch.Error, 120)
-            );
+            memorySearchTrace = CreateForcedToolTrace("skip", skipReason: "casual_query");
+            memoryGetTrace = CreateForcedToolTrace("skip", skipReason: "casual_query");
         }
         else
         {
-            memorySearchTrace = CreateForcedToolTrace(
-                "ok",
-                result: $"{scopedMemoryResults.Count.ToString(CultureInfo.InvariantCulture)}/{memorySearch.Results.Count.ToString(CultureInfo.InvariantCulture)}"
-            );
-            if (scopedMemoryResults.Count > 0)
+            var memorySearch = _memorySearchTool.Search(query, maxResults: 4, minScore: ResolveForcedMemoryMinScore(query));
+            var scopedMemoryResults = FilterMemorySearchResultsByScope(memorySearch.Results, normalizedMemoryScope, allowedConversationIds);
+            if (memorySearch.Disabled)
             {
-                sections.Add(BuildMemorySearchContextBlock(scopedMemoryResults));
+                memorySearchTrace = CreateForcedToolTrace(
+                    "disabled",
+                    detail: TrimForAudit(memorySearch.Error, 120)
+                );
+            }
+            else
+            {
+                memorySearchTrace = CreateForcedToolTrace(
+                    "ok",
+                    result: $"{scopedMemoryResults.Count.ToString(CultureInfo.InvariantCulture)}/{memorySearch.Results.Count.ToString(CultureInfo.InvariantCulture)}"
+                );
+                var useSearchHits = forceMemoryContext || HasRelevantMemorySearchResults(query, scopedMemoryResults);
+                if (useSearchHits && scopedMemoryResults.Count > 0)
+                {
+                    sections.Add(BuildMemorySearchContextBlock(scopedMemoryResults));
+                }
+
+                var topMemoryHit = useSearchHits
+                    ? scopedMemoryResults.FirstOrDefault()
+                    : null;
+                if (topMemoryHit != null)
+                {
+                    var lineWindow = Math.Clamp(topMemoryHit.EndLine - topMemoryHit.StartLine + 4, 6, 28);
+                    memoryGet = _memoryGetTool.Get(topMemoryHit.Path, topMemoryHit.StartLine, lineWindow);
+                    if (memoryGet.Disabled)
+                    {
+                        memoryGetTrace = CreateForcedToolTrace(
+                            "disabled",
+                            detail: TrimForAudit(memoryGet.Error, 120)
+                        );
+                    }
+                    else if (string.IsNullOrWhiteSpace(memoryGet.Text))
+                    {
+                        memoryGetTrace = CreateForcedToolTrace(
+                            "ok",
+                            result: "0",
+                            detail: TrimForAudit(
+                                $"{topMemoryHit.Path}{FormatMemoryLineRange(topMemoryHit.StartLine, topMemoryHit.EndLine)}",
+                                120
+                            )
+                        );
+                    }
+                    else
+                    {
+                        memoryGetTrace = CreateForcedToolTrace(
+                            "ok",
+                            result: "1",
+                            detail: TrimForAudit(
+                                $"{topMemoryHit.Path}{FormatMemoryLineRange(topMemoryHit.StartLine, topMemoryHit.EndLine)}",
+                                120
+                            )
+                        );
+                        sections.Add(BuildMemoryGetContextBlock(topMemoryHit, memoryGet));
+                    }
+                }
+                else if (memoryGetTrace["skipReason"] == "-")
+                {
+                    memoryGetTrace = CreateForcedToolTrace(
+                        "skip",
+                        skipReason: scopedMemoryResults.Count == 0 ? "no_hit" : "unrelated"
+                    );
+                }
             }
         }
 
-        MemoryGetToolResult? memoryGet = null;
-        var topMemoryHit = scopedMemoryResults.FirstOrDefault();
-        if (topMemoryHit != null)
+        var fallbackNote = forceMemoryContext
+            ? ResolveFallbackMemoryNoteForScope(normalizedMemoryScope)
+            : null;
+        if (fallbackNote == null)
         {
-            var lineWindow = Math.Clamp(topMemoryHit.EndLine - topMemoryHit.StartLine + 4, 6, 28);
-            memoryGet = _memoryGetTool.Get(topMemoryHit.Path, topMemoryHit.StartLine, lineWindow);
+            if (memoryGetTrace["skipReason"] == "-")
+            {
+                memoryGetTrace = CreateForcedToolTrace("skip", skipReason: "no_hit_no_note");
+            }
+        }
+        else if (sections.Count == 0) // 메모리 히트가 없었을 때만 fallback note 적용
+        {
+            var fallbackPath = $"memory-notes/{fallbackNote.Name}";
+            memoryGet = _memoryGetTool.Get(fallbackPath, 1, 16);
             if (memoryGet.Disabled)
             {
                 memoryGetTrace = CreateForcedToolTrace(
                     "disabled",
-                    detail: TrimForAudit(memoryGet.Error, 120)
+                    detail: TrimForAudit($"fallback:{memoryGet.Error}", 120)
                 );
             }
             else if (string.IsNullOrWhiteSpace(memoryGet.Text))
@@ -368,10 +497,7 @@ public sealed partial class CommandService
                 memoryGetTrace = CreateForcedToolTrace(
                     "ok",
                     result: "0",
-                    detail: TrimForAudit(
-                        $"{topMemoryHit.Path}{FormatMemoryLineRange(topMemoryHit.StartLine, topMemoryHit.EndLine)}",
-                        120
-                    )
+                    detail: TrimForAudit(fallbackPath, 120)
                 );
             }
             else
@@ -379,53 +505,13 @@ public sealed partial class CommandService
                 memoryGetTrace = CreateForcedToolTrace(
                     "ok",
                     result: "1",
-                    detail: TrimForAudit(
-                        $"{topMemoryHit.Path}{FormatMemoryLineRange(topMemoryHit.StartLine, topMemoryHit.EndLine)}",
-                        120
-                    )
+                    detail: TrimForAudit(fallbackPath, 120)
                 );
-                sections.Add(BuildMemoryGetContextBlock(topMemoryHit, memoryGet));
-            }
-        }
-        else
-        {
-            var fallbackNote = ResolveFallbackMemoryNoteForScope(normalizedMemoryScope);
-            if (fallbackNote == null)
-            {
-                memoryGetTrace = CreateForcedToolTrace("skip", skipReason: "no_hit_no_note");
-            }
-            else
-            {
-                var fallbackPath = $"memory-notes/{fallbackNote.Name}";
-                memoryGet = _memoryGetTool.Get(fallbackPath, 1, 16);
-                if (memoryGet.Disabled)
-                {
-                    memoryGetTrace = CreateForcedToolTrace(
-                        "disabled",
-                        detail: TrimForAudit($"fallback:{memoryGet.Error}", 120)
-                    );
-                }
-                else if (string.IsNullOrWhiteSpace(memoryGet.Text))
-                {
-                    memoryGetTrace = CreateForcedToolTrace(
-                        "ok",
-                        result: "0",
-                        detail: TrimForAudit(fallbackPath, 120)
-                    );
-                }
-                else
-                {
-                    memoryGetTrace = CreateForcedToolTrace(
-                        "ok",
-                        result: "1",
-                        detail: TrimForAudit(fallbackPath, 120)
-                    );
-                    sections.Add(
-                        "[memory_get]\n"
-                        + $"path: {fallbackPath}\n"
-                        + TrimForForcedContext(memoryGet.Text, 900)
-                    );
-                }
+                sections.Add(
+                    "[memory_get]\n"
+                    + $"path: {fallbackPath}\n"
+                    + TrimForForcedContext(memoryGet.Text, 900)
+                );
             }
         }
 
@@ -587,6 +673,67 @@ public sealed partial class CommandService
             retryMaxAttempts,
             retryStopReason
         );
+    }
+
+    private static bool ShouldUseForcedMemoryContext(string input)
+    {
+        return ShouldUsePriorConversationContext(input)
+            || ContainsAny(
+                (input ?? string.Empty).Trim().ToLowerInvariant(),
+                "rag",
+                "메모리",
+                "memory",
+                "기억",
+                "컨텍스트",
+                "context",
+                "노트",
+                "note",
+                "이전 대화",
+                "대화 기록",
+                "최근 대화");
+    }
+
+    private static bool HasRelevantMemorySearchResults(
+        string query,
+        IReadOnlyList<MemorySearchCitationResult> results
+    )
+    {
+        var top = results.FirstOrDefault();
+        if (top == null)
+        {
+            return false;
+        }
+
+        if (top.Score >= 0.62d)
+        {
+            return true;
+        }
+
+        if (top.Score < 0.45d)
+        {
+            return false;
+        }
+
+        var queryTokens = ExtractContextTokens(query);
+        var resultTokens = ExtractContextTokens($"{top.Path}\n{top.Snippet}");
+        return HasMeaningfulTokenOverlap(queryTokens, resultTokens);
+    }
+
+    private static bool LooksLikeProjectContextRequest(string input)
+    {
+        var normalized = (input ?? string.Empty).Trim().ToLowerInvariant();
+        return ContainsAny(
+            normalized,
+            "agents.md",
+            "agent.md",
+            "agants.md",
+            "프로젝트 지침",
+            "프로젝트 컨텍스트",
+            "project context",
+            "스킬",
+            "skill",
+            "skills",
+            "skill.md");
     }
 
     private static string BuildMemorySearchContextBlock(IReadOnlyList<MemorySearchCitationResult> results)

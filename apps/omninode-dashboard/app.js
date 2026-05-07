@@ -140,7 +140,11 @@ import {
 import { renderRoutineTab as renderRoutineTabModule } from "./modules/dashboard-routine-renderers.js";
 import { renderLogicTab as renderLogicTabModule } from "./modules/dashboard-logic-renderers.js";
 import { renderToolControlPanel as renderToolControlPanelModule } from "./modules/dashboard-ops-renderers.js";
-import { renderSettingsPanel as renderSettingsPanelModule } from "./modules/dashboard-settings-renderers.js";
+import {
+  renderAutomationRootPanel as renderAutomationRootPanelModule,
+  renderNotebookRootPanel as renderNotebookRootPanelModule,
+  renderSettingsPanel as renderSettingsPanelModule
+} from "./modules/dashboard-settings-renderers.js";
 import {
   attachLatencyMetaToConversation,
   buildConversationAvatarText,
@@ -658,6 +662,7 @@ import {
     const currentRoutinePane = mobilePaneByTab.routine || (routineSelectedId ? "detail" : "overview");
     const currentLogicPane = mobilePaneByTab.logic || (isPortraitMobileLayout ? "canvas" : "selection");
     const currentSettingsPane = mobilePaneByTab.settings || "auth";
+    const currentAutomationPane = mobilePaneByTab.automation || "plans";
 
     useEffect(() => {
       logicSelectedGraphIdRef.current = logicSelectedGraphId;
@@ -4418,7 +4423,7 @@ import {
     }, []);
 
     useEffect(() => {
-      if (rootTab === "settings" && authed) {
+      if ((rootTab === "settings" || rootTab === "automation") && authed) {
         setDoctorState((prev) => ({
           ...prev,
           loading: true,
@@ -4431,6 +4436,24 @@ import {
           lastError: ""
         }));
         requestPlanList(send, { silent: true, queueIfClosed: false });
+        setRoutingPolicyState((prev) => ({
+          ...prev,
+          loading: true,
+          lastError: ""
+        }));
+        requestRoutingPolicyGet(send, { silent: true, queueIfClosed: false });
+        setTaskGraphState((prev) => ({
+          ...prev,
+          loading: true,
+          lastError: ""
+        }));
+        requestTaskGraphList(send, { silent: true, queueIfClosed: false });
+      }
+    }, [rootTab, authed]);
+
+    useEffect(() => {
+      if (rootTab === "notebook" && authed) {
+        refreshNotebook({ silent: true, queueIfClosed: false });
       }
     }, [rootTab, authed]);
 
@@ -6733,6 +6756,78 @@ import {
       });
     }
 
+    function renderNotebookRoot() {
+      return renderNotebookRootPanelModule({
+        e,
+        authed,
+        notebooksState,
+        setNotebookProjectKey,
+        setNotebookAppendKind,
+        setNotebookAppendText,
+        refreshNotebook,
+        appendNotebook,
+        createNotebookHandoff,
+        appendSelectedPlanDecision,
+        appendSelectedTaskVerification,
+        appendDoctorVerification,
+        appendRefactorVerification
+      });
+    }
+
+    function renderAutomationRoot() {
+      return renderAutomationRootPanelModule({
+        e,
+        authed,
+        plansState,
+        taskGraphState,
+        routingPolicyState,
+        setPlanCreateObjective,
+        setPlanCreateConstraintsText,
+        setPlanCreateMode,
+        setRoutingPolicyChain,
+        refreshRoutingPolicy,
+        saveRoutingPolicy,
+        refreshPlansList,
+        loadPlanSnapshot,
+        submitPlanCreate,
+        reviewPlan,
+        approvePlan,
+        runPlan,
+        setTaskGraphCreatePlanId,
+        useSelectedPlanForTaskGraph,
+        refreshTaskGraphList,
+        loadTaskGraph,
+        submitTaskGraphCreate,
+        runTaskGraph,
+        loadTaskOutput,
+        cancelTask,
+        selectedGroqModel,
+        setSelectedGroqModel,
+        groqModels,
+        selectedCopilotModel,
+        setSelectedCopilotModel,
+        copilotModels,
+        defaultCodexModel: DEFAULT_CODEX_MODEL,
+        geminiModelChoices: GEMINI_MODEL_CHOICES,
+        cerebrasModelChoices: CEREBRAS_MODEL_CHOICES,
+        send,
+        currentAutomationPane,
+        setAutomationPane: (paneKey) => setResponsivePane("automation", paneKey)
+      });
+    }
+
+    const mainContent = rootTab === "settings"
+      ? renderSettings()
+      : rootTab === "notebook"
+        ? renderNotebookRoot()
+        : rootTab === "automation"
+          ? renderAutomationRoot()
+          : rootTab === "routine"
+            ? renderRoutine()
+            : rootTab === "logic"
+              ? renderLogic()
+              : renderWorkspace();
+
     return e(
       "div",
       { className: "app-shell" },
@@ -6740,13 +6835,7 @@ import {
       e(
         "main",
         { className: "main-shell", ref: mainShellRef },
-        rootTab === "settings"
-          ? renderSettings()
-          : rootTab === "routine"
-            ? renderRoutine()
-            : rootTab === "logic"
-              ? renderLogic()
-            : renderWorkspace()
+        mainContent
       ),
       renderCodingResultOverlay(),
       renderSafeRefactorOverlay(),

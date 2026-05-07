@@ -1,6 +1,6 @@
 # Omni-node Doctor 가이드
 
-업데이트 기준: 2026-05-05
+업데이트 기준: 2026-05-07
 
 이 문서는 `doctor` 진단 기능의 실행 방법, 점검 항목, 결과 저장 위치를 정리한다.
 
@@ -40,6 +40,7 @@ dotnet run --project apps/omninode-middleware/OmniNode.Middleware.csproj -- doct
 ## 3. 대시보드와 텔레그램
 
 - 대시보드: 설정 탭의 `환경 진단` 패널에서 최근 보고서 조회와 새 실행 가능
+- 설정 탭에서는 doctor가 노트북/자동화 화면과 분리되어 있으며, 운영 진단 결과가 필요할 때만 확인한다.
 - 텔레그램: `/doctor`, `/doctor json`
 - 텔레그램 자연어: `환경 진단해줘`도 같은 진단 경로로 연결됨
 

@@ -115,6 +115,8 @@ public sealed partial class CommandService
             + "{\"need_web\":true|false,\"reason\":\"짧은 근거\"}\n\n"
             + "판정 규칙:\n"
             + "- 뉴스/오늘/최근/실시간/최신/현재 상태/시세/가격/일정/법·정책 변경/특정 매체 기사 요청이면 need_web=true\n"
+            + "- AI 봇(너, 자신)의 정체성, 능력, 사용법에 대한 질문이거나 인사, 일상 대화(안녕, 반가워 등)면 무조건 need_web=false\n"
+            + "- 짧은 감정 표현(피곤해, 우울해, 좋은 일이 없어), 단순 동조(응, 맞아, 그렇네), 되묻기(너는?) 등 문맥이 없는 일상 대화면 무조건 need_web=false\n"
             + "- 일반 개념 설명/번역/코드 설명/창작/사용자 제공 텍스트 요약이면 need_web=false\n"
             + "- 설명문, 코드블록, 마크다운 금지\n\n"
             + "사용자 입력:\n"
@@ -3219,6 +3221,11 @@ public sealed partial class CommandService
             return new SearchRequirementDecision(false, "llm:false:empty_input", string.Empty, string.Empty);
         }
 
+        if (LooksLikeClearlyNonWebQuestion(normalized))
+        {
+            return new SearchRequirementDecision(false, "heuristic:false:non_web", string.Empty, string.Empty);
+        }
+
         if (_config.EnableFastWebPipeline)
         {
             var heuristicNeedWeb = LooksLikeExplicitWebLookupQuestion(normalized) || LooksLikeRealtimeQuestion(normalized);
@@ -3255,6 +3262,8 @@ public sealed partial class CommandService
                       사용자의 입력을 보고 웹 검색 필요 여부와 소스 제약 의도를 JSON으로 판단하세요.
                       기준:
                       - 최신성/실시간성(뉴스, 오늘 일정, 시세, 최근 변경, 현재 상태)이 중요하면 needWeb=YES
+                      - AI 봇(너, 자신)의 정체성, 능력, 사용법에 대한 질문이거나 인사, 일상 대화(안녕, 반가워 등)면 무조건 needWeb=NO
+                      - 짧은 감정 표현(피곤해, 우울해, 좋은 일이 없어), 단순 동조(응, 맞아, 그렇네), 되묻기(너는?) 등 문맥이 없는 일상 대화면 무조건 needWeb=NO
                       - 일반 지식/설명/창작/코딩처럼 최신 웹 근거가 필수 아님이면 needWeb=NO
                       - 특정 매체/기관/브랜드의 정보만 원하는 의도가 보이면 sourceFocus에 그 명칭을 넣으세요.
                       - sourceFocus가 있고 공식 도메인을 신뢰성 있게 유추 가능하면 sourceDomain에 도메인만 넣으세요. (예: cnn.com)
@@ -3764,6 +3773,11 @@ public sealed partial class CommandService
             return true;
         }
 
+        if (LooksLikeCasualOrIdentityQuestion(normalized))
+        {
+            return true;
+        }
+
         if (ContainsAny(normalized, "요약", "summary", "summarize", "정리"))
         {
             return normalized.Contains('\n')
@@ -3773,6 +3787,54 @@ public sealed partial class CommandService
         }
 
         return false;
+    }
+
+    private static bool LooksLikeCasualOrIdentityQuestion(string input)
+    {
+        var normalized = (input ?? string.Empty).Trim().ToLowerInvariant();
+
+        if (normalized.Length <= 8)
+        {
+            if (ContainsAny(normalized, "응", "어", "아니", "네", "예", "맞아", "그래", "음", "헐", "대박", "진짜", "뭐해", "ok", "ㅇㅇ", "ㅋㅋ", "ㅎㅎ", "ㅠㅠ", "ㅜㅜ", "너는?", "나도"))
+            {
+                return true;
+            }
+        }
+
+        return ContainsAny(
+            normalized,
+            "할 수 있",
+            "할수 있",
+            "할 줄 아",
+            "할줄 아",
+            "뭐할 수",
+            "뭐 할수",
+            "뭐 할 수",
+            "너는 누구",
+            "당신은 누구",
+            "넌 누구",
+            "너는 뭐",
+            "넌 뭐",
+            "자기소개",
+            "안녕",
+            "반가워",
+            "반갑습니다",
+            "기능 알려",
+            "명령어",
+            "스킬 목록",
+            "무엇을 할",
+            "좋은 일이 없",
+            "피곤해",
+            "우울해",
+            "배고파",
+            "심심해",
+            "그렇네",
+            "수고",
+            "고마워",
+            "감사",
+            "잘자",
+            "잘가"
+        );
     }
 
     private static bool LooksLikeLocalDateTimeQuestion(string input)
@@ -3869,6 +3931,12 @@ public sealed partial class CommandService
         if (normalized.Length == 0)
         {
             return 0.45d;
+        }
+
+        if (normalized.Length < 10 && !normalized.Contains('.'))
+        {
+            // 짧은 일상어(예: "1+1 은?")가 엉뚱한 메모리를 끌어오는 것을 방지
+            return 0.65d;
         }
 
         if (LooksLikeRealtimeQuestion(normalized))

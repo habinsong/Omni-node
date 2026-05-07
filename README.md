@@ -12,7 +12,7 @@
 
 </div>
 
-업데이트 기준: 2026-03-13
+업데이트 기준: 2026-05-07
 
 ## 소개
 
@@ -86,6 +86,9 @@ Omni-node는 아래 같은 과장된 분위기가 싫어서 시작한 프로젝�
 - `코딩 탭`: 단일 완주, 역할 분담형 오케스트레이션, 모델별 독립 완주 비교
 - `루틴 탭`: 스케줄 생성, 실행, 이력, 브라우저 에이전트, 텔레그램 전송
 - `로직 탭`: ComfyUI 스타일 노드 캔버스로 대화/코딩/루틴/도구를 조합하고 저장/실행
+- `노트북 탭`: 배운 점, 결정, 검증 결과, handoff를 한 화면에서 작성하고 문서로 확인
+- `자동화/계획 탭`: 계획 생성/리뷰/승인/실행과 task graph 실행 라우팅 관리
+- `설정 탭`: 인증, 제공자 키, 모델/사용량, 프로젝트 문맥, 고급 도구 운영
 - `Safe Refactor`: 줄 범위 교체, 이름 바꾸기, 패턴 치환
 - `텔레그램`: 자연어로 대화/루틴/코딩/리팩터/계획/태스크/노트북 제어
 - `운영`: health/ready/doctor, 상태 파일, 작업 산출물, 로그/검증 경로
@@ -139,7 +142,7 @@ Omni-node는 아래 같은 과장된 분위기가 싫어서 시작한 프로젝�
 
 ![설정 탭](docs/assets/readme/dashboard-settings-tab.png)
 
-제공자 키 관리, 텔레그램 설정, Codex/Copilot 상태, 라우팅 정책, 프로젝트 문맥, 계획/태스크/노트북/운영 패널을 모아 둔다.
+제공자 키 관리, 텔레그램 설정, Codex/Copilot 상태, 모델 사용량, 라우팅 정책, 프로젝트 문맥, doctor, 도구 통합 패널을 관리한다. 노트북과 자동화/계획은 별도 좌측 루트 탭으로 분리되어 설정 화면에 섞이지 않는다.
 
 ## 왜 만들었나
 
@@ -213,6 +216,7 @@ Omni-node는 이 지점을 운영 가능한 구조로 바꾼다.
 - `단일 모델`: 선택한 모델 하나가 즉시 응답
 - `오케스트레이션`: 워커 역할을 자동 분담해 초안, 점검, 보완, 최종 정리를 합성
 - `다중 LLM`: 모델별 응답을 캐러셀로 넘겨 보며 아래 메시지에서 `공통 요약 / 공통 핵심 / 부분 차이` 확인
+- **노이즈 캔슬링 라우팅**: "안녕", "배고파", "1+1은?" 같은 일상적인 짧은 대화는 불필요한 웹 검색이나 메모리 벡터 검색을 자동으로 차단하여, LLM이 컨텍스트 오염 없이 자연스럽게 대답하도록 보장합니다.
 - 텔레그램 연동 대화, 메모리 노트 연결, URL 컨텍스트, grounded 검색 연동
 
 ### 2. 코딩
@@ -250,14 +254,34 @@ Omni-node는 이 지점을 운영 가능한 구조로 바꾼다.
 - `런타임 산출물`: `workspace/.runtime/logic/<graph-id>/<run-id>/`
 - `실행 기록`: `graph.json`, `snapshot.json`, `events.log`와 노드별 결과 envelope를 남김
 
-### 5. Safe Refactor
+### 5. 노트북
+
+- 좌측 루트 메뉴의 `노트북` 탭에서 learnings / decisions / verification / handoff를 관리
+- 상단 요약 카드로 문서 커버리지, 현재 작성 대상, 초안 길이, 작성 엔진을 확인
+- `기록 작성` 작업대에서 프로젝트 키, 저장 루트, 기록 종류, 본문을 한 번에 정리
+- `빠른 기록`은 선택한 plan, graph, doctor, refactor 결과를 바로 노트북 초안으로 변환
+- `다음 액션`은 비어 있는 문서와 handoff 상태를 기준으로 다음에 채울 항목을 제안
+- `문서 보기`는 배운 점/결정/검증/인수인계를 카드로 분리해 보여줌
+- 노트북 append와 handoff 생성은 현재 규칙 기반으로 동작하며, LLM 라우팅을 쓰지 않음
+
+### 6. 자동화/계획
+
+- 좌측 루트 메뉴의 `자동화/계획` 탭에서 계획과 task graph를 분리 관리
+- 내부 좌측 선택 영역에서 `계획` 또는 `태스크 그래프` 중 하나를 선택해 화면 정보량을 줄임
+- `계획` 화면은 계획 생성, 리뷰, 승인, 실행, 계획용 LLM 라우팅을 함께 다룸
+- `계획용 LLM`은 planner/reviewer 라우트를 분리하고 provider/model/fallback chain을 보여줌
+- `태스크 그래프` 화면은 plan 기반 DAG 생성, 실행, task 로그, graph 실행 라우팅을 다룸
+- `그래프 실행 라우팅`은 `visualUi`, `quickFix`, `safeRefactor`를 우선 노출하고, `backgroundMonitor`, `documentation`, `searchFallback`은 보조 라우팅으로 접어 관리
+- 계획 생성/리뷰는 LLM을 사용하고, task graph 생성은 규칙 기반으로 plan을 분해하며, graph 실행은 task 종류에 따라 LLM 또는 command 실행 경로를 사용
+
+### 7. Safe Refactor
 
 - `줄 범위 교체`: 선택한 줄 범위만 안전하게 수정
 - `이름 바꾸기`: LSP 기반 심볼 rename preview/apply
 - `패턴 치환`: ast-grep 기반 구조적 치환 preview/apply
 - 공통 흐름은 `읽기 -> 미리보기 -> 재검증 -> 적용`
 
-### 6. 텔레그램
+### 8. 텔레그램
 
 텔레그램은 보조 채널이 아니라 웹 대시보드 없이도 주요 기능을 직접 쓸 수 있는 운영 채널이다.
 
@@ -266,6 +290,7 @@ Omni-node는 이 지점을 운영 가능한 구조로 바꾼다.
 - Safe Refactor read/preview/apply
 - 루틴 생성, 수정, 이력 확인, 재전송
 - `doctor`, `plan`, `task`, `notebook`, `handoff`, `memory`, `LLM 상태/모델 제어`
+- 명시적 스킬 활성화 요청
 
 슬래시 명령 없이도 자연어로 제어할 수 있다.
 
@@ -275,15 +300,18 @@ Omni-node는 이 지점을 운영 가능한 구조로 바꾼다.
 - `최근 코딩 결과 보여줘`
 - `리팩터 상태 보여줘`
 - `내일 오전 9시에 서버 상태 점검 루틴 만들어줘`
+- `eli5 스킬 사용해`
 
-### 7. 운영 패널
+스킬 이름을 직접 말하면 일반 대화로 흘리지 않고 해당 스킬을 활성화한 뒤 다음 응답에 적용한다.
+
+### 9. 설정 / 운영 패널
 
 - 제공자 키 관리
 - Codex / Copilot 상태 조회 및 로그인 연계
-- 프로젝트 문맥 스캔
-- 계획 생성/리뷰/승인/실행
-- Background Task Graph
-- Notebook / Handoff
+- 프로젝트 문맥 스캔 (`AGENTS.md` 전역 시스템 지침 및 `.omni/skills/` 동적 스킬 주입)
+- 모델/사용량과 Groq 모델 적용
+- Routing Policy 확인과 provider fallback 상태 점검
+- 도구 통합 패널에서 provider/tool/rag 상태와 제어 결과 확인
 - 최신 doctor 보고서 조회
 
 ## 시스템 구성
@@ -321,7 +349,7 @@ Omni-node/
 └─ README.md
 ```
 
-현재 워크트리는 `.git` 제외 기준 3,818개 실파일로 구성되어 있고, 이 중 제품 구현의 중심은 `apps/omninode-core`, `apps/omninode-middleware`, `apps/omninode-dashboard`, `apps/omninode-sandbox` 네 영역이다. 대시보드 모듈 파일은 49개, 미들웨어 `Application/` 파일은 70개, `Infrastructure/` 파일은 17개다.
+현재 워크트리는 `.git` 제외 기준 3,420개 실파일로 구성되어 있고, 이 중 제품 구현의 중심은 `apps/omninode-core`, `apps/omninode-middleware`, `apps/omninode-dashboard`, `apps/omninode-sandbox` 네 영역이다. 대시보드 모듈 파일은 54개, 미들웨어 `Application/` 파일은 70개, `Infrastructure/` 파일은 17개다.
 
 canonical 루트는 `apps/`, `docs/`, `workspace/`다. 루트 `coding`, `runtime`, `omninode-*` 경로는 하위 호환 alias로만 취급한다.
 
@@ -533,6 +561,24 @@ CLI/텔레그램에서는 예를 들어 이렇게 만들 수 있다.
 - 로직 그래프는 `logic_graph` 루틴으로 저장되지만 일반 루틴 탭 목록에는 나오지 않는다.
 - 현재 로직 그래프 편집과 실행 제어는 웹 대시보드 경로가 기준이다.
 
+### 노트북
+
+1. 노트북 탭에서 프로젝트 키와 저장 루트를 확인
+2. 작성할 문서 종류를 `배운 점`, `결정`, `검증` 중 선택
+3. 본문 입력 영역에 실제로 다음 세션에 필요한 내용을 작성
+4. 필요하면 빠른 기록에서 선택 plan, graph, doctor, refactor 결과를 초안으로 불러오기
+5. 저장 후 문서 보기에서 배운 점/결정/검증/인수인계 카드 상태 확인
+6. 세션을 넘기기 전 `handoff 생성`으로 최신 인수인계 문서 갱신
+
+### 자동화/계획
+
+1. 자동화/계획 탭에서 내부 좌측 선택으로 `계획` 또는 `태스크 그래프`를 고름
+2. 계획 화면에서는 요청과 제약을 입력해 plan을 만들고 리뷰/승인/실행 순서로 진행
+3. 계획용 LLM 영역에서 planner/reviewer 라우팅 provider와 모델, fallback chain을 확인
+4. 태스크 그래프 화면에서는 승인된 plan으로 graph를 만들고 실행 상태와 task output을 확인
+5. 그래프 실행 라우팅에서 UI 작업, 빠른 수정, 안전 리팩터 같은 task category가 어떤 provider/model로 실행될지 확인
+6. 작업이 끝나면 노트북 탭에서 decision과 verification으로 결과를 남김
+
 ### Safe Refactor
 
 1. 코딩 탭 입력창 위의 `Safe Refactor` 도크 열기
@@ -570,7 +616,12 @@ Omni-node는 `상태 원본`과 `작업 산출물`을 분리한다.
 | `workspace/coding/runs/` | 코딩 실행별 작업 폴더 |
 | `workspace/coding/routines/` | 루틴 실행 산출물과 브라우저 에이전트 자산 |
 | `workspace/.runtime/logic/` | 로직 그래프 실행별 `graph.json`, `snapshot.json`, `events.log` |
+| `workspace/.runtime/tasks/` | task graph 실행 로그와 `result.json` |
 | `workspace/.runtime/refactor-preview/` | Safe Refactor preview 저장 |
+| `~/.omninode/plans/` | 계획, 리뷰, 실행 상태 원본 |
+| `~/.omninode/tasks/` | task graph 정의와 상태 원본 |
+| `~/.omninode/notebooks/` | 배운 점, 결정, 검증, handoff 문서 원본 |
+| `~/.omninode/routing-policy.json` | category별 provider 라우팅 override |
 | `~/.omninode/cli/` | `Omni-node` 전역 실행기 PID, 로그, 최근 시작 메타데이터 |
 | `/tmp/omninode_core.<uid>.sock` | macOS/Linux 코어 UDS 소켓 |
 | `tcp://127.0.0.1:51808` | Windows 코어 로컬 TCP 엔드포인트 |
@@ -595,8 +646,9 @@ Omni-node는 `상태 원본`과 `작업 산출물`을 분리한다.
 - [Safe Refactoring](./docs/SAFE_REFACTORING.md)
 - [Doctor](./docs/DOCTOR.md)
 - [Planning / Tasks](./docs/PLANNING_AND_TASKS.md)
-- [Notebook / Handoff](./docs/NOTEBOOKS_AND_HANDOFF.md)
+- [노트북 / Handoff](./docs/NOTEBOOKS_AND_HANDOFF.md)
 - [AGENTS / Skills](./docs/AGENTS_AND_SKILLS.md)
+- [도구 통합 패널 사용 가이드](./docs/도구_통합_패널_사용_가이드.md)
 - [기술 스택 정리](./docs/기술스택_정리.md)
 
 ## 운영 메모

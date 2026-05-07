@@ -5,6 +5,205 @@ import { renderRoutingPolicyPanel } from "./routing-policy-renderers.js";
 import { renderTaskGraphPanel } from "./task-graph-renderers.js";
 import { renderNotebooksPanel } from "./notebooks-renderers.js";
 
+export function renderNotebookRootPanel(props) {
+  const {
+    e,
+    authed,
+    notebooksState,
+    setNotebookProjectKey,
+    setNotebookAppendKind,
+    setNotebookAppendText,
+    refreshNotebook,
+    appendNotebook,
+    createNotebookHandoff,
+    appendSelectedPlanDecision,
+    appendSelectedTaskVerification,
+    appendDoctorVerification,
+    appendRefactorVerification
+  } = props;
+
+  return e(
+    "section",
+    { className: "settings settings-root-panel settings-root-panel-notebook" },
+    e("div", { className: "settings-shell settings-standalone-shell" },
+      e("div", { className: "settings-summary" },
+        e("div", { className: "settings-summary-head" },
+          e("div", null,
+            e("h2", null, "노트북"),
+            e("p", null, "작업 기록, handoff, 검증 메모를 한 곳에서 정리합니다.")
+          )
+        )
+      ),
+      e("div", { className: "settings-detail-stack settings-root-detail-stack" },
+        e("div", { className: "settings-detail-item" },
+          renderNotebooksPanel({
+            e,
+            authed,
+            notebooksState,
+            setNotebookProjectKey,
+            setNotebookAppendKind,
+            setNotebookAppendText,
+            refreshNotebook,
+            appendNotebook,
+            createNotebookHandoff,
+            appendSelectedPlanDecision,
+            appendSelectedTaskVerification,
+            appendDoctorVerification,
+            appendRefactorVerification
+          })
+        )
+      )
+    )
+  );
+}
+
+export function renderAutomationRootPanel(props) {
+  const {
+    e,
+    authed,
+    plansState,
+    taskGraphState,
+    routingPolicyState,
+    setPlanCreateObjective,
+    setPlanCreateConstraintsText,
+    setPlanCreateMode,
+    setRoutingPolicyChain,
+    refreshRoutingPolicy,
+    saveRoutingPolicy,
+    refreshPlansList,
+    loadPlanSnapshot,
+    submitPlanCreate,
+    reviewPlan,
+    approvePlan,
+    runPlan,
+    setTaskGraphCreatePlanId,
+    useSelectedPlanForTaskGraph,
+    refreshTaskGraphList,
+    loadTaskGraph,
+    submitTaskGraphCreate,
+    runTaskGraph,
+    loadTaskOutput,
+    cancelTask,
+    selectedGroqModel,
+    setSelectedGroqModel,
+    groqModels,
+    selectedCopilotModel,
+    setSelectedCopilotModel,
+    copilotModels,
+    defaultCodexModel,
+    geminiModelChoices,
+    cerebrasModelChoices,
+    send,
+    currentAutomationPane,
+    setAutomationPane
+  } = props;
+  const activePane = currentAutomationPane === "tasks" ? "tasks" : "plans";
+  const planCount = Array.isArray(plansState?.items) ? plansState.items.length : 0;
+  const graphCount = Array.isArray(taskGraphState?.items) ? taskGraphState.items.length : 0;
+  const activePanel = activePane === "tasks"
+    ? renderTaskGraphPanel({
+      e,
+      authed,
+      plansState,
+      taskGraphState,
+      routingPolicyState,
+      setTaskGraphCreatePlanId,
+      setRoutingPolicyChain,
+      refreshRoutingPolicy,
+      saveRoutingPolicy,
+      useSelectedPlanForTaskGraph,
+      refreshTaskGraphList,
+      loadTaskGraph,
+      submitTaskGraphCreate,
+      runTaskGraph,
+      loadTaskOutput,
+      cancelTask,
+      selectedGroqModel,
+      setSelectedGroqModel,
+      groqModels,
+      selectedCopilotModel,
+      setSelectedCopilotModel,
+      copilotModels,
+      defaultCodexModel,
+      geminiModelChoices,
+      cerebrasModelChoices,
+      send
+    })
+    : renderPlansPanel({
+      e,
+      authed,
+      plansState,
+      routingPolicyState,
+      setPlanCreateObjective,
+      setPlanCreateConstraintsText,
+      setPlanCreateMode,
+      setRoutingPolicyChain,
+      refreshRoutingPolicy,
+      saveRoutingPolicy,
+      refreshPlansList,
+      loadPlanSnapshot,
+      submitPlanCreate,
+      reviewPlan,
+      approvePlan,
+      runPlan,
+      selectedGroqModel,
+      setSelectedGroqModel,
+      groqModels,
+      selectedCopilotModel,
+      setSelectedCopilotModel,
+      copilotModels,
+      defaultCodexModel,
+      geminiModelChoices,
+      cerebrasModelChoices,
+      send
+    });
+  const navItems = [
+    {
+      key: "plans",
+      title: "계획",
+      helper: "생성, 리뷰, 승인",
+      meta: `${planCount}건`
+    },
+    {
+      key: "tasks",
+      title: "태스크 그래프",
+      helper: "그래프 생성, 실행 라우팅",
+      meta: `${graphCount}건`
+    }
+  ];
+
+  return e(
+    "section",
+    { className: "settings settings-root-panel settings-root-panel-automation" },
+    e("div", { className: "settings-shell settings-standalone-shell" },
+      e("div", { className: "settings-summary" },
+        e("div", { className: "settings-summary-head" },
+          e("div", null,
+            e("h2", null, "자동화/계획"),
+            e("p", null, "계획 생성부터 태스크 실행 흐름까지 같은 화면에서 관리합니다.")
+          )
+        )
+      ),
+      e("div", { className: "automation-root-layout" },
+        e("aside", { className: "automation-root-nav", "aria-label": "자동화 작업 선택" },
+          navItems.map((item) => e("button", {
+            key: item.key,
+            type: "button",
+            className: `automation-root-nav-item ${activePane === item.key ? "active" : ""}`,
+            onClick: () => setAutomationPane(item.key)
+          },
+          e("span", { className: "automation-root-nav-title" }, item.title),
+          e("span", { className: "automation-root-nav-helper" }, item.helper),
+          e("span", { className: "automation-root-nav-meta" }, item.meta)))
+        ),
+        e("div", { className: "settings-detail-stack settings-root-detail-stack automation-root-stack" },
+          e("div", { className: "settings-detail-item" }, activePanel)
+        )
+      )
+    )
+  );
+}
+
 export function renderSettingsPanel(props) {
   const {
     e,
@@ -794,21 +993,6 @@ export function renderSettingsPanel(props) {
     refreshDoctorReport
   });
 
-  const plansPanel = renderPlansPanel({
-    e,
-    authed,
-    plansState,
-    setPlanCreateObjective,
-    setPlanCreateConstraintsText,
-    setPlanCreateMode,
-    refreshPlansList,
-    loadPlanSnapshot,
-    submitPlanCreate,
-    reviewPlan,
-    approvePlan,
-    runPlan
-  });
-
   const routingPolicyPanel = renderRoutingPolicyPanel({
     e,
     authed,
@@ -827,37 +1011,6 @@ export function renderSettingsPanel(props) {
     refreshProjectContext,
     refreshSkillsList,
     refreshCommandsList
-  });
-
-  const taskGraphPanel = renderTaskGraphPanel({
-    e,
-    authed,
-    plansState,
-    taskGraphState,
-    setTaskGraphCreatePlanId,
-    useSelectedPlanForTaskGraph,
-    refreshTaskGraphList,
-    loadTaskGraph,
-    submitTaskGraphCreate,
-    runTaskGraph,
-    loadTaskOutput,
-    cancelTask
-  });
-
-  const notebooksPanel = renderNotebooksPanel({
-    e,
-    authed,
-    notebooksState,
-    setNotebookProjectKey,
-    setNotebookAppendKind,
-    setNotebookAppendText,
-    refreshNotebook,
-    appendNotebook,
-    createNotebookHandoff,
-    appendSelectedPlanDecision,
-    appendSelectedTaskVerification,
-    appendDoctorVerification,
-    appendRefactorVerification
   });
 
   const settingsSummary = e("div", { className: "settings-summary" },
@@ -949,17 +1102,7 @@ export function renderSettingsPanel(props) {
       label: "작업 문맥",
       summary: "프로젝트 문맥과 기록",
       items: [
-        { key: "context-project", label: "프로젝트 문맥", summary: "스캔된 문맥과 명령", panel: contextPanel },
-        { key: "context-notes", label: "노트북", summary: "작업 기록과 handoff", panel: notebooksPanel }
-      ]
-    },
-    {
-      key: "automation",
-      label: "자동화/계획",
-      summary: "계획과 실행 그래프",
-      items: [
-        { key: "automation-plans", label: "계획", summary: "계획 생성과 승인", panel: plansPanel },
-        { key: "automation-tasks", label: "태스크 그래프", summary: "계획 기반 실행", panel: taskGraphPanel }
+        { key: "context-project", label: "프로젝트 문맥", summary: "스캔된 문맥과 명령", panel: contextPanel }
       ]
     },
     {

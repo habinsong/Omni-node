@@ -1,8 +1,8 @@
 # Omni-node Safe Refactoring
 
-업데이트 기준: 2026-03-13
+업데이트 기준: 2026-05-07
 
-이 문서는 코딩 탭의 `Safe Refactor` 패널과 미들웨어의 안전한 refactor preview/apply 흐름을 설명한다.
+이 문서는 코딩 탭의 `Safe Refactor` 도크와 미들웨어의 안전한 refactor preview/apply 흐름을 설명한다.
 
 핵심 원칙은 간단하다.
 
@@ -27,7 +27,7 @@
 
 ## 2. 대시보드 사용 순서
 
-코딩 탭의 `요구사항 입력` 바로 위에는 얇게 접힌 `Safe Refactor` 도크가 있고, 위 화살표 `열기`를 누르면 중앙 오버레이로 뜬다. 오버레이가 열리면 뒤 배경은 약하게 blur 처리된다.
+코딩 탭의 `요구사항 입력` 바로 위에는 얇게 접힌 `Safe Refactor` 도크가 있고, `열기`를 누르면 중앙 오버레이로 뜬다. 오버레이가 열리면 뒤 배경은 약하게 blur 처리된다.
 
 상단 모드 버튼으로 아래 3가지를 전환한다.
 
@@ -122,13 +122,13 @@ refactor apply
 
 ## 5. WebSocket 예시
 
-### 4.1 anchor 읽기
+### 5.1 anchor 읽기
 
 ```json
 { "type": "refactor_read", "path": "app.js" }
 ```
 
-### 4.2 preview 만들기
+### 5.2 preview 만들기
 
 ```json
 {
@@ -146,7 +146,7 @@ refactor apply
 }
 ```
 
-### 4.3 apply
+### 5.3 apply
 
 ```json
 { "type": "refactor_apply", "previewId": "preview_20260308123456_abcdef123456" }

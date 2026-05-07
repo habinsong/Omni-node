@@ -4909,6 +4909,468 @@ body,
   width: 100%;
 }
 
+.settings-root-panel > .settings-standalone-shell .settings-root-detail-stack {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.settings-root-panel > .settings-standalone-shell .settings-detail-item {
+  width: 100%;
+}
+
+.settings-root-panel-automation > .settings-standalone-shell .automation-root-stack {
+  gap: 14px;
+}
+
+/* Notebook tab final UX pass: workbench-first layout with clear capture, status, and document browsing. */
+.settings-notebooks-panel.notebooks-workbench-panel {
+  display: block !important;
+  width: 100%;
+  padding: 20px 22px;
+  border-radius: 12px;
+}
+
+.settings-notebooks-panel.notebooks-workbench-panel > .notebook-feedback-bar,
+.settings-notebooks-panel.notebooks-workbench-panel > .notebook-metric-grid,
+.settings-notebooks-panel.notebooks-workbench-panel > .notebook-shell,
+.settings-notebooks-panel.notebooks-workbench-panel > .notebook-documents-section {
+  margin-top: 14px;
+}
+
+.settings-notebooks-panel.notebooks-workbench-panel > .notebook-feedback-bar:first-of-type,
+.settings-notebooks-panel.notebooks-workbench-panel > .notebook-metric-grid:first-of-type,
+.settings-notebooks-panel.notebooks-workbench-panel > .notebook-shell:first-of-type,
+.settings-notebooks-panel.notebooks-workbench-panel > .notebook-documents-section:first-of-type {
+  margin-top: 0;
+}
+
+.notebook-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.notebook-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0;
+}
+
+.notebook-feedback-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid rgba(214, 224, 236, 0.95);
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.notebook-feedback-text {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.notebook-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.notebook-metric-card {
+  display: grid;
+  gap: 8px;
+  min-height: 110px;
+  padding: 14px 16px;
+  border: 1px solid rgba(214, 224, 236, 0.95);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.notebook-metric-card.neutral {
+  background: #f8fbff;
+}
+
+.notebook-metric-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.notebook-metric-value {
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.notebook-metric-helper {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.notebook-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.28fr) minmax(300px, 0.72fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.notebook-primary-column,
+.notebook-side-column {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.notebook-workbench-card,
+.notebook-source-card,
+.notebook-status-card,
+.notebook-next-card,
+.notebook-document-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgba(214, 224, 236, 0.95);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.notebook-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.notebook-section-head strong {
+  display: block;
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.notebook-section-head p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.notebook-draft-meta {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.notebook-project-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.72fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.notebook-project-field,
+.notebook-text-field {
+  min-width: 0;
+}
+
+.notebook-project-hint {
+  display: grid;
+  gap: 6px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid rgba(226, 233, 244, 0.95);
+  border-radius: 9px;
+  background: #f8fbff;
+}
+
+.notebook-project-hint strong {
+  font-size: 13px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.notebook-project-hint span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.notebook-kind-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.notebook-kind-card {
+  display: grid;
+  gap: 6px;
+  min-height: 92px;
+  padding: 12px 14px;
+  border: 1px solid rgba(214, 224, 236, 0.95);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--text);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.notebook-kind-card strong {
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.notebook-kind-card span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.notebook-kind-card.active {
+  border-color: rgba(93, 112, 236, 0.32);
+  background: #eef2ff;
+}
+
+.notebook-template-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.notebook-template-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.notebook-textarea {
+  min-height: 220px;
+  resize: vertical;
+}
+
+.notebook-compose-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.notebook-source-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.notebook-source-grid .btn {
+  width: 100%;
+  min-height: 40px;
+}
+
+.notebook-status-list,
+.notebook-next-list {
+  display: grid;
+  gap: 10px;
+}
+
+.notebook-status-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.45fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.notebook-status-row span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.notebook-status-row strong {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.notebook-next-item {
+  display: grid;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid rgba(226, 233, 244, 0.95);
+  border-radius: 9px;
+  background: #f8fbff;
+}
+
+.notebook-next-item strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.notebook-next-item p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.notebook-documents-section {
+  display: grid;
+  gap: 12px;
+}
+
+.notebook-documents-head {
+  padding-bottom: 0;
+}
+
+.notebook-documents-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.notebook-document-handoff {
+  grid-column: 1 / -1;
+}
+
+.notebook-document-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.notebook-document-head strong {
+  display: block;
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.notebook-document-head p {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.notebook-document-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.notebook-document-preview {
+  max-height: 260px;
+  margin: 0;
+  padding: 12px;
+  border-radius: 9px;
+  background: #f8fbff;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+}
+
+.notebook-document-empty {
+  padding: 12px;
+  border-radius: 9px;
+  background: #f8fbff;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.notebook-document-path {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.notebook-document-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.notebook-empty-state {
+  min-height: 180px;
+}
+
+@media (max-width: 1240px) {
+  .notebook-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .notebook-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .notebook-project-row,
+  .notebook-documents-grid,
+  .notebook-kind-grid,
+  .notebook-source-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .notebook-document-handoff {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .settings-notebooks-panel.notebooks-workbench-panel {
+    padding: 16px;
+  }
+
+  .notebook-panel-head,
+  .notebook-section-head,
+  .notebook-compose-actions,
+  .notebook-panel-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .notebook-metric-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .notebook-template-strip {
+    align-items: stretch;
+  }
+
+  .notebook-template-strip .btn,
+  .notebook-compose-actions .btn,
+  .notebook-panel-actions .btn,
+  .notebook-next-item .btn,
+  .notebook-document-actions .btn {
+    width: 100%;
+  }
+
+  .notebook-status-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}
+
 @media (max-width: 1040px) {
   .settings > .settings-shell .settings-body,
   .settings > .settings-shell .settings-detail-stack {
@@ -10717,6 +11179,1029 @@ video {
   .settings-plans-panel > .plans-create-grid,
   .settings-task-graph-panel > .task-graph-form {
     padding: 12px;
+  }
+}
+
+/* Automation tab final UX pass: planning and task graphs are workbench-first, not list-dump screens. */
+.settings-plans-panel.plans-workbench-panel,
+.settings-task-graph-panel.task-graph-workbench-panel {
+  display: block !important;
+  width: 100%;
+  padding: 20px 22px;
+  border-radius: 12px;
+}
+
+.settings-plans-panel.plans-workbench-panel > .plans-feedback-bar,
+.settings-plans-panel.plans-workbench-panel > .plan-metric-grid,
+.settings-plans-panel.plans-workbench-panel > .plans-workbench-shell,
+.settings-task-graph-panel.task-graph-workbench-panel > .task-graph-feedback-bar,
+.settings-task-graph-panel.task-graph-workbench-panel > .task-graph-metric-grid,
+.settings-task-graph-panel.task-graph-workbench-panel > .task-graph-workbench-shell {
+  margin-top: 14px;
+}
+
+.plans-panel-head-ux,
+.task-graph-panel-head-ux {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.plans-feedback-bar,
+.task-graph-feedback-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid rgba(214, 224, 236, 0.95);
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.plans-feedback-text,
+.task-graph-feedback-text {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.plan-metric-grid,
+.task-graph-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.plan-metric-card,
+.task-graph-metric-card {
+  display: grid;
+  gap: 8px;
+  min-height: 110px;
+  padding: 14px 16px;
+  border: 1px solid rgba(214, 224, 236, 0.95);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.plan-metric-card.neutral,
+.task-graph-metric-card.neutral {
+  background: #f8fbff;
+}
+
+.plan-metric-label,
+.task-graph-metric-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.plan-metric-value,
+.task-graph-metric-value {
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.plan-metric-helper,
+.task-graph-metric-helper {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.plans-workbench-shell,
+.task-graph-workbench-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.plans-primary-column,
+.task-graph-primary-column {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.plans-browser-shell,
+.task-graph-browser-shell {
+  display: grid;
+  grid-template-columns: minmax(280px, 330px) minmax(0, 1fr);
+  gap: 14px;
+  min-width: 0;
+}
+
+.plans-create-card,
+.plan-next-card,
+.task-graph-create-card,
+.task-graph-next-card,
+.automation-llm-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(214, 224, 236, 0.95);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.plans-section-head-ux strong {
+  display: block;
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.plans-section-head-ux p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.plan-workbench-textarea {
+  min-height: 168px;
+}
+
+.plan-workbench-constraints {
+  min-height: 124px;
+}
+
+.plan-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.plan-mode-card {
+  display: grid;
+  gap: 6px;
+  min-height: 88px;
+  padding: 12px 14px;
+  border: 1px solid rgba(214, 224, 236, 0.95);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--text);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.plan-mode-card strong {
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.plan-mode-card span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.plan-mode-card.active {
+  border-color: rgba(93, 112, 236, 0.32);
+  background: #eef2ff;
+}
+
+.plan-template-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.plan-template-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.plan-compose-actions,
+.task-graph-create-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.automation-llm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.automation-route-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.automation-route-grid-execution {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.automation-route-item {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(226, 233, 244, 0.95);
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.automation-route-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.automation-route-top strong {
+  display: block;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.automation-route-top p {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.automation-route-category {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.automation-route-controls {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.42fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.automation-provider-field,
+.automation-chain-field {
+  min-width: 0;
+}
+
+.automation-model-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.34fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.automation-model-summary {
+  display: grid;
+  gap: 4px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid rgba(226, 233, 244, 0.95);
+  border-radius: 9px;
+  background: #ffffff;
+}
+
+.automation-model-summary span {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.automation-model-summary strong {
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.automation-model-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.automation-model-fixed {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px dashed rgba(214, 224, 236, 0.95);
+  border-radius: 9px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  background: #ffffff;
+}
+
+.plan-next-list,
+.task-graph-next-list {
+  display: grid;
+  gap: 10px;
+}
+
+.plan-next-item,
+.task-graph-next-item {
+  display: grid;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid rgba(226, 233, 244, 0.95);
+  border-radius: 9px;
+  background: #f8fbff;
+}
+
+.plan-next-item strong,
+.task-graph-next-item strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.plan-next-item p,
+.task-graph-next-item p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.plan-browser-list,
+.plan-browser-detail,
+.task-graph-browser-list,
+.task-graph-browser-detail {
+  min-width: 0;
+}
+
+.plan-browser-list .plans-list,
+.task-graph-browser-list .plans-list {
+  max-height: 720px;
+  overflow: auto;
+}
+
+.task-graph-form-ux {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.task-graph-plan-hint {
+  display: grid;
+  gap: 6px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid rgba(226, 233, 244, 0.95);
+  border-radius: 9px;
+  background: #f8fbff;
+}
+
+.task-graph-plan-hint strong {
+  font-size: 13px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.task-graph-plan-hint span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.task-graph-inspector-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.86fr) minmax(0, 1.14fr);
+  gap: 12px;
+}
+
+.task-graph-task-browser,
+.task-graph-output-stack {
+  min-width: 0;
+}
+
+.task-graph-output-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.task-graph-selected-card {
+  display: grid;
+  gap: 12px;
+}
+
+.task-graph-selected-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.task-graph-selected-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.38fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.task-graph-selected-row span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.task-graph-selected-row strong {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.task-graph-output-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.task-graph-log {
+  min-height: 220px;
+}
+
+@media (max-width: 1360px) {
+  .plans-workbench-shell,
+  .task-graph-workbench-shell,
+  .plans-browser-shell,
+  .task-graph-browser-shell,
+  .task-graph-inspector-grid,
+  .automation-route-grid,
+  .automation-route-grid-execution {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1120px) {
+  .plan-metric-grid,
+  .task-graph-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .settings-plans-panel.plans-workbench-panel,
+  .settings-task-graph-panel.task-graph-workbench-panel {
+    padding: 16px;
+  }
+
+  .plans-panel-head-ux,
+  .task-graph-panel-head-ux,
+  .plan-compose-actions,
+  .task-graph-create-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .plan-mode-grid,
+  .plan-metric-grid,
+  .task-graph-metric-grid,
+  .task-graph-output-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .automation-route-controls,
+  .automation-model-row,
+  .automation-model-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .plan-template-strip,
+  .settings-plans-panel.plans-workbench-panel .plans-head-actions,
+  .settings-task-graph-panel.task-graph-workbench-panel .plans-head-actions,
+  .automation-llm-actions {
+    align-items: stretch;
+  }
+
+  .plan-template-strip .btn,
+  .plan-compose-actions .btn,
+  .task-graph-create-actions .btn,
+  .plan-next-item .btn,
+  .task-graph-next-item .btn,
+  .automation-llm-actions .btn,
+  .settings-plans-panel.plans-workbench-panel .plans-head-actions .btn,
+  .settings-task-graph-panel.task-graph-workbench-panel .plans-head-actions .btn,
+  .settings-plans-panel.plans-workbench-panel .plan-detail-actions .btn,
+  .settings-task-graph-panel.task-graph-workbench-panel .plan-detail-actions .btn,
+  .settings-task-graph-panel.task-graph-workbench-panel .task-graph-node-actions .btn,
+  .automation-model-editor .btn {
+    width: 100%;
+  }
+
+  .task-graph-selected-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}
+
+/* Automation root rebuild: one left choice rail, one active work surface. */
+.settings-root-panel-automation > .settings-standalone-shell .automation-root-layout {
+  display: grid;
+  grid-template-columns: minmax(190px, 220px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  width: 100%;
+  min-width: 0;
+}
+
+.automation-root-nav {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(214, 224, 236, 0.95);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.automation-root-nav-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  min-width: 0;
+  padding: 12px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.automation-root-nav-item.active {
+  border-color: rgba(93, 112, 236, 0.28);
+  background: #eef2ff;
+}
+
+.automation-root-nav-title {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.automation-root-nav-helper {
+  grid-column: 1 / -1;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.automation-root-nav-meta {
+  align-self: start;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #f4f7fb;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.settings-root-panel-automation > .settings-standalone-shell .automation-root-stack,
+.settings-root-panel-automation > .settings-standalone-shell .automation-root-stack .settings-detail-item {
+  min-width: 0;
+  width: 100%;
+}
+
+.settings-root-panel-automation .automation-llm-card {
+  overflow: hidden;
+}
+
+.automation-route-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.automation-route-list-primary {
+  gap: 10px;
+}
+
+.automation-route-row {
+  display: grid;
+  grid-template-columns: minmax(118px, 0.58fr) minmax(126px, 0.42fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: end;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(226, 233, 244, 0.95);
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.automation-route-name {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  align-self: center;
+}
+
+.automation-route-name strong {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.automation-route-name span {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.automation-route-row .meta-field {
+  min-width: 0;
+}
+
+.automation-route-row .automation-chain-field {
+  grid-column: 1 / -1;
+}
+
+.automation-model-cell {
+  display: grid;
+  grid-template-columns: minmax(112px, 0.42fr) minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  align-items: end;
+}
+
+.automation-model-cell .automation-model-summary,
+.automation-model-cell .automation-model-editor,
+.automation-model-cell .automation-model-fixed {
+  min-width: 0;
+}
+
+.automation-model-editor {
+  grid-template-columns: minmax(0, 1fr) minmax(58px, auto);
+}
+
+.automation-model-editor .input,
+.automation-chain-field .input,
+.automation-provider-field .input {
+  width: 100%;
+  min-width: 0;
+}
+
+.automation-model-editor .btn {
+  min-width: 58px;
+  white-space: nowrap;
+}
+
+.automation-route-details {
+  min-width: 0;
+  border-top: 1px solid rgba(226, 233, 244, 0.95);
+  padding-top: 10px;
+}
+
+.automation-route-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8fbff;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.automation-route-details summary strong {
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.automation-route-details summary span {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.automation-route-details[open] summary {
+  margin-bottom: 10px;
+}
+
+@media (max-width: 1500px) {
+  .automation-route-row {
+    grid-template-columns: minmax(118px, 0.58fr) minmax(126px, 0.42fr) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1180px) {
+  .settings-root-panel-automation > .settings-standalone-shell .automation-root-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .automation-root-nav {
+    position: static;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .automation-route-row,
+  .automation-model-cell,
+  .automation-model-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .automation-model-editor .btn {
+    width: 100%;
+  }
+
+  .automation-route-details summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .automation-route-details summary span {
+    text-align: left;
+  }
+}
+
+@media (max-width: 620px) {
+  .automation-root-nav {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Automation routing compact pass: route controls are a scan list, not large cards. */
+.settings-root-panel-automation .automation-llm-card {
+  gap: 10px;
+  padding: 14px;
+}
+
+.settings-root-panel-automation .automation-llm-card .plans-section-head-ux {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(226, 233, 244, 0.95);
+}
+
+.settings-root-panel-automation .automation-llm-card .plans-section-head-ux strong {
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.settings-root-panel-automation .automation-llm-card .plans-section-head-ux p {
+  max-width: 720px;
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-root-panel-automation .automation-llm-actions {
+  gap: 6px;
+}
+
+.settings-root-panel-automation .automation-llm-actions .btn {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 34px;
+  white-space: nowrap;
+}
+
+.settings-root-panel-automation .automation-route-list {
+  gap: 7px;
+}
+
+.settings-root-panel-automation .automation-route-compact {
+  display: grid;
+  grid-template-columns: minmax(126px, 0.55fr) minmax(142px, 0.42fr) minmax(0, 1fr);
+  gap: 8px 10px;
+  align-items: end;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(226, 233, 244, 0.95);
+  border-radius: 9px;
+  background: #f8fbff;
+}
+
+.settings-root-panel-automation .automation-route-compact .automation-route-name {
+  align-self: center;
+}
+
+.settings-root-panel-automation .automation-route-compact .automation-route-name strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.25;
+  overflow-wrap: normal;
+}
+
+.settings-root-panel-automation .automation-route-compact .automation-route-name span {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.settings-root-panel-automation .automation-route-compact .meta-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.settings-root-panel-automation .automation-route-compact .meta-label {
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.settings-root-panel-automation .automation-route-compact .input,
+.settings-root-panel-automation .automation-route-compact select.input {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 34px;
+}
+
+.settings-root-panel-automation .automation-model-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 54px;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-root-panel-automation .automation-model-control .btn {
+  min-width: 0;
+  min-height: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 34px;
+  white-space: nowrap;
+}
+
+.settings-root-panel-automation .automation-model-static {
+  display: block;
+  min-width: 0;
+  height: 34px;
+  padding: 7px 10px;
+  border: 1px dashed rgba(214, 224, 236, 0.95);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-root-panel-automation .automation-chain-details {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.settings-root-panel-automation .automation-chain-details summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 6px 0 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.settings-root-panel-automation .automation-chain-details summary span {
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.settings-root-panel-automation .automation-chain-details summary strong {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-root-panel-automation .automation-chain-details .automation-chain-field {
+  margin-top: 7px;
+}
+
+.settings-root-panel-automation .automation-route-details {
+  margin-top: 3px;
+  padding-top: 8px;
+}
+
+.settings-root-panel-automation .automation-route-details summary {
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+@media (max-width: 980px) {
+  .settings-root-panel-automation .automation-route-compact {
+    grid-template-columns: minmax(120px, 0.5fr) minmax(0, 1fr);
+  }
+
+  .settings-root-panel-automation .automation-route-compact .automation-model-field {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .settings-root-panel-automation .automation-llm-card .plans-section-head-ux {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-root-panel-automation .automation-llm-actions {
+    justify-content: stretch;
+  }
+
+  .settings-root-panel-automation .automation-route-compact,
+  .settings-root-panel-automation .automation-model-control {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-root-panel-automation .automation-llm-actions .btn,
+  .settings-root-panel-automation .automation-model-control .btn {
+    width: 100%;
+  }
+}
+
+/* Notebook correction: keep documents as a 2x2 grid and make writing space usable. */
+.settings-root-panel-notebook .settings-notebooks-panel.notebooks-workbench-panel .notebook-textarea {
+  min-height: 340px;
+  height: auto;
+}
+
+.settings-root-panel-notebook .settings-notebooks-panel.notebooks-workbench-panel .notebook-documents-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.settings-root-panel-notebook .settings-notebooks-panel.notebooks-workbench-panel .notebook-document-handoff {
+  grid-column: auto;
+}
+
+.settings-root-panel-notebook .settings-notebooks-panel.notebooks-workbench-panel .notebook-document-card {
+  grid-template-rows: auto auto minmax(58px, 1fr) auto auto;
+  align-content: stretch;
+}
+
+.settings-root-panel-notebook .settings-notebooks-panel.notebooks-workbench-panel .notebook-document-actions {
+  align-self: end;
+}
+
+.settings-root-panel-notebook .settings-notebooks-panel.notebooks-workbench-panel .notebook-shell {
+  align-items: stretch;
+}
+
+.settings-root-panel-notebook .settings-notebooks-panel.notebooks-workbench-panel .notebook-primary-column,
+.settings-root-panel-notebook .settings-notebooks-panel.notebooks-workbench-panel .notebook-side-column {
+  height: 100%;
+}
+
+.settings-root-panel-notebook .settings-notebooks-panel.notebooks-workbench-panel .notebook-side-column {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.settings-root-panel-notebook .settings-notebooks-panel.notebooks-workbench-panel .notebook-next-card {
+  height: 100%;
+  align-content: start;
+}
+
+@media (max-width: 900px) {
+  .settings-root-panel-notebook .settings-notebooks-panel.notebooks-workbench-panel .notebook-documents-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

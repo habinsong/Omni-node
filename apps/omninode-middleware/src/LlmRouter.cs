@@ -385,7 +385,8 @@ public sealed class LlmRouter : IDisposable
 
         var model = string.IsNullOrWhiteSpace(modelOverride) ? GetSelectedGroqModel() : modelOverride.Trim();
         var endpoint = $"{_config.GroqBaseUrl.TrimEnd('/')}/chat/completions";
-        var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers.";
+        var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
+            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them.";
         var requestedMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
         var effectiveMaxOutputTokens = ClampGroqMaxOutputTokensForModel(model, requestedMaxOutputTokens);
         var promptBudgetChars = ResolveGroqPromptBudgetChars(model);
@@ -1448,7 +1449,8 @@ public sealed class LlmRouter : IDisposable
         var effectiveModel = selectedModel;
         var fallbackRetried = false;
         var endpoint = $"{_config.CerebrasBaseUrl.TrimEnd('/')}/chat/completions";
-        var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers.";
+        var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
+            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them.";
         var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
         var promptForTurn = userInput;
         var mergedBuilder = new StringBuilder();

@@ -117,7 +117,6 @@ export function renderChatComposerPanel(props) {
     return e(
       "div",
       { className: "composer messenger-composer" },
-      e("div", { className: "preset-hint" }, "단일 코딩은 선택한 모델 1개가 처음부터 끝까지 구현, 실행, 검증, 수정까지 직접 완주합니다."),
       e("div", { className: "toolbar" },
         e("select", {
           className: "input compact",
@@ -140,11 +139,11 @@ export function renderChatComposerPanel(props) {
             }
           }
         },
-        e("option", { value: "groq" }, "Groq"),
-        e("option", { value: "gemini" }, "Gemini"),
-        e("option", { value: "cerebras" }, "Cerebras"),
-        e("option", { value: "copilot" }, "Copilot"),
-        e("option", { value: "codex" }, "Codex")),
+          e("option", { value: "groq" }, "Groq"),
+          e("option", { value: "gemini" }, "Gemini"),
+          e("option", { value: "cerebras" }, "Cerebras"),
+          e("option", { value: "copilot" }, "Copilot"),
+          e("option", { value: "codex" }, "Codex")),
         chatSingleProvider === "groq"
           ? e("select", {
             className: "input compact",
@@ -214,12 +213,12 @@ export function renderChatComposerPanel(props) {
             }
           }
         },
-        e("option", { value: "auto" }, "AUTO"),
-        e("option", { value: "groq" }, "Groq"),
-        e("option", { value: "gemini" }, "Gemini"),
-        e("option", { value: "cerebras" }, "Cerebras"),
-        e("option", { value: "copilot" }, "Copilot"),
-        e("option", { value: "codex" }, "Codex")),
+          e("option", { value: "auto" }, "AUTO"),
+          e("option", { value: "groq" }, "Groq"),
+          e("option", { value: "gemini" }, "Gemini"),
+          e("option", { value: "cerebras" }, "Cerebras"),
+          e("option", { value: "copilot" }, "Copilot"),
+          e("option", { value: "codex" }, "Codex")),
         chatOrchProvider === "groq"
           ? e("select", {
             className: "input compact",
@@ -326,12 +325,12 @@ export function renderChatComposerPanel(props) {
         value: chatMultiSummaryProvider,
         onChange: (event) => setChatMultiSummaryProvider(event.target.value)
       },
-      e("option", { value: "auto" }, "요약: AUTO"),
-      e("option", { value: "gemini" }, "요약: Gemini"),
-      e("option", { value: "groq" }, "요약: Groq"),
-      e("option", { value: "cerebras" }, "요약: Cerebras"),
-      e("option", { value: "copilot" }, "요약: Copilot"),
-      e("option", { value: "codex" }, "요약: Codex"))
+        e("option", { value: "auto" }, "요약: AUTO"),
+        e("option", { value: "gemini" }, "요약: Gemini"),
+        e("option", { value: "groq" }, "요약: Groq"),
+        e("option", { value: "cerebras" }, "요약: Cerebras"),
+        e("option", { value: "copilot" }, "요약: Copilot"),
+        e("option", { value: "codex" }, "요약: Codex"))
     ),
     renderComposerInputBar({
       value: chatInputMulti,
@@ -461,12 +460,12 @@ export function renderCodingComposerPanel(props) {
             }
           }
         },
-        e("option", { value: "auto" }, "AUTO"),
-        e("option", { value: "groq" }, "Groq"),
-        e("option", { value: "gemini" }, "Gemini"),
-        e("option", { value: "cerebras" }, "Cerebras"),
-        e("option", { value: "copilot" }, "Copilot"),
-        e("option", { value: "codex" }, "Codex")),
+          e("option", { value: "auto" }, "AUTO"),
+          e("option", { value: "groq" }, "Groq"),
+          e("option", { value: "gemini" }, "Gemini"),
+          e("option", { value: "cerebras" }, "Cerebras"),
+          e("option", { value: "copilot" }, "Copilot"),
+          e("option", { value: "codex" }, "Codex")),
         codingSingleProvider === "groq"
           ? e("select", {
             className: "input compact",
@@ -544,12 +543,12 @@ export function renderCodingComposerPanel(props) {
             }
           }
         },
-        e("option", { value: "auto" }, "주 구현: AUTO"),
-        e("option", { value: "groq" }, "주 구현: Groq"),
-        e("option", { value: "gemini" }, "주 구현: Gemini"),
-        e("option", { value: "cerebras" }, "주 구현: Cerebras"),
-        e("option", { value: "copilot" }, "주 구현: Copilot"),
-        e("option", { value: "codex" }, "주 구현: Codex")),
+          e("option", { value: "auto" }, "주 구현: AUTO"),
+          e("option", { value: "groq" }, "주 구현: Groq"),
+          e("option", { value: "gemini" }, "주 구현: Gemini"),
+          e("option", { value: "cerebras" }, "주 구현: Cerebras"),
+          e("option", { value: "copilot" }, "주 구현: Copilot"),
+          e("option", { value: "codex" }, "주 구현: Codex")),
         codingOrchProvider === "groq"
           ? e("select", {
             className: "input compact",
@@ -653,12 +652,12 @@ export function renderCodingComposerPanel(props) {
           }
         }
       },
-      e("option", { value: "auto" }, "비교 요약: AUTO"),
-      e("option", { value: "groq" }, "비교 요약: Groq"),
-      e("option", { value: "gemini" }, "비교 요약: Gemini"),
-      e("option", { value: "cerebras" }, "비교 요약: Cerebras"),
-      e("option", { value: "copilot" }, "비교 요약: Copilot"),
-      e("option", { value: "codex" }, "비교 요약: Codex")),
+        e("option", { value: "auto" }, "비교 요약: AUTO"),
+        e("option", { value: "groq" }, "비교 요약: Groq"),
+        e("option", { value: "gemini" }, "비교 요약: Gemini"),
+        e("option", { value: "cerebras" }, "비교 요약: Cerebras"),
+        e("option", { value: "copilot" }, "비교 요약: Copilot"),
+        e("option", { value: "codex" }, "비교 요약: Codex")),
       codingMultiProvider === "groq"
         ? e("select", {
           className: "input compact",

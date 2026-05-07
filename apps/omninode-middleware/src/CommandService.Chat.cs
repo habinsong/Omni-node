@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace OmniNode.Middleware;
 
@@ -116,6 +118,32 @@ public sealed partial class CommandService
         );
         var thread = session.Thread;
         var rawInput = (request.Input ?? string.Empty).Trim();
+        var localAssistantInfoReply = TryBuildLocalAssistantInfoResponse(rawInput);
+        if (!string.IsNullOrWhiteSpace(localAssistantInfoReply))
+        {
+            _conversationStore.AppendMessage(thread.Id, "user", rawInput, "local:assistant_info");
+            _conversationStore.AppendMessage(thread.Id, "assistant", localAssistantInfoReply, "local:assistant_info");
+            ScheduleConversationMaintenance(
+                thread.Id,
+                "chat-single",
+                "local",
+                "assistant_info"
+            );
+
+            var localInfoUpdated = _conversationStore.Get(thread.Id) ?? thread;
+            return new ConversationChatResult(
+                "single",
+                localInfoUpdated.Id,
+                "local",
+                "assistant_info",
+                localAssistantInfoReply,
+                "local:assistant_info",
+                localInfoUpdated,
+                null,
+                null
+            );
+        }
+
         var localUsageReply = await TryBuildInChatCopilotUsageResponseAsync(rawInput, request.Source, cancellationToken);
         if (!string.IsNullOrWhiteSpace(localUsageReply))
         {
@@ -220,34 +248,35 @@ public sealed partial class CommandService
 
         if (request.WebSearchEnabled)
         {
+            var webLookupInput = ResolveContextualWebLookupInput(thread.Id, rawInput);
             var decisionStopwatch = Stopwatch.StartNew();
             var decisionPath = "llm";
             var shouldUseGeminiWeb = false;
             var selfDecideNeedWeb = false;
 
-            if (LooksLikeExplicitWebLookupQuestion(rawInput))
+            if (LooksLikeExplicitWebLookupQuestion(webLookupInput))
             {
                 decisionPath = "heuristic_explicit_web";
                 shouldUseGeminiWeb = true;
             }
-            else if (LooksLikeRealtimeQuestion(rawInput))
+            else if (LooksLikeRealtimeQuestion(webLookupInput))
             {
                 decisionPath = "heuristic_web";
                 shouldUseGeminiWeb = true;
             }
-            else if (LooksLikeClearlyNonWebQuestion(rawInput))
+            else if (LooksLikeClearlyNonWebQuestion(webLookupInput))
             {
                 decisionPath = "heuristic_no_web";
             }
             else
             {
                 var webDecision = await DecideNeedWebBySelectedProviderAsync(
-                    rawInput,
+                    webLookupInput,
                     requestedProvider,
                     resolvedModel,
                     cancellationToken
                 );
-                var shouldFallbackToGeminiWeb = !webDecision.DecisionSucceeded && LooksLikeRealtimeQuestion(rawInput);
+                var shouldFallbackToGeminiWeb = !webDecision.DecisionSucceeded && LooksLikeRealtimeQuestion(webLookupInput);
                 shouldUseGeminiWeb = webDecision.NeedWeb || shouldFallbackToGeminiWeb;
                 selfDecideNeedWeb = shouldFallbackToGeminiWeb;
             }
@@ -257,11 +286,11 @@ public sealed partial class CommandService
             {
                 var memoryHint = BuildSafeWebMemoryPreferenceHint(
                     session.SessionId,
-                    rawInput,
+                    webLookupInput,
                     session.LinkedMemoryNotes
                 );
                 var webResult = await ComposeGroundedWebAnswerWithFallbackAsync(
-                    rawInput,
+                    webLookupInput,
                     memoryHint,
                     selfDecideNeedWeb,
                     allowMarkdownTable: true,
@@ -411,7 +440,7 @@ public sealed partial class CommandService
             );
         }
 
-        if (!_config.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(rawInput, generated.Text))
+        if (ShouldRetrySingleChatWithoutHistory(rawInput, generated.Text))
         {
             var historyBypassInput = BuildHistoryBypassInput(preparedInput.Text);
             var recovered = await GenerateSingleAsync(historyBypassInput, effectiveSingleToken);
@@ -428,6 +457,14 @@ public sealed partial class CommandService
                 {
                     generated = recovered;
                 }
+                else
+                {
+                    generated = new LlmSingleChatResult(
+                        generated.Provider,
+                        generated.Model,
+                        BuildOffTopicGuardMessage(rawInput)
+                    );
+                }
             }
             else
             {
@@ -436,6 +473,11 @@ public sealed partial class CommandService
                     "chat_single_history_recovery",
                     "skip",
                     $"provider={requestedProvider} model={resolvedModel} empty_recovered_text=true"
+                );
+                generated = new LlmSingleChatResult(
+                    generated.Provider,
+                    generated.Model,
+                    BuildOffTopicGuardMessage(rawInput)
                 );
             }
         }
@@ -504,7 +546,8 @@ public sealed partial class CommandService
         );
         if (!looksLikeNewsAnswer)
         {
-            return false;
+            return LooksLikeOffTopicModelExplanation(normalizedInput, normalizedOutput)
+                || LooksLikeUnrequestedP2SAnswer(normalizedInput, normalizedOutput);
         }
 
         var asksLlmPricing = ContainsAny(
@@ -538,6 +581,93 @@ public sealed partial class CommandService
         }
 
         return true;
+    }
+
+    private static bool LooksLikeOffTopicModelExplanation(string normalizedInput, string normalizedOutput)
+    {
+        if (!ContainsAny(normalizedInput, "gpt-oss", "gpt oss", "gpt_oss", "gptoss"))
+        {
+            return false;
+        }
+
+        return !ContainsAny(
+            normalizedOutput,
+            "gpt-oss",
+            "gpt oss",
+            "openai",
+            "llm",
+            "언어 모델",
+            "오픈 웨이트",
+            "open weight",
+            "moe",
+            "mixture-of-experts",
+            "120b");
+    }
+
+    private static bool LooksLikeUnrequestedP2SAnswer(string normalizedInput, string normalizedOutput)
+    {
+        if (ContainsAny(normalizedInput, "p2s", "print-to-shape", "3d 프린팅", "3d printing"))
+        {
+            return false;
+        }
+
+        return ContainsAny(normalizedOutput, "p2s", "print-to-shape", "3d 프린팅", "3d printing");
+    }
+
+    private static string BuildOffTopicGuardMessage(string input)
+    {
+        var normalized = (input ?? string.Empty).Trim();
+        return string.IsNullOrWhiteSpace(normalized)
+            ? "모델 응답이 요청과 맞지 않아 답변을 중단했습니다. 다시 질문해 주세요."
+            : $"모델 응답이 새 요청과 맞지 않아 답변을 중단했습니다. 원문 요청: {normalized}";
+    }
+
+    private string ResolveContextualWebLookupInput(string conversationId, string input)
+    {
+        var normalized = (input ?? string.Empty).Trim();
+        if (!LooksLikeVagueWebLookupRequest(normalized))
+        {
+            return normalized;
+        }
+
+        var previousUser = _conversationStore.Get(conversationId)?.Messages
+            .OrderByDescending(item => item.CreatedUtc)
+            .FirstOrDefault(item =>
+                item.Role.Equals("user", StringComparison.OrdinalIgnoreCase)
+                && !item.Text.Trim().Equals(normalized, StringComparison.OrdinalIgnoreCase))
+            ?.Text
+            .Trim();
+        if (string.IsNullOrWhiteSpace(previousUser))
+        {
+            return normalized;
+        }
+
+        return $"{previousUser}\n\n추가 요청: {normalized}";
+    }
+
+    private static bool LooksLikeVagueWebLookupRequest(string input)
+    {
+        var normalized = Regex.Replace((input ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
+        if (normalized.Length == 0 || normalized.Length > 40)
+        {
+            return false;
+        }
+
+        return ContainsAny(
+            normalized,
+            "웹검색해서 찾아",
+            "웹 검색해서 찾아",
+            "웹검색해",
+            "웹 검색해",
+            "검색해서 찾아",
+            "찾아봐",
+            "찾아 줘",
+            "찾아줘",
+            "검색해봐",
+            "검색해 줘",
+            "검색해줘",
+            "look it up",
+            "search it");
     }
 
     private static int ResolveSingleChatMaxOutputTokens(string input)
@@ -579,6 +709,357 @@ public sealed partial class CommandService
                 """;
     }
 
+    private string? TryBuildLocalAssistantInfoResponse(string input)
+    {
+        var normalized = Regex.Replace((input ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
+        if (normalized.Length == 0 || normalized.Length > 180)
+        {
+            return null;
+        }
+
+        var compact = Regex.Replace(normalized, @"[\p{P}\p{S}\s]+", string.Empty);
+        if (LooksLikeLocalSkillInventoryQuestion(normalized, compact))
+        {
+            return BuildLocalSkillInventoryResponse();
+        }
+
+        var skillActivationReply = TryBuildLocalSkillActivationResponse(normalized, compact);
+        if (!string.IsNullOrWhiteSpace(skillActivationReply))
+        {
+            return skillActivationReply;
+        }
+
+        if (LooksLikeLocalLimitationQuestion(normalized, compact))
+        {
+            return BuildLocalLimitationResponse();
+        }
+
+        if (LooksLikeLocalCapabilityQuestion(normalized, compact))
+        {
+            return BuildLocalCapabilityResponse();
+        }
+
+        if (LooksLikeLocalIdentityQuestion(normalized, compact))
+        {
+            return BuildLocalIdentityResponse();
+        }
+
+        return null;
+    }
+
+    private string? TryBuildLocalSkillActivationResponse(string normalized, string compact)
+    {
+        var snapshot = TryLoadProjectContextSnapshotForLocalInfo();
+        if (snapshot == null || snapshot.Skills.Count == 0)
+        {
+            return null;
+        }
+
+        var asksToUseSkill = ContainsAny(
+                               normalized,
+                               "사용해",
+                               "사용해줘",
+                               "써",
+                               "써줘",
+                               "적용해",
+                               "켜",
+                               "켜줘",
+                               "활성화",
+                               "activate",
+                               "use")
+                           || compact.Contains("사용해", StringComparison.Ordinal)
+                           || compact.Contains("사용해줘", StringComparison.Ordinal)
+                           || compact.Contains("활성화", StringComparison.Ordinal)
+                           || compact.Contains("activate", StringComparison.Ordinal)
+                           || compact.Contains("use", StringComparison.Ordinal);
+        if (!asksToUseSkill)
+        {
+            return null;
+        }
+
+        var matchedSkill = snapshot.Skills
+            .OrderByDescending(skill => skill.Name.Length)
+            .FirstOrDefault(skill => normalized.Contains(skill.Name, StringComparison.OrdinalIgnoreCase));
+        if (matchedSkill == null)
+        {
+            return null;
+        }
+
+        return $"""
+                `{matchedSkill.Name}` 스킬을 사용할 수 있습니다.
+                다음 메시지에서 설명하거나 검토할 주제를 바로 보내세요.
+
+                - 스킬: {matchedSkill.Name}
+                - 설명: {TrimLocalAssistantInfoText(matchedSkill.Description, 120)}
+                """;
+    }
+
+    private static bool LooksLikeLocalSkillInventoryQuestion(string normalized, string compact)
+    {
+        var hasSkillKeyword = ContainsAny(normalized, "스킬", "skill", "skills", "skill.md")
+                              || compact.Contains("스킬", StringComparison.Ordinal)
+                              || compact.Contains("skill", StringComparison.Ordinal);
+        if (!hasSkillKeyword)
+        {
+            return false;
+        }
+
+        return ContainsAny(
+            normalized,
+            "뭐",
+            "무엇",
+            "어떤",
+            "목록",
+            "리스트",
+            "보여",
+            "알려",
+            "있어",
+            "있니",
+            "가능",
+            "가지고",
+            "사용 가능한",
+            "available",
+            "list");
+    }
+
+    private static bool LooksLikeLocalLimitationQuestion(string normalized, string compact)
+    {
+        var asksAssistant = ContainsAny(
+            normalized,
+            "너",
+            "넌",
+            "네가",
+            "니가",
+            "당신",
+            "어시스턴트",
+            "ai",
+            "봇",
+            "omni",
+            "옴니");
+        if (!asksAssistant)
+        {
+            return false;
+        }
+
+        return ContainsAny(
+            normalized,
+            "할 수 없는",
+            "할수 없는",
+            "못 하는",
+            "못하는",
+            "못 해",
+            "못해",
+            "한계",
+            "제한",
+            "limitations",
+            "cannot")
+            || compact.Contains("할수없는", StringComparison.Ordinal)
+            || compact.Contains("할수없", StringComparison.Ordinal);
+    }
+
+    private static bool LooksLikeLocalCapabilityQuestion(string normalized, string compact)
+    {
+        var asksAssistant = ContainsAny(
+            normalized,
+            "너",
+            "넌",
+            "네가",
+            "니가",
+            "당신",
+            "어시스턴트",
+            "ai",
+            "봇",
+            "omni",
+            "옴니");
+        if (!asksAssistant)
+        {
+            return false;
+        }
+
+        return ContainsAny(
+            normalized,
+            "할 수",
+            "할수",
+            "뭘 할",
+            "뭐 할",
+            "무엇을 할",
+            "기능",
+            "도움",
+            "가능",
+            "능력",
+            "capability",
+            "capabilities")
+            || compact.Contains("할수있는", StringComparison.Ordinal)
+            || compact.Contains("할수있", StringComparison.Ordinal);
+    }
+
+    private static bool LooksLikeLocalIdentityQuestion(string normalized, string compact)
+    {
+        return ContainsAny(
+            normalized,
+            "너는 누구",
+            "넌 누구",
+            "너 누구",
+            "너가 누구",
+            "네가 누구",
+            "니가 누구",
+            "당신은 누구",
+            "당신 누구",
+            "정체",
+            "자기소개",
+            "who are you")
+            || compact.Contains("너는누구", StringComparison.Ordinal)
+            || compact.Contains("넌누구", StringComparison.Ordinal)
+            || compact.Contains("너누구", StringComparison.Ordinal)
+            || compact.Contains("너뭐야", StringComparison.Ordinal)
+            || compact.Contains("넌뭐야", StringComparison.Ordinal);
+    }
+
+    private string BuildLocalIdentityResponse()
+    {
+        var snapshot = TryLoadProjectContextSnapshotForLocalInfo();
+        if (snapshot == null)
+        {
+            return """
+                   저는 Omni-node 어시스턴트입니다.
+                   현재 프로젝트 지침과 스킬 스냅샷을 읽지 못해 세부 목록은 확인할 수 없습니다.
+                   """;
+        }
+
+        return $"""
+                저는 Omni-node 어시스턴트입니다.
+                현재 프로젝트의 AGENTS.md 지침과 연결된 스킬/명령 정보를 기준으로 답합니다.
+
+                - 프로젝트: {snapshot.ProjectRoot}
+                - 지침 소스: {snapshot.Instructions.Sources.Count}개
+                - 등록 스킬: {snapshot.Skills.Count}개
+                - 등록 명령: {snapshot.Commands.Count}개
+
+                일반 대화는 간결하게 답하고, 코드/문서 작업은 파일을 먼저 읽은 뒤 필요한 범위만 수정하도록 설정되어 있습니다.
+                """;
+    }
+
+    private string BuildLocalCapabilityResponse()
+    {
+        var snapshot = TryLoadProjectContextSnapshotForLocalInfo();
+        var skillCount = snapshot?.Skills.Count ?? 0;
+        var commandCount = snapshot?.Commands.Count ?? 0;
+
+        return $"""
+                제가 할 수 있는 일은 이 워크스페이스에 연결된 기능 기준으로 답합니다.
+
+                - 프로젝트 지침(AGENTS.md)을 기준으로 대화와 작업 방식 유지
+                - 코드/문서 파일 읽기, 수정, 빌드/테스트 실행, 결과 요약
+                - 연결된 스킬을 확인하고 필요한 작업에 맞게 사용
+                - 질문이 이전 대화와 이어질 때만 최근 대화, 메모리, RAG 결과를 참고
+                - 웹검색이 필요한 질문은 검색 컨텍스트를 붙여 근거 기반으로 답변
+                - LLM 제공자/모델 설정, 상태 확인, 응답 이상 진단 지원
+
+                현재 등록된 스킬은 {skillCount}개, 명령 템플릿은 {commandCount}개입니다.
+                """;
+    }
+
+    private string BuildLocalLimitationResponse()
+    {
+        var snapshot = TryLoadProjectContextSnapshotForLocalInfo();
+        var hasProjectInstructions = snapshot?.Instructions.Sources.Count > 0;
+
+        return $"""
+                제가 할 수 없는 일과 제한은 다음과 같습니다.
+
+                - 확인되지 않은 사실을 확정처럼 말하지 않습니다.
+                - 사용자 확인 없이 파괴적 변경이나 요청 밖 대규모 변경을 하지 않습니다.
+                - 최신 외부 정보는 웹검색이나 제공된 근거 없이는 확정하지 않습니다.
+                - 연결되지 않은 계정, 도구, 파일에는 접근할 수 없습니다.
+                - 새 질문이 이전 대화와 무관하면 메모리/RAG/최근 대화를 억지로 붙이지 않습니다.
+
+                현재 프로젝트 지침 로드 상태: {(hasProjectInstructions ? "로드됨" : "확인 필요")}
+                """;
+    }
+
+    private string BuildLocalSkillInventoryResponse()
+    {
+        var snapshot = TryLoadProjectContextSnapshotForLocalInfo();
+        if (snapshot == null)
+        {
+            return "현재 스킬 스냅샷을 읽지 못했습니다. 프로젝트 컨텍스트 로더 상태를 먼저 확인해야 합니다.";
+        }
+
+        if (snapshot.Skills.Count == 0)
+        {
+            return $"현재 등록된 스킬이 없습니다.\n프로젝트: {snapshot.ProjectRoot}";
+        }
+
+        var skills = snapshot.Skills
+            .OrderBy(skill => skill.Scope.Equals("project", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ThenBy(skill => skill.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var builder = new StringBuilder();
+        builder.AppendLine($"현재 연결된 스킬은 총 {skills.Length}개입니다.");
+        builder.AppendLine();
+
+        var emitted = 0;
+        AppendSkillGroup("프로젝트 스킬", "project");
+        AppendSkillGroup("전역 스킬", "global");
+
+        var remaining = skills.Length - emitted;
+        if (remaining > 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine($"나머지 {remaining}개는 스킬 목록 화면에서 확인할 수 있습니다.");
+        }
+
+        return builder.ToString().Trim();
+
+        void AppendSkillGroup(string title, string scope)
+        {
+            var group = skills
+                .Where(skill => skill.Scope.Equals(scope, StringComparison.OrdinalIgnoreCase))
+                .Take(Math.Max(0, 24 - emitted))
+                .ToArray();
+            if (group.Length == 0)
+            {
+                return;
+            }
+
+            if (emitted > 0)
+            {
+                builder.AppendLine();
+            }
+
+            builder.AppendLine($"{title}:");
+            foreach (var skill in group)
+            {
+                builder.AppendLine($"- {skill.Name}: {TrimLocalAssistantInfoText(skill.Description, 96)}");
+                emitted++;
+            }
+        }
+    }
+
+    private ProjectContextSnapshot? TryLoadProjectContextSnapshotForLocalInfo()
+    {
+        try
+        {
+            return _projectContextLoader.LoadSnapshot();
+        }
+        catch (Exception ex)
+        {
+            _auditLogger.Log("local", "assistant_info_snapshot", "failed", ex.Message);
+            return null;
+        }
+    }
+
+    private static string TrimLocalAssistantInfoText(string text, int maxChars)
+    {
+        var normalized = Regex.Replace((text ?? string.Empty).Trim(), @"\s+", " ");
+        if (normalized.Length <= maxChars)
+        {
+            return string.IsNullOrWhiteSpace(normalized) ? "설명이 없습니다." : normalized;
+        }
+
+        return normalized[..maxChars].TrimEnd() + "...";
+    }
+
     private async Task<ConversationChatResult> ChatOrchestrationWithStateCoreAsync(
         ChatRequest request,
         CancellationToken cancellationToken
@@ -597,6 +1078,32 @@ public sealed partial class CommandService
         );
         var thread = session.Thread;
         var rawInput = (request.Input ?? string.Empty).Trim();
+        var localAssistantInfoReply = TryBuildLocalAssistantInfoResponse(rawInput);
+        if (!string.IsNullOrWhiteSpace(localAssistantInfoReply))
+        {
+            _conversationStore.AppendMessage(thread.Id, "user", rawInput, "local:assistant_info");
+            _conversationStore.AppendMessage(thread.Id, "assistant", localAssistantInfoReply, "local:assistant_info");
+            await EnsureConversationTitleFromFirstTurnAsync(
+                thread.Id,
+                "local",
+                "assistant_info",
+                cancellationToken
+            );
+
+            var localInfoUpdated = _conversationStore.Get(thread.Id) ?? thread;
+            return new ConversationChatResult(
+                "orchestration",
+                localInfoUpdated.Id,
+                "local",
+                "assistant_info",
+                localAssistantInfoReply,
+                "local:assistant_info",
+                localInfoUpdated,
+                null,
+                null
+            );
+        }
+
         var localUsageReply = await TryBuildInChatCopilotUsageResponseAsync(rawInput, request.Source, cancellationToken);
         if (!string.IsNullOrWhiteSpace(localUsageReply))
         {
@@ -764,6 +1271,45 @@ public sealed partial class CommandService
             ? "none"
             : NormalizeModelSelection(request.CodexModel) ?? _config.CodexModel;
         var requestedSummaryProvider = NormalizeProvider(request.SummaryProvider, allowAuto: true);
+        var localAssistantInfoReply = TryBuildLocalAssistantInfoResponse(rawInput);
+        if (!string.IsNullOrWhiteSpace(localAssistantInfoReply))
+        {
+            _conversationStore.AppendMessage(thread.Id, "user", rawInput, "local:assistant_info");
+            _conversationStore.AppendMessage(thread.Id, "assistant", localAssistantInfoReply, "local:assistant_info");
+            await EnsureConversationTitleFromFirstTurnAsync(
+                thread.Id,
+                "local",
+                "assistant_info",
+                cancellationToken
+            );
+
+            var localInfoUpdated = _conversationStore.Get(thread.Id) ?? thread;
+            return new ConversationMultiResult(
+                localInfoUpdated.Id,
+                "로컬 안내 응답으로 Groq 호출은 생략되었습니다.",
+                "로컬 안내 응답으로 Gemini 호출은 생략되었습니다.",
+                "로컬 안내 응답으로 Cerebras 호출은 생략되었습니다.",
+                "로컬 안내 응답으로 Copilot 호출은 생략되었습니다.",
+                localAssistantInfoReply,
+                localGroqModel,
+                localGeminiModel,
+                localCerebrasModel,
+                localCopilotModel,
+                requestedSummaryProvider,
+                "local",
+                localInfoUpdated,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "로컬 안내 응답으로 Codex 호출은 생략되었습니다.",
+                localCodexModel,
+                localAssistantInfoReply,
+                "로컬 안내 응답이라 모델별 차이 정리는 생략되었습니다."
+            );
+        }
+
         var localUsageReply = await TryBuildInChatCopilotUsageResponseAsync(rawInput, request.Source, cancellationToken);
         if (!string.IsNullOrWhiteSpace(localUsageReply))
         {

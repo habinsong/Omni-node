@@ -3138,15 +3138,15 @@ public sealed partial class CommandService
             {
                 line = Regex.Replace(
                     line,
-                    @"([.!?])\s+(?=(?:[""'“‘(\[])?[가-힣A-Z]))",
+                    @"([.!?])\s+(?!(?:md|js|cs|ts|jsx|tsx|txt|py|json|html|css|xml|yml|yaml|sh|ps1|bat|cmd|log|csv|exe|dll|zip|tar|gz)\b)(?=(?:[""'“‘(\[])?[가-힣A-Z]))",
                     "$1\n",
-                    RegexOptions.CultureInvariant
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
                 );
                 line = Regex.Replace(
                     line,
-                    @"(다\.|요\.)\s+(?=(?:[""'“‘(\[])?[가-힣A-Z]))",
+                    @"(다\.|요\.)\s+(?!(?:md|js|cs|ts|jsx|tsx|txt|py|json|html|css|xml|yml|yaml|sh|ps1|bat|cmd|log|csv|exe|dll|zip|tar|gz)\b)(?=(?:[""'“‘(\[])?[가-힣A-Z]))",
                     "$1\n",
-                    RegexOptions.CultureInvariant
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
                 );
                 line = Regex.Replace(line, @"(…+)\s+", "$1\n");
                 line = Regex.Replace(line, @"\s+\|\s+\|", " |\n|");

@@ -250,9 +250,14 @@ public sealed partial class CommandService
         bool includeLocalTimeHint = false
     )
     {
+        var includePriorContext = ShouldUsePriorConversationContext(conversationId, input);
+        var explicitRequestNotes = NormalizeExplicitMemoryNoteNames(requestMemoryNotes);
+        var autoLinkedNotes = includePriorContext
+            ? _conversationStore.Get(conversationId)?.LinkedMemoryNotes ?? Array.Empty<string>()
+            : Array.Empty<string>();
         var notes = MergeMemoryNoteNames(
-            _conversationStore.Get(conversationId)?.LinkedMemoryNotes ?? Array.Empty<string>(),
-            requestMemoryNotes
+            autoLinkedNotes,
+            explicitRequestNotes
         );
         var noteBlocks = new List<string>();
         foreach (var name in notes.Take(4))
@@ -267,12 +272,17 @@ public sealed partial class CommandService
             noteBlocks.Add($"### {name}\n{content}");
         }
 
-        var historyRaw = _conversationStore.BuildHistoryText(conversationId, _config.ConversationHistoryMessages);
-        var history = TrimContextHistory(historyRaw, 5200);
+        var history = string.Empty;
+        if (includePriorContext)
+        {
+            var historyRaw = _conversationStore.BuildHistoryText(conversationId, _config.ConversationHistoryMessages);
+            history = TrimContextHistory(historyRaw, 5200);
+        }
+
         var builder = new StringBuilder();
         builder.AppendLine("[컨텍스트 사용 규칙]");
         builder.AppendLine("- '새 요청'을 최우선으로 처리하세요.");
-        builder.AppendLine("- 최근 대화/메모리와 새 요청이 충돌하면 새 요청을 따르세요.");
+        builder.AppendLine("- 제공된 최근 대화/메모리와 새 요청이 충돌하면 새 요청을 따르세요.");
         builder.AppendLine("- 이전 답변 형식(예: 뉴스 N건 목록)을 관성으로 복사하지 마세요.");
         builder.AppendLine();
         if (noteBlocks.Count > 0)
@@ -307,6 +317,188 @@ public sealed partial class CommandService
 
         var tail = contextual[^8000..];
         return $"[context_truncated]\n{tail}";
+    }
+
+    private static IReadOnlyList<string> NormalizeExplicitMemoryNoteNames(IReadOnlyList<string>? names)
+    {
+        if (names == null || names.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        return names
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private bool ShouldUsePriorConversationContext(string conversationId, string input)
+    {
+        if (ShouldUsePriorConversationContext(input))
+        {
+            return true;
+        }
+
+        return HasTopicalOverlapWithRecentConversation(conversationId, input);
+    }
+
+    private static bool ShouldUsePriorConversationContext(string input)
+    {
+        var normalized = Regex.Replace((input ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+
+        if (ContainsAny(normalized, "아니", "그게 아니라", "그 말고", "말고", "라고", "라니까"))
+        {
+            return true;
+        }
+
+        if (LooksLikeCasualOrIdentityQuestion(normalized))
+        {
+            return false;
+        }
+
+        if (ContainsAny(
+                normalized,
+                "이전",
+                "앞서",
+                "아까",
+                "방금",
+                "위에서",
+                "위 내용",
+                "최근 대화",
+                "대화 내용",
+                "메모리",
+                "기억",
+                "그 답변",
+                "그 내용",
+                "그거",
+                "그것",
+                "그걸",
+                "해당",
+                "이어서",
+                "계속",
+                "다시",
+                "더 자세히",
+                "웹검색해서 찾아",
+                "웹 검색해서 찾아",
+                "찾아봐",
+                "검색해봐",
+                "search it",
+                "look it up"))
+        {
+            return true;
+        }
+
+        return normalized.Length <= 80
+            && ContainsAny(normalized, "그 ", "이 ", "저 ", "위 ", "앞 ", "방금", "아까", "이거", "저거");
+    }
+
+    private bool HasTopicalOverlapWithRecentConversation(string conversationId, string input)
+    {
+        var inputTokens = ExtractContextTokens(input);
+        if (inputTokens.Count == 0)
+        {
+            return false;
+        }
+
+        var thread = _conversationStore.Get(conversationId);
+        if (thread == null || thread.Messages.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var message in thread.Messages
+                     .OrderByDescending(item => item.CreatedUtc)
+                     .Where(item => item.Role.Equals("user", StringComparison.OrdinalIgnoreCase))
+                     .Take(8))
+        {
+            var messageText = (message.Text ?? string.Empty).Trim();
+            if (messageText.Length == 0)
+            {
+                continue;
+            }
+
+            if (messageText.Equals((input ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var messageTokens = ExtractContextTokens(messageText);
+            if (HasMeaningfulTokenOverlap(inputTokens, messageTokens))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasMeaningfulTokenOverlap(
+        IReadOnlySet<string> left,
+        IReadOnlySet<string> right,
+        int minimumShared = 2
+    )
+    {
+        if (left.Count == 0 || right.Count == 0)
+        {
+            return false;
+        }
+
+        var shared = left.Where(right.Contains).ToArray();
+        if (shared.Length == 0)
+        {
+            return false;
+        }
+
+        if (shared.Any(token => token.Length >= 5 || token.Any(char.IsDigit) || token.Contains('-', StringComparison.Ordinal)))
+        {
+            return true;
+        }
+
+        return shared.Length >= minimumShared;
+    }
+
+    private static IReadOnlySet<string> ExtractContextTokens(string text)
+    {
+        var tokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Match match in Regex.Matches((text ?? string.Empty).ToLowerInvariant(), @"[\p{L}\p{N}][\p{L}\p{N}._/-]*"))
+        {
+            var token = NormalizeContextToken(match.Value);
+            if (IsContextStopToken(token))
+            {
+                continue;
+            }
+
+            tokens.Add(token);
+        }
+
+        return tokens;
+    }
+
+    private static string NormalizeContextToken(string token)
+    {
+        return (token ?? string.Empty)
+            .Trim()
+            .Trim('.', ',', ':', ';', '!', '?', '\'', '"', '`', '(', ')', '[', ']', '{', '}');
+    }
+
+    private static bool IsContextStopToken(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token) || token.Length <= 1)
+        {
+            return true;
+        }
+
+        return token is
+            "이" or "그" or "저" or "것" or "거" or "수" or "좀" or "왜" or "뭐" or "무엇" or
+            "모델" or "설명" or "대해" or "대한" or "관련" or "알려줘" or "해줘" or "줘" or
+            "답변" or "질문" or "요청" or "다음" or "현재" or "오늘" or "최신" or "정보" or
+            "the" or "a" or "an" or "and" or "or" or "to" or "of" or "for" or "with" or "in" or
+            "on" or "about" or "what" or "why" or "how" or "is" or "are" or "it" or "this" or "that";
     }
 
     private async Task EnsureConversationTitleFromFirstTurnAsync(
@@ -1839,7 +2031,12 @@ public sealed partial class CommandService
         if (!normalized.Contains('\n'))
         {
             normalized = Regex.Replace(normalized, @"(?<!\n)(\d+[.)]\s+)", "\n$1");
-            normalized = Regex.Replace(normalized, @"([.!?]|…|\.{3})\s+(?=[^\n])", "$1\n");
+            normalized = Regex.Replace(
+                normalized,
+                @"([.!?]|…|\.{3})\s+(?!(?:md|js|cs|ts|jsx|tsx|txt|py|json|html|css|xml|yml|yaml|sh|ps1|bat|cmd|log|csv|exe|dll|zip|tar|gz)\b)(?=[^\n])",
+                "$1\n",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+            );
         }
 
         normalized = Regex.Replace(normalized, @"\n{3,}", "\n\n");
