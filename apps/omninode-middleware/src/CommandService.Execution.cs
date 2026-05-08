@@ -151,6 +151,12 @@ public sealed partial class CommandService
                     return llmCommandResult;
                 }
 
+                var skillCommandResult = await TryHandleTelegramSkillCommandAsync(text, cancellationToken);
+                if (skillCommandResult != null)
+                {
+                    return skillCommandResult;
+                }
+
                 var doctorCommandResult = await TryHandleTelegramDoctorCommandAsync(text, cancellationToken);
                 if (doctorCommandResult != null)
                 {
@@ -190,6 +196,18 @@ public sealed partial class CommandService
 
             if (!text.StartsWith("/", StringComparison.Ordinal))
             {
+                if (source.Equals("telegram", StringComparison.OrdinalIgnoreCase))
+                {
+                    var skillNaturalResult = await TryHandleTelegramNaturalSkillCommandAsync(
+                        text,
+                        cancellationToken
+                    );
+                    if (skillNaturalResult != null)
+                    {
+                        return skillNaturalResult;
+                    }
+                }
+
                 var naturalByLlmResult = await TryHandleNaturalCommandByLlmAsync(
                     source,
                     text,

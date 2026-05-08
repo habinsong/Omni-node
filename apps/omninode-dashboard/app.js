@@ -753,6 +753,16 @@ import {
     const [codingMode, setCodingMode] = useState("single");
     const [uiPreferences, setUiPreferences] = useState(() => loadUiPreferences());
     const [uiPreferencesSavedAt, setUiPreferencesSavedAt] = useState(0);
+    const [thinkPlusModeByKey, setThinkPlusModeByKey] = useState(() => {
+      try {
+        const raw = typeof window !== "undefined" && window.localStorage
+          ? window.localStorage.getItem("omninode_think_plus_v1")
+          : null;
+        return raw ? JSON.parse(raw) : {};
+      } catch {
+        return {};
+      }
+    });
     const [recordingShortcutKey, setRecordingShortcutKey] = useState(null);
     const uiPreferencesSessionStartRef = useRef(null);
     const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -1110,6 +1120,13 @@ import {
       persistUiPreferences(uiPreferences);
       setUiPreferencesSavedAt(Date.now());
     }, [uiPreferences]);
+
+    useEffect(() => {
+      if (typeof window === "undefined" || !window.localStorage) return;
+      try {
+        window.localStorage.setItem("omninode_think_plus_v1", JSON.stringify(thinkPlusModeByKey));
+      } catch {}
+    }, [thinkPlusModeByKey]);
 
     // 시스템 TTS 음성 목록 갱신 (브라우저가 비동기로 voice를 로드하므로 onvoiceschanged 후 한 번 더 받기)
     useEffect(() => {
@@ -3980,7 +3997,8 @@ import {
         webUrls: rich.webUrls,
         webSearchEnabled: rich.webSearchEnabled,
         skillName: selectedChatSkill?.name || undefined,
-        skillScope: selectedChatSkill?.scope || undefined
+        skillScope: selectedChatSkill?.scope || undefined,
+        thinkPlus: !!thinkPlusModeByKey["chat:single"]
       });
 
       if (!ok) {
@@ -4451,7 +4469,8 @@ import {
         memoryNotes: currentMemoryNotes,
         attachments: rich.attachments,
         webUrls: rich.webUrls,
-        webSearchEnabled: rich.webSearchEnabled
+        webSearchEnabled: rich.webSearchEnabled,
+        thinkPlus: !!thinkPlusModeByKey["coding:single"]
       });
 
       if (!ok) {
@@ -7321,6 +7340,8 @@ import {
     }
 
     function renderComposerInputBar({ value, onChange, onSend, pendingKey, placeholder }) {
+      const thinkPlusVisible = pendingKey === "chat:single" || pendingKey === "coding:single";
+      const thinkPlusReady = !!geminiUsage?.totals || true; // Gemini API 키 가용 여부는 백엔드가 더 정확히 알지만 UI는 일단 활성화 후 백엔드에서 fallback
       return renderComposerInputBarShell({
         e,
         value,
@@ -7342,7 +7363,13 @@ import {
         selectedSkill: currentKey === "chat:single" ? selectedChatSkill : null,
         onClearSkill: () => setSelectedChatSkill(null),
         speechState,
-        onStartVoiceInput: startVoiceInput
+        onStartVoiceInput: startVoiceInput,
+        thinkPlusVisible,
+        thinkPlusEnabled: thinkPlusVisible ? !!thinkPlusModeByKey[pendingKey] : false,
+        thinkPlusReady,
+        onToggleThinkPlus: thinkPlusVisible
+          ? () => setThinkPlusModeByKey((prev) => ({ ...prev, [pendingKey]: !prev[pendingKey] }))
+          : undefined
       });
     }
 

@@ -8409,6 +8409,36 @@ select.input,
   box-shadow: 0 14px 28px rgba(39, 120, 242, 0.24);
 }
 
+.composer-icon-btn.think-plus {
+  position: relative;
+  color: var(--text-secondary, #5b6b7e);
+}
+
+.composer-icon-btn.think-plus.active {
+  background: linear-gradient(135deg, #b46bff 0%, #7a3fcf 100%);
+  color: #ffffff;
+  border-color: #7a3fcf;
+  box-shadow: 0 8px 20px rgba(122, 63, 207, 0.32);
+}
+
+.composer-icon-btn.think-plus.active .think-plus-badge {
+  fill: #ffffff;
+}
+
+.composer-icon-btn.think-plus:not(.active) .think-plus-badge {
+  fill: #b46bff;
+}
+
+:root[data-theme="dark"] body .composer-icon-btn.think-plus:not(.active) {
+  color: var(--dark-muted) !important;
+}
+
+:root[data-theme="dark"] body .composer-icon-btn.think-plus.active {
+  background: linear-gradient(135deg, #b46bff 0%, #7a3fcf 100%) !important;
+  color: #ffffff !important;
+  border-color: #7a3fcf !important;
+}
+
 .icon-svg {
   width: 17px;
   height: 17px;

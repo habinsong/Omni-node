@@ -143,7 +143,16 @@ public sealed partial class CommandService
             ));
         }
 
-        var contextualInput = BuildContextualInput(session.SessionId, preparedInput.Text, session.LinkedMemoryNotes);
+        var thinkPlusPreText = preparedInput.Text;
+        if (request.ThinkPlusEnabled && request.Mode == "single")
+        {
+            var thinkPlusContext = await BuildThinkPlusContextAsync(rawInput, request.Source, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrEmpty(thinkPlusContext))
+            {
+                thinkPlusPreText = thinkPlusContext + thinkPlusPreText;
+            }
+        }
+        var contextualInput = BuildContextualInput(session.SessionId, thinkPlusPreText, session.LinkedMemoryNotes);
         var rawRequestedPaths = ExtractRequestedCodingPaths(rawInput, request.Language);
         var rawExpectedOutput = ExtractExpectedConsoleOutput(rawInput);
         AutonomousCodingOutcome outcome;

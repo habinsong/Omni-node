@@ -3873,6 +3873,7 @@ public sealed partial class WebSocketGateway
             string? skillScope = null;
             string? skillDescription = null;
             string? skillBody = null;
+            bool? thinkPlus = null;
             if (doc.RootElement.TryGetProperty("skillName", out var skillNameEl))
             {
                 skillName = skillNameEl.GetString();
@@ -3888,6 +3889,11 @@ public sealed partial class WebSocketGateway
             if (doc.RootElement.TryGetProperty("skillBody", out var skillBodyEl))
             {
                 skillBody = skillBodyEl.GetString();
+            }
+            if (doc.RootElement.TryGetProperty("thinkPlus", out var thinkPlusEl))
+            {
+                if (thinkPlusEl.ValueKind == JsonValueKind.True) thinkPlus = true;
+                else if (thinkPlusEl.ValueKind == JsonValueKind.False) thinkPlus = false;
             }
 
             if (doc.RootElement.TryGetProperty("edits", out var editsElement))
@@ -4546,6 +4552,7 @@ public sealed partial class WebSocketGateway
                 SkillScope = skillScope,
                 SkillDescription = skillDescription,
                 SkillBody = skillBody,
+                ThinkPlus = thinkPlus,
                 RoutineId = routineId,
                 ExecutionMode = executionMode,
                 AgentProvider = agentProvider,

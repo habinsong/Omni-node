@@ -134,7 +134,7 @@ public sealed partial class CommandService
         );
         var thread = session.Thread;
         var rawInput = (request.Input ?? string.Empty).Trim();
-        var localAssistantInfoReply = TryBuildLocalAssistantInfoResponse(rawInput);
+        var localAssistantInfoReply = TryBuildLocalAssistantInfoResponse(rawInput, session.SessionId, request.Source);
         if (!string.IsNullOrWhiteSpace(localAssistantInfoReply))
         {
             _conversationStore.AppendMessage(thread.Id, "user", rawInput, "local:assistant_info");
@@ -471,6 +471,15 @@ public sealed partial class CommandService
             request.SkillName,
             request.SkillScope
         );
+        // Think+ 모드 prepend (chat-single 단독 모드만)
+        if (request.ThinkPlusEnabled && request.Mode == "single")
+        {
+            var thinkPlusContext = await BuildThinkPlusContextAsync(rawInput, request.Source, effectiveSingleToken).ConfigureAwait(false);
+            if (!string.IsNullOrEmpty(thinkPlusContext))
+            {
+                skillPreparedText = thinkPlusContext + skillPreparedText;
+            }
+        }
         var contextualInput = BuildContextualInput(
             session.SessionId,
             skillPreparedText,
@@ -510,11 +519,27 @@ public sealed partial class CommandService
                 }
                 else
                 {
-                    generated = new LlmSingleChatResult(
-                        generated.Provider,
-                        generated.Model,
-                        BuildOffTopicGuardMessage(rawInput)
-                    );
+                    var originalRequestInput = BuildOriginalRequestRetryInput(rawInput);
+                    var originalRecovered = await GenerateSingleAsync(originalRequestInput, effectiveSingleToken);
+                    if (!string.IsNullOrWhiteSpace(originalRecovered.Text)
+                        && !ShouldRetrySingleChatWithoutHistory(rawInput, originalRecovered.Text))
+                    {
+                        _auditLogger.Log(
+                            request.Source,
+                            "chat_single_history_recovery",
+                            "ok",
+                            $"provider={requestedProvider} model={resolvedModel} recoveredStage=original_request"
+                        );
+                        generated = originalRecovered;
+                    }
+                    else
+                    {
+                        generated = new LlmSingleChatResult(
+                            generated.Provider,
+                            generated.Model,
+                            BuildOffTopicGuardMessage(rawInput)
+                        );
+                    }
                 }
             }
             else
@@ -525,11 +550,27 @@ public sealed partial class CommandService
                     "skip",
                     $"provider={requestedProvider} model={resolvedModel} empty_recovered_text=true"
                 );
-                generated = new LlmSingleChatResult(
-                    generated.Provider,
-                    generated.Model,
-                    BuildOffTopicGuardMessage(rawInput)
-                );
+                var originalRequestInput = BuildOriginalRequestRetryInput(rawInput);
+                var originalRecovered = await GenerateSingleAsync(originalRequestInput, effectiveSingleToken);
+                if (!string.IsNullOrWhiteSpace(originalRecovered.Text)
+                    && !ShouldRetrySingleChatWithoutHistory(rawInput, originalRecovered.Text))
+                {
+                    _auditLogger.Log(
+                        request.Source,
+                        "chat_single_history_recovery",
+                        "ok",
+                        $"provider={requestedProvider} model={resolvedModel} recoveredStage=original_request"
+                    );
+                    generated = originalRecovered;
+                }
+                else
+                {
+                    generated = new LlmSingleChatResult(
+                        generated.Provider,
+                        generated.Model,
+                        BuildOffTopicGuardMessage(rawInput)
+                    );
+                }
             }
         }
 
@@ -762,7 +803,29 @@ public sealed partial class CommandService
                 """;
     }
 
-    private string? TryBuildLocalAssistantInfoResponse(string input)
+    private static string BuildOriginalRequestRetryInput(string rawInput)
+    {
+        var normalized = (rawInput ?? string.Empty).Trim();
+        if (normalized.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        return $"""
+                [중요]
+                아래 원문 요청만 다시 처리하세요.
+                이전 대화의 형식을 관성으로 따라가지 말고, 새 요청 주제에만 답변하세요.
+
+                [원문 요청]
+                {normalized}
+                """;
+    }
+
+    private string? TryBuildLocalAssistantInfoResponse(
+        string input,
+        string? threadKey = null,
+        string source = "local"
+    )
     {
         var normalized = Regex.Replace((input ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
         if (normalized.Length == 0 || normalized.Length > 180)
@@ -776,10 +839,23 @@ public sealed partial class CommandService
             return BuildLocalSkillInventoryResponse();
         }
 
-        var skillActivationReply = TryBuildLocalSkillActivationResponse(normalized, compact);
+        var skillDeactivationReply = TryBuildLocalSkillDeactivationResponse(normalized, threadKey, source);
+        if (!string.IsNullOrWhiteSpace(skillDeactivationReply))
+        {
+            return skillDeactivationReply;
+        }
+
+        var skillActivationReply = TryBuildLocalSkillActivationResponse(normalized, compact, threadKey, source);
         if (!string.IsNullOrWhiteSpace(skillActivationReply))
         {
             return skillActivationReply;
+        }
+
+        var hasActiveSkill = !string.IsNullOrWhiteSpace(threadKey)
+            && _activeSkillByThread.ContainsKey(threadKey);
+        if (hasActiveSkill)
+        {
+            return null;
         }
 
         if (LooksLikeLocalLimitationQuestion(normalized, compact))
@@ -800,7 +876,12 @@ public sealed partial class CommandService
         return null;
     }
 
-    private string? TryBuildLocalSkillActivationResponse(string normalized, string compact)
+    private string? TryBuildLocalSkillActivationResponse(
+        string normalized,
+        string compact,
+        string? threadKey,
+        string source
+    )
     {
         var snapshot = TryLoadProjectContextSnapshotForLocalInfo();
         if (snapshot == null || snapshot.Skills.Count == 0)
@@ -830,8 +911,22 @@ public sealed partial class CommandService
             return null;
         }
 
-        // 사용자가 같은 메시지에 task까지 같이 줬으면 stub으로 가로채지 말고 LLM에 넘김.
-        // 예: "X 스킬 사용해서 Y에 대해 설명해줘" — "사용해서" 연결어미 + 추가 동사/명사가 task 신호.
+        var matchedSkill = snapshot.Skills
+            .OrderByDescending(skill => skill.Name.Length)
+            .FirstOrDefault(skill => normalized.Contains(skill.Name, StringComparison.OrdinalIgnoreCase));
+        if (matchedSkill == null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(threadKey))
+        {
+            _activeSkillByThread[threadKey] = matchedSkill.Name;
+            _auditLogger.Log(source, "skill_activate", "ok", $"name={matchedSkill.Name} scope={matchedSkill.Scope}");
+        }
+
+        // 사용자가 같은 메시지에 task까지 같이 줬으면 안내문 대신 바로 LLM에 넘긴다.
+        // 예: "X 스킬 사용해서 Y에 대해 설명해줘"
         var hasInlineTask = Regex.IsMatch(
                                normalized,
                                @"(?i)(사용해서|써서|적용해서|활용해서|이용해서|가지고|using\s+|use\s+\S+\s+to\s+)"
@@ -863,21 +958,39 @@ public sealed partial class CommandService
             return null;
         }
 
-        var matchedSkill = snapshot.Skills
-            .OrderByDescending(skill => skill.Name.Length)
-            .FirstOrDefault(skill => normalized.Contains(skill.Name, StringComparison.OrdinalIgnoreCase));
-        if (matchedSkill == null)
+        return $"""
+                `{matchedSkill.Name}` 스킬을 이 대화에 적용했습니다.
+                다음 메시지부터 이 스킬 지침을 계속 우선 적용합니다.
+
+                - 스킬: {matchedSkill.Name}
+                - 설명: {TrimLocalAssistantInfoText(matchedSkill.Description, 120)}
+                - 해제: "스킬 해제" 또는 "스킬 중지"
+                """;
+    }
+
+    private string? TryBuildLocalSkillDeactivationResponse(
+        string normalized,
+        string? threadKey,
+        string source
+    )
+    {
+        if (!LooksLikeSkillDeactivationRequest(normalized))
         {
             return null;
         }
 
-        return $"""
-                `{matchedSkill.Name}` 스킬을 사용할 수 있습니다.
-                다음 메시지에서 설명하거나 검토할 주제를 바로 보내세요.
+        if (string.IsNullOrWhiteSpace(threadKey))
+        {
+            return "현재 대화에 활성화된 스킬이 없습니다.";
+        }
 
-                - 스킬: {matchedSkill.Name}
-                - 설명: {TrimLocalAssistantInfoText(matchedSkill.Description, 120)}
-                """;
+        if (_activeSkillByThread.TryRemove(threadKey, out var skillName))
+        {
+            _auditLogger.Log(source, "skill_deactivate", "ok", $"name={skillName}");
+            return $"`{skillName}` 스킬을 해제했습니다.";
+        }
+
+        return "현재 대화에 활성화된 스킬이 없습니다.";
     }
 
     private static bool LooksLikeLocalSkillInventoryQuestion(string normalized, string compact)
@@ -1241,7 +1354,7 @@ public sealed partial class CommandService
         );
         var thread = session.Thread;
         var rawInput = (request.Input ?? string.Empty).Trim();
-        var localAssistantInfoReply = TryBuildLocalAssistantInfoResponse(rawInput);
+        var localAssistantInfoReply = TryBuildLocalAssistantInfoResponse(rawInput, session.SessionId, request.Source);
         if (!string.IsNullOrWhiteSpace(localAssistantInfoReply))
         {
             _conversationStore.AppendMessage(thread.Id, "user", rawInput, "local:assistant_info");
@@ -1435,7 +1548,7 @@ public sealed partial class CommandService
             ? "none"
             : NormalizeModelSelection(request.CodexModel) ?? _config.CodexModel;
         var requestedSummaryProvider = NormalizeProvider(request.SummaryProvider, allowAuto: true);
-        var localAssistantInfoReply = TryBuildLocalAssistantInfoResponse(rawInput);
+        var localAssistantInfoReply = TryBuildLocalAssistantInfoResponse(rawInput, session.SessionId, request.Source);
         if (!string.IsNullOrWhiteSpace(localAssistantInfoReply))
         {
             _conversationStore.AppendMessage(thread.Id, "user", rawInput, "local:assistant_info");

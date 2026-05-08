@@ -1754,6 +1754,44 @@ public sealed partial class CommandService
         var skillQueryText = text ?? string.Empty;
         var hasStickyActiveSkillForTelegram = !string.IsNullOrWhiteSpace(session.SessionId)
             && _activeSkillByThread.ContainsKey(session.SessionId);
+
+        // Think+ 모드 토글 (텔레그램 자연어 명령어)
+        var thinkPlusToggleNote = string.Empty;
+        if (LooksLikeThinkPlusActivation(skillQueryText) && !LooksLikeThinkPlusDeactivation(skillQueryText))
+        {
+            if (!IsThinkPlusActiveForThread(session.SessionId))
+            {
+                SetThinkPlusForThread(session.SessionId, true);
+                thinkPlusToggleNote = "[추론 모드 활성화] 지금부터 모든 메시지에 대해 최신 웹 검색 결과를 참고해 답변합니다. 끄려면 \"추론 모드 꺼\"라고 말하세요.";
+            }
+        }
+        else if (LooksLikeThinkPlusDeactivation(skillQueryText))
+        {
+            if (IsThinkPlusActiveForThread(session.SessionId))
+            {
+                SetThinkPlusForThread(session.SessionId, false);
+                thinkPlusToggleNote = "[추론 모드 비활성화] 일반 모드로 돌아갑니다.";
+            }
+        }
+        var thinkPlusActiveForTelegram = IsThinkPlusActiveForThread(session.SessionId);
+
+        // 토글 명령만 보낸 경우 (다른 질문 없이) 즉시 안내 메시지 반환.
+        if (!string.IsNullOrEmpty(thinkPlusToggleNote))
+        {
+            var note = thinkPlusToggleNote;
+            _conversationStore.AppendMessage(session.Thread.Id, "user", text, "telegram:user");
+            _conversationStore.AppendMessage(session.Thread.Id, "assistant", note, "telegram:think_plus_toggle");
+            await EnsureConversationTitleFromFirstTurnAsync(session.Thread.Id, "system", "-", cancellationToken);
+            SetCurrentTelegramExecutionMetadata(null, 0, 0, "-");
+            _auditLogger.Log(
+                "telegram",
+                "think_plus_toggle",
+                thinkPlusActiveForTelegram ? "on" : "off",
+                $"thread={session.Thread.Id}"
+            );
+            return note;
+        }
+
         var isSkillContextQuery = LooksLikeProjectContextRequest(skillQueryText)
             || LooksLikeSkillCreationRequest(skillQueryText)
             || LooksLikeSkillDeactivationRequest(skillQueryText)
@@ -1861,10 +1899,21 @@ public sealed partial class CommandService
             return blockedResponseText;
         }
 
-        // 스킬·프로젝트 컨텍스트가 들어간 입력은 압축 우회 (압축 시 [Active Skill] 본문이 사라짐).
-        var preparedInput = (isSkillContextQuery || hasStickyActiveSkillForTelegram)
+        // 스킬·프로젝트 컨텍스트 또는 Think+ 가 들어간 입력은 압축 우회 (압축 시 컨텍스트가 사라짐).
+        var preparedInput = (isSkillContextQuery || hasStickyActiveSkillForTelegram || thinkPlusActiveForTelegram)
             ? sharedPrepared.Text
             : await PrepareTelegramInputAsync(sharedPrepared.Text, cancellationToken);
+
+        // Think+ 활성이면 sharedPrepared 앞에 web context prepend
+        if (thinkPlusActiveForTelegram)
+        {
+            var thinkPlusContext = await BuildThinkPlusContextAsync(text ?? string.Empty, "telegram", cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrEmpty(thinkPlusContext))
+            {
+                preparedInput = thinkPlusContext + preparedInput;
+            }
+        }
+
         var thinkingLevel = ResolveTelegramThinkingLevel(snapshot, text);
         var profiledInput = BuildTelegramProfilePrompt(preparedInput, snapshot.Profile, thinkingLevel);
         var contextualProfiledInput = BuildContextualInput(session.SessionId, profiledInput, session.LinkedMemoryNotes);

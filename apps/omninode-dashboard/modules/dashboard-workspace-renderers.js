@@ -61,6 +61,35 @@ function renderMicIcon(e) {
   );
 }
 
+function renderThinkPlusIcon(e) {
+  // 작은 뇌 도형 + 우상단 + 마크
+  return e(
+    "svg",
+    { viewBox: "0 0 24 24", className: "icon-svg", "aria-hidden": "true" },
+    e("path", {
+      d: "M9 5.5C7 5.5 5.5 7 5.5 9c0 .8.3 1.5.8 2-.5.5-.8 1.2-.8 2 0 1.4.9 2.6 2.2 3-.1.3-.2.6-.2 1 0 1.5 1.3 2.8 2.8 2.8.6 0 1.2-.2 1.6-.5v-13c-.5-.5-1.2-.8-1.9-.8Z",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "1.6",
+      strokeLinejoin: "round"
+    }),
+    e("path", {
+      d: "M15 5.5c2 0 3.5 1.5 3.5 3.5 0 .8-.3 1.5-.8 2 .5.5.8 1.2.8 2 0 1.4-.9 2.6-2.2 3 .1.3.2.6.2 1 0 1.5-1.3 2.8-2.8 2.8-.6 0-1.2-.2-1.6-.5v-13c.5-.5 1.2-.8 1.9-.8Z",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "1.6",
+      strokeLinejoin: "round"
+    }),
+    e("circle", { cx: "19.5", cy: "5.5", r: "3.2", fill: "currentColor", className: "think-plus-badge" }),
+    e("path", {
+      d: "M19.5 4v3M18 5.5h3",
+      stroke: "var(--surface, #ffffff)",
+      strokeWidth: "1.4",
+      strokeLinecap: "round"
+    })
+  );
+}
+
 function renderCloseIcon(e) {
   return e(
     "svg",
@@ -153,7 +182,11 @@ export function renderComposerInputBar(props) {
     selectedSkill,
     onClearSkill,
     speechState,
-    onStartVoiceInput
+    onStartVoiceInput,
+    thinkPlusVisible,
+    thinkPlusEnabled,
+    thinkPlusReady,
+    onToggleThinkPlus
   } = props;
   const skillName = `${selectedSkill?.name || ""}`.trim();
   const skillScope = `${selectedSkill?.scope || "project"}`.trim() || "project";
@@ -206,6 +239,18 @@ export function renderComposerInputBar(props) {
           title: attachmentPanelVisible ? "첨부 패널 닫기" : "첨부 패널 열기",
           onClick: toggleAttachmentPanel
         }, renderPaperclipIcon(e)),
+        thinkPlusVisible && typeof onToggleThinkPlus === "function"
+          ? e("button", {
+              type: "button",
+              className: `composer-icon-btn think-plus ${thinkPlusEnabled ? "active" : ""}`,
+              title: thinkPlusReady === false
+                ? "Think+ 모드 (Gemini API 키가 필요합니다)"
+                : (thinkPlusEnabled ? "Think+ 모드 끄기 (현재 ON)" : "Think+ 모드 켜기 (최신 웹 검색 + 추론)"),
+              onClick: onToggleThinkPlus,
+              disabled: thinkPlusReady === false,
+              "aria-pressed": thinkPlusEnabled ? "true" : "false"
+            }, renderThinkPlusIcon(e))
+          : null,
         e("button", {
           type: "button",
           className: "composer-icon-btn send",

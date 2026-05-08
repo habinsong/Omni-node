@@ -194,7 +194,8 @@ internal sealed class WsAiCommandDispatcher
                         message.CodexModel,
                         message.RequestId,
                         message.SkillName,
-                        message.SkillScope
+                        message.SkillScope,
+                        message.ThinkPlus == true
                     ),
                     cancellationToken,
                     stream
@@ -387,7 +388,8 @@ internal sealed class WsAiCommandDispatcher
                         message.Attachments,
                         message.WebUrls,
                         message.WebSearchEnabled,
-                        null
+                        null,
+                        message.ThinkPlus == true
                     ),
                     cancellationToken,
                     progress

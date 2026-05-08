@@ -108,6 +108,9 @@ public sealed partial class CommandService :
     private SkillCreateDirective? _skillCreateDirective;
     private SkillCreateDirective SkillCreateDirective =>
         _skillCreateDirective ??= new SkillCreateDirective(_config);
+    private SkillFileService? _skillFileService;
+    private SkillFileService SkillFiles =>
+        _skillFileService ??= new SkillFileService(_config);
     private readonly ConcurrentDictionary<string, string> _activeSkillByThread = new(StringComparer.Ordinal);
     private readonly CopilotCliWrapper _copilotWrapper;
     private readonly CodexCliWrapper _codexWrapper;

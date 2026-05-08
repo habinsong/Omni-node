@@ -79,7 +79,8 @@ public sealed record ChatRequest(
     string? CodexModel = null,
     string? RequestId = null,
     string? SkillName = null,
-    string? SkillScope = null
+    string? SkillScope = null,
+    bool ThinkPlusEnabled = false
 );
 public sealed record MultiChatRequest(
     string Input,
@@ -235,7 +236,8 @@ public sealed record CodingRunRequest(
     IReadOnlyList<InputAttachment>? Attachments = null,
     IReadOnlyList<string>? WebUrls = null,
     bool WebSearchEnabled = true,
-    string? CodexModel = null
+    string? CodexModel = null,
+    bool ThinkPlusEnabled = false
 );
 public sealed record CodingWorkerResult(
     string Provider,
