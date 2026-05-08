@@ -2508,6 +2508,11 @@ public sealed partial class CommandService
         builder.AppendLine("- 현재 사용자 입력을 최우선으로 따른다.");
         builder.AppendLine("- 선호 메모리가 있더라도 현재 입력과 충돌하면 즉시 무시한다.");
         builder.AppendLine("- 사실/수치/날짜/가격/사건 정보는 웹 근거만 사용하고 추정하지 마라.");
+        builder.AppendLine("- 사용자가 특정 사이트/매체(AccuWeather, weather.com, 인베스팅닷컴, investing.com, 연합뉴스, Bloomberg, naver.com 등)를 언급하면 그 도메인을 우선 검색해라. 검색어에 site: 연산자 또는 도메인명을 포함해 1차 시도해라.");
+        builder.AppendLine("- 1차 검색에서 정보가 충분하지 않으면 키워드를 바꿔(영문/한글 변환, 동의어, 기간 명시, 단위 명시, 추가 매체 포함) 최소 2~3차례 재검색해라.");
+        builder.AppendLine("- 검색 결과에 명시되지 않은 구체 수치(가격, 지수, 기온, 강수확률, 통계, 날짜 등)는 절대 만들어내지 마라. 결과에 없으면 '검색 결과에 해당 데이터가 명확하게 없습니다'라고 솔직히 답하고 어디서 확인하면 되는지 안내만 해라.");
+        builder.AppendLine("- 미래 시점(수개월~수년 뒤) 예측은 일반적으로 부정확하다는 점을 명시하고, 명시된 공식 예보/장기 전망 출처에서 인용한 값만 사용해라.");
+        builder.AppendLine("- 답변에 '확인 중', '확인했습니다', '추출 완료', '잠시만요' 같은 진행 안내문이나 거짓 보고를 넣지 마라. 결론과 핵심부터 직접 작성해라.");
         if (selfDecideNeedWeb)
         {
             builder.AppendLine("- 먼저 사용자 입력만 보고 웹검색 필요 여부를 스스로 판단해라.");
