@@ -258,10 +258,12 @@ import {
     { id: "gemini-3.1-pro-preview", label: "Gemini: gemini-3.1-pro-preview" },
     { id: "gemini-3.1-flash-lite-preview", label: "Gemini: gemini-3.1-flash-lite-preview" }
   ];
-  const DEFAULT_CEREBRAS_MODEL = "gpt-oss-120b";
+  const DEFAULT_CEREBRAS_MODEL = "llama-4-scout-17b-16e-instruct";
   const CEREBRAS_MODEL_CHOICES = [
     { id: DEFAULT_CEREBRAS_MODEL, label: `Cerebras 기본: ${DEFAULT_CEREBRAS_MODEL}` },
-    { id: "zai-glm-4.7", label: "Cerebras: zai-glm-4.7 (preview)" }
+    { id: "llama-4-maverick-17b-128e-instruct", label: "Cerebras: llama-4-maverick-17b-128e-instruct" },
+    { id: "llama3.3-70b", label: "Cerebras: llama3.3-70b" },
+    { id: "qwen-3-32b", label: "Cerebras: qwen-3-32b" }
   ];
   const UI_PREFERENCES_KEY = "omninode_ui_preferences_v1";
   const DEFAULT_UI_PREFERENCES = {

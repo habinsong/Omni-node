@@ -30,7 +30,7 @@ public sealed record GeminiUrlContextChatResponse(
 public sealed class LlmRouter : IDisposable
 {
     private const int ChatContinuationRounds = 4;
-    private const string CerebrasFallbackModel = "gpt-oss-120b";
+    private const string CerebrasFallbackModel = "llama-4-scout-17b-16e-instruct";
     private static readonly Regex GroqMaxTokensLimitRegex = new(
         @"max_tokens`?\s*must be less than or equal to `?(?<limit>\d+)`?|maximum value for `max_tokens` is(?: less than the `context_window` for this model)?\s*`?(?<limit2>\d+)`?",
         RegexOptions.Compiled | RegexOptions.IgnoreCase
