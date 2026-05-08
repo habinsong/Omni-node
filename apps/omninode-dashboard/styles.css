@@ -14844,190 +14844,2175 @@ video {
 
 /* Skills management panel */
 .skills-root {
-  display: grid;
-  grid-template-columns: minmax(260px, 320px) 1fr;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  min-height: 0;
+}
+
+.skills-page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 16px;
-  padding: 16px;
-  height: 100%;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.skills-page-head h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.skills-page-head p {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.skills-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.skills-status-bar {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  background: var(--surface-soft);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.skills-status-bar.ok {
+  border-color: var(--ok-border);
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.skills-status-bar.error {
+  border-color: rgba(217, 48, 37, 0.24);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.skills-status-bar.info {
+  border-color: #c9d8f6;
+  background: #f4f7ff;
+  color: var(--accent);
+}
+
+.skills-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.skills-metric {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 12px 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.skills-metric span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.skills-metric strong {
+  display: block;
+  min-width: 0;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 19px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skills-metric p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.skills-workbench {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 14px;
+  min-height: 0;
+}
+
+.skills-sidebar,
+.skills-editor {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
   min-height: 0;
 }
 
 .skills-sidebar {
-  background: var(--surface-1, #1b1b1f);
-  border: 1px solid var(--border-1, #2a2a30);
-  border-radius: 10px;
-  padding: 12px;
-  overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-height: 0;
+  gap: 12px;
+  padding: 14px;
+  overflow: hidden;
 }
 
-.skills-sidebar-header {
+.skills-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.skills-sidebar-head strong {
+  display: block;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.skills-sidebar-head span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.skills-search-field,
+.skills-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skills-search-field span,
+.skills-field span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.skills-field small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.skills-field .input.invalid {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(217, 48, 37, 0.08);
+}
+
+.skills-field-error {
+  color: var(--danger) !important;
+}
+
+.skills-list {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 532px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.skills-list-item {
+  width: 100%;
+  min-height: 100px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  padding: 12px;
+  color: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+  transition: border-color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.skills-list-item:hover {
+  border-color: #c6d5ef;
+  background: #fbfdff;
+}
+
+.skills-list-item.active {
+  border-color: #b7caf2;
+  background: var(--accent-light);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.skills-list-main {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;
 }
 
-.skills-sidebar-actions {
-  display: flex;
-  gap: 6px;
+.skills-list-main strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.skills-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.skills-list-item {
-  border: 1px solid var(--border-1, #2a2a30);
-  border-radius: 8px;
-  padding: 10px;
-  cursor: pointer;
-  background: var(--surface-2, #222226);
-  transition: background-color 120ms ease, border-color 120ms ease;
-}
-
-.skills-list-item:hover {
-  border-color: var(--accent, #4f8cff);
-}
-
-.skills-list-item.active {
-  border-color: var(--accent, #4f8cff);
-  background: var(--surface-3, #2a2a35);
-}
-
-.skills-list-name {
-  font-weight: 600;
-  margin-bottom: 2px;
-}
-
-.skills-list-scope {
-  font-size: 11px;
-  color: var(--muted, #9ca3af);
-  margin-bottom: 4px;
-}
-
-.skills-list-desc {
+.skills-list-item p {
+  display: -webkit-box;
+  margin-top: 7px;
+  overflow: hidden;
+  color: var(--text-secondary);
   font-size: 12px;
-  color: var(--muted-2, #b3b3b8);
-  line-height: 1.4;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-.skills-empty,
-.skills-editor-empty {
-  color: var(--muted, #9ca3af);
-  padding: 16px;
-  text-align: center;
+.skills-list-path {
+  display: block;
+  margin-top: 8px;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skills-scope-chip {
+  flex: 0 0 auto;
+  border: 1px solid #d6e4f5;
+  border-radius: 999px;
+  background: #f3f7fd;
+  padding: 3px 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.skills-scope-chip.project {
+  border-color: var(--ok-border);
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.skills-scope-chip.global {
+  border-color: #d9ccff;
+  background: #f4f0ff;
+  color: #6941c6;
+}
+
+.skills-empty {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 18px;
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.5;
+  text-align: center;
+}
+
+.skills-create-strip {
+  width: 100%;
+  border: 1px dashed #b7caf2;
+  border-radius: var(--radius-sm);
+  background: #f7faff;
+  padding: 11px;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.skills-create-strip:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .skills-editor {
-  background: var(--surface-1, #1b1b1f);
-  border: 1px solid var(--border-1, #2a2a30);
-  border-radius: 10px;
-  padding: 16px;
-  overflow: auto;
-  min-height: 0;
-}
-
-.skills-editor-form {
   display: flex;
   flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  overflow: auto;
+}
+
+.skills-editor-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.skills-editor-eyebrow {
+  display: inline-flex;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.skills-editor-head h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 21px;
+  line-height: 1.25;
+}
+
+.skills-editor-head p {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.skills-editor-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.skills-editor-meta span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  padding: 5px 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.skills-usage-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #d7e3f8;
+  border-radius: var(--radius-sm);
+  background: #f8fbff;
+  padding: 12px 14px;
+}
+
+.skills-usage-card strong {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.skills-usage-card p {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+
+.skills-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
-.skills-editor-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.skills-editor-label {
-  font-size: 12px;
-  color: var(--muted, #9ca3af);
-  font-weight: 600;
-}
-
-.skills-editor-input,
-.skills-editor-textarea {
-  background: var(--surface-2, #222226);
-  border: 1px solid var(--border-1, #2a2a30);
-  border-radius: 6px;
-  padding: 8px 10px;
-  color: inherit;
-  font: inherit;
-  outline: none;
-}
-
-.skills-editor-input:focus,
-.skills-editor-textarea:focus {
-  border-color: var(--accent, #4f8cff);
-}
-
-.skills-editor-input.invalid {
-  border-color: #d65a5a;
-}
-
-.skills-editor-textarea {
-  resize: vertical;
-  min-height: 280px;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+.skills-readonly-field {
+  min-height: 40px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  padding: 9px 11px;
+  color: var(--text-secondary);
   font-size: 13px;
-  line-height: 1.5;
+  font-weight: 700;
 }
 
-.skills-editor-readonly {
-  padding: 8px 10px;
-  background: var(--surface-2, #222226);
-  border: 1px dashed var(--border-1, #2a2a30);
-  border-radius: 6px;
-  color: var(--muted-2, #b3b3b8);
-}
-
-.skills-editor-hint.error {
-  font-size: 11px;
-  color: #d65a5a;
-}
-
-.skills-editor-status {
-  padding: 8px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-}
-
-.skills-editor-status.ok {
-  background: rgba(60, 160, 100, 0.15);
-  color: #5fbf85;
-  border: 1px solid rgba(60, 160, 100, 0.4);
-}
-
-.skills-editor-status.error {
-  background: rgba(214, 90, 90, 0.15);
-  color: #ef8e8e;
-  border: 1px solid rgba(214, 90, 90, 0.4);
-}
-
-.skills-editor-status.info {
-  background: rgba(79, 140, 255, 0.15);
-  color: #8fb4ff;
-  border: 1px solid rgba(79, 140, 255, 0.4);
+.skills-body-input {
+  min-height: 360px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .skills-editor-actions {
   display: flex;
+  align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  padding-top: 4px;
+}
+
+.skills-editor-empty,
+.skills-editor-loading {
+  display: grid;
+  min-height: 360px;
+  place-content: center;
+  color: var(--muted);
+  text-align: center;
+}
+
+.skills-editor-empty strong,
+.skills-editor-loading strong {
+  color: var(--text);
+  font-size: 18px;
+}
+
+.skills-editor-empty p,
+.skills-editor-loading p {
+  max-width: 360px;
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.skills-loading-mark {
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  margin: 0 auto 12px;
+  place-items: center;
+  border: 1px solid #d7e3f8;
+  border-radius: 999px;
+  background: #f8fbff;
+  color: var(--accent);
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.btn.danger {
+  border-color: rgba(217, 48, 37, 0.28);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.btn.icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 16px;
 }
 
 @media (max-width: 900px) {
   .skills-root {
+    padding: 14px;
+  }
+
+  .skills-page-head,
+  .skills-editor-head,
+  .skills-usage-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .skills-head-actions,
+  .skills-editor-actions {
+    justify-content: stretch;
+  }
+
+  .skills-head-actions .btn,
+  .skills-editor-actions .btn {
+    flex: 1;
+  }
+
+  .skills-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .skills-root {
+    min-height: auto;
+  }
+
+  .skills-workbench,
+  .skills-editor-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .skills-list {
+    max-height: 320px;
+  }
+}
+
+@media (max-width: 560px) {
+  .skills-overview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Usability extensions: streaming composer, full-text search, preferences, command palette, theme. */
+.conversation-search-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.conversation-search-btn,
+.conversation-search-clear {
+  min-height: 34px;
+  height: 34px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.conversation-search-status {
+  margin-top: 7px;
+  padding: 7px 10px;
+  border: 1px solid rgba(210, 222, 238, 0.92);
+  border-radius: 12px;
+  background: rgba(244, 248, 255, 0.82);
+  color: #58708d;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.conversation-search-status.error {
+  border-color: rgba(217, 48, 37, 0.22);
+  background: rgba(252, 232, 230, 0.72);
+  color: #a13b33;
+}
+
+.composer-skill-strip,
+.composer-speech-error {
+  border: 1px solid rgba(183, 205, 244, 0.9);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.96), rgba(229, 239, 255, 0.94));
+  color: #244f91;
+  box-shadow: 0 10px 22px rgba(39, 120, 242, 0.08);
+}
+
+.composer-skill-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px 9px 12px;
+}
+
+.composer-skill-copy {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.composer-skill-copy strong {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 900;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.composer-skill-scope {
+  flex: 0 0 auto;
+  min-height: 24px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(180, 202, 238, 0.82);
+  color: #315f9f;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.composer-skill-scope.global {
+  color: #7b4d16;
+  border-color: rgba(224, 194, 138, 0.86);
+  background: rgba(255, 249, 236, 0.86);
+}
+
+.composer-skill-clear {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(183, 205, 244, 0.9);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.84);
+  color: #41699f;
+  cursor: pointer;
+}
+
+.composer-skill-clear .icon-svg {
+  width: 14px;
+  height: 14px;
+}
+
+.composer-speech-error {
+  padding: 8px 11px;
+  border-color: rgba(217, 48, 37, 0.22);
+  background: rgba(252, 232, 230, 0.76);
+  color: #a13b33;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.composer-icon-btn.mic.active {
+  border-color: #9fc0f4;
+  background: #e8f0ff;
+  color: #245eb9;
+  box-shadow: 0 12px 24px rgba(39, 120, 242, 0.16);
+}
+
+.composer-icon-btn.mic.recording {
+  position: relative;
+  border-color: #ef4444;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+  box-shadow: 0 14px 28px rgba(239, 68, 68, 0.26);
+}
+
+.composer-icon-btn.mic.recording::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  background: #22c55e;
+}
+
+.ui-preferences-panel {
+  gap: 16px;
+}
+
+.settings-visual-card.preferences {
+  background:
+    radial-gradient(circle at top right, rgba(39, 120, 242, 0.16), transparent 46%),
+    linear-gradient(180deg, rgba(250, 253, 255, 0.98), rgba(239, 246, 255, 0.96));
+}
+
+.preference-section {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(214, 224, 236, 0.92);
+  border-radius: 18px;
+  background: rgba(248, 251, 255, 0.84);
+}
+
+.preference-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.preference-section-head strong {
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--text);
+}
+
+.preference-section-head span {
+  max-width: 360px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.theme-choice-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.theme-choice {
+  min-height: 42px;
+  border: 1px solid rgba(214, 224, 236, 0.96);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #53677f;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.theme-choice.active {
+  border-color: #9dbcf2;
+  background: linear-gradient(180deg, #edf4ff 0%, #dce9ff 100%);
+  color: #245eb9;
+  box-shadow: 0 10px 20px rgba(39, 120, 242, 0.12);
+}
+
+.shortcut-conflict {
+  padding: 9px 11px;
+  border: 1px solid rgba(217, 48, 37, 0.24);
+  border-radius: 12px;
+  background: rgba(252, 232, 230, 0.78);
+  color: #a13b33;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.shortcut-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(120px, 0.75fr) minmax(150px, 1fr);
+  gap: 6px 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(214, 224, 236, 0.92);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.shortcut-row.conflict {
+  border-color: rgba(217, 48, 37, 0.32);
+}
+
+.shortcut-row > span {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.shortcut-row .input {
+  height: 38px;
+  min-width: 0;
+  font-family: "SFMono-Regular", "Consolas", monospace;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.shortcut-row small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.tab-shortcut-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tab-shortcut-strip span {
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(214, 224, 236, 0.92);
+  background: rgba(255, 255, 255, 0.72);
+  color: #596d86;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.backup-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.backup-import-label {
+  position: relative;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.backup-import-label.disabled {
+  opacity: 0.58;
+  pointer-events: none;
+}
+
+.backup-import-label input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.backup-status {
+  padding: 10px 12px;
+  border: 1px solid rgba(214, 224, 236, 0.92);
+  border-radius: 12px;
+  background: rgba(244, 248, 255, 0.84);
+  color: #526b87;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.backup-preview-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(183, 205, 244, 0.9);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.96), rgba(250, 252, 255, 0.94));
+}
+
+.backup-preview-head,
+.backup-preview-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.backup-preview-head strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.backup-preview-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.backup-conflict-list {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #596d86;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.backup-conflict-list.clean {
+  color: #167647;
+}
+
+.backup-conflict-list code {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #2f517d;
+}
+
+.command-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: start center;
+  padding: 10vh 18px 18px;
+  background: rgba(10, 18, 32, 0.34);
+  backdrop-filter: blur(10px);
+}
+
+.command-palette {
+  width: min(720px, 100%);
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(199, 213, 233, 0.96);
+  border-radius: 22px;
+  background: rgba(251, 253, 255, 0.98);
+  box-shadow: 0 30px 70px rgba(13, 28, 52, 0.28);
+}
+
+.command-palette-input-wrap {
+  padding: 4px;
+  border: 1px solid rgba(214, 224, 236, 0.92);
+  border-radius: 16px;
+  background: rgba(244, 248, 255, 0.9);
+}
+
+.command-palette-input {
+  width: 100%;
+  min-height: 50px;
+  border: none;
+  outline: none;
+  border-radius: 12px;
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.command-palette-results {
+  max-height: min(56vh, 540px);
+  display: grid;
+  gap: 6px;
+  overflow: auto;
+}
+
+.command-palette-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 4px 12px;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.command-palette-item:hover,
+.command-palette-item:focus-visible {
+  border-color: rgba(183, 205, 244, 0.9);
+  background: linear-gradient(180deg, rgba(240, 247, 255, 0.96), rgba(249, 252, 255, 0.96));
+  outline: none;
+}
+
+.command-palette-group {
+  grid-row: span 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  border-radius: 999px;
+  background: rgba(232, 240, 255, 0.92);
+  color: #2d5fae;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.command-palette-item strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 900;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.command-palette-item small {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.command-palette-empty {
+  padding: 28px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0e1521;
+  --surface: #151e2b;
+  --surface-soft: #101927;
+  --surface-hover: #1c2838;
+  --line: #26364a;
+  --line-strong: #34475e;
+  --text: #e8edf5;
+  --text-secondary: #aab8ca;
+  --muted: #8292a8;
+  --accent: #72a7ff;
+  --accent-hover: #8bb7ff;
+  --accent-light: #1c3154;
+  --ok-bg: #102b20;
+  --ok-border: #245b42;
+  --warn-bg: #332713;
+  --warn-border: #785a20;
+  --danger-bg: #341b1e;
+  --shadow-sm: 0 10px 24px rgba(0, 0, 0, 0.24);
+  --shadow-md: 0 18px 40px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 26px 56px rgba(0, 0, 0, 0.38);
+}
+
+:root[data-theme="dark"] body {
+  background:
+    radial-gradient(circle at top left, rgba(60, 83, 125, 0.28), transparent 22%),
+    radial-gradient(circle at right 18%, rgba(54, 84, 138, 0.26), transparent 24%),
+    linear-gradient(180deg, #101827 0%, #0b111c 100%);
+}
+
+:root[data-theme="dark"] .main-shell,
+:root[data-theme="dark"] .chat-panel,
+:root[data-theme="dark"] .conversation-panel,
+:root[data-theme="dark"] .global-nav,
+:root[data-theme="dark"] .thread-header-shell,
+:root[data-theme="dark"] .composer,
+:root[data-theme="dark"] .settings-shell,
+:root[data-theme="dark"] .skills-root,
+:root[data-theme="dark"] .settings-root-panel,
+:root[data-theme="dark"] .panel,
+:root[data-theme="dark"] .support-card,
+:root[data-theme="dark"] .memory-dock,
+:root[data-theme="dark"] .coding-result,
+:root[data-theme="dark"] .command-palette {
+  background: rgba(18, 27, 40, 0.94);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .message-list,
+:root[data-theme="dark"] .thread-inline-carousel-body,
+:root[data-theme="dark"] .result-carousel-message-list {
+  background:
+    radial-gradient(circle at top right, rgba(79, 102, 143, 0.22), transparent 24%),
+    radial-gradient(circle at left 38%, rgba(55, 93, 158, 0.14), transparent 18%),
+    linear-gradient(180deg, #111b2a 0%, #0e1622 100%);
+}
+
+:root[data-theme="dark"] .bubble.assistant,
+:root[data-theme="dark"] .conversation-item,
+:root[data-theme="dark"] .folder-toggle,
+:root[data-theme="dark"] .composer-input-shell,
+:root[data-theme="dark"] .rich-input,
+:root[data-theme="dark"] .input,
+:root[data-theme="dark"] select.input,
+:root[data-theme="dark"] .textarea,
+:root[data-theme="dark"] .preference-section,
+:root[data-theme="dark"] .shortcut-row,
+:root[data-theme="dark"] .backup-conflict-list,
+:root[data-theme="dark"] .command-palette-input,
+:root[data-theme="dark"] .command-palette-input-wrap {
+  background: rgba(20, 31, 46, 0.96);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .conversation-search,
+:root[data-theme="dark"] .folder-search-input,
+:root[data-theme="dark"] .thread-modebar,
+:root[data-theme="dark"] .thread-info-panel,
+:root[data-theme="dark"] .settings-visual-card,
+:root[data-theme="dark"] .settings-form-card,
+:root[data-theme="dark"] .settings-section,
+:root[data-theme="dark"] .settings-mini-stat,
+:root[data-theme="dark"] .settings-summary-card,
+:root[data-theme="dark"] .backup-preview-card,
+:root[data-theme="dark"] .composer-skill-strip,
+:root[data-theme="dark"] .composer-icon-btn {
+  background: rgba(17, 27, 41, 0.92);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .item-preview,
+:root[data-theme="dark"] .thread-subline,
+:root[data-theme="dark"] .preference-section-head span,
+:root[data-theme="dark"] .shortcut-row small,
+:root[data-theme="dark"] .command-palette-item small {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .command-palette-backdrop {
+  background: rgba(3, 7, 14, 0.62);
+}
+
+:root[data-theme="dark"] .command-palette-item:hover,
+:root[data-theme="dark"] .command-palette-item:focus-visible,
+:root[data-theme="dark"] .theme-choice.active,
+:root[data-theme="dark"] .conversation-item.active {
+  background: rgba(29, 49, 78, 0.94);
+  border-color: #426591;
+}
+
+:root[data-theme="dark"] .composer-icon-btn.send {
+  background: linear-gradient(135deg, #367ee8 0%, #1f5dc0 100%);
+  color: #ffffff;
+}
+
+@media (max-width: 900px) {
+  .shortcut-grid,
+  .backup-action-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .preference-section-head,
+  .backup-preview-head,
+  .backup-preview-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .preference-section-head span {
+    max-width: none;
+    text-align: left;
+  }
+}
+
+@media (max-width: 640px) {
+  .conversation-search-actions,
+  .theme-choice-row,
+  .shortcut-row,
+  .command-palette-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .command-palette-backdrop {
+    padding-top: 7vh;
+  }
+
+  .command-palette-group {
+    grid-row: auto;
+    width: fit-content;
+    justify-content: flex-start;
+    padding: 0 10px;
+  }
+
+  .composer-skill-copy {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
+/* Dark mode coverage v2: final override for every dashboard surface. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --dark-bg-0: #070b12;
+  --dark-bg-1: #0c1320;
+  --dark-bg-2: #101927;
+  --dark-surface-0: #111a29;
+  --dark-surface-1: #162132;
+  --dark-surface-2: #1c2a3d;
+  --dark-border: #2a3a50;
+  --dark-border-strong: #3a506b;
+  --dark-text: #e8eef8;
+  --dark-muted: #9aa9bd;
+  --dark-muted-2: #74869e;
+  --dark-accent: #76a9ff;
+  --dark-accent-soft: #1b3357;
+  --dark-ok-bg: #102a1f;
+  --dark-ok-text: #71d79a;
+  --dark-warn-bg: #342712;
+  --dark-warn-text: #f5c064;
+  --dark-danger-bg: #351a20;
+  --dark-danger-text: #ff8f8a;
+}
+
+:root[data-theme="dark"] html,
+:root[data-theme="dark"] body,
+:root[data-theme="dark"] #root,
+:root[data-theme="dark"] .app-shell,
+:root[data-theme="dark"] .main-shell {
+  background:
+    radial-gradient(circle at top left, rgba(62, 86, 132, 0.2), transparent 24%),
+    radial-gradient(circle at top right, rgba(42, 67, 111, 0.18), transparent 26%),
+    linear-gradient(180deg, var(--dark-bg-1), var(--dark-bg-0)) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .global-nav,
+  .conversation-panel,
+  .chat-panel,
+  .thread-header-shell,
+  .thread-info-panel,
+  .thread-modebar,
+  .thread-support-stack,
+  .composer,
+  .settings,
+  .settings-shell,
+  .settings-standalone-shell,
+  .settings-root-panel,
+  .settings-root-panel-notebook,
+  .settings-root-panel-automation,
+  .settings-detail-stack,
+  .settings-detail-item,
+  .panel,
+  .settings-optimized-panel,
+  .settings-summary,
+  .settings-summary-card,
+  .settings-side-nav,
+  .settings-group-panels,
+  .routine-tab,
+  .routine-layout,
+  .routine-left-column,
+  .routine-primary-column,
+  .routine-secondary-column,
+  .routine-create-panel,
+  .routine-library-panel,
+  .routine-detail-panel,
+  .routine-wizard,
+  .logic-tab-shell,
+  .logic-command-bar,
+  .logic-section-nav,
+  .logic-detail-pane,
+  .logic-canvas-pane,
+  .logic-canvas-workspace,
+  .logic-canvas-mobile-workspace,
+  .coding-result,
+  .coding-output-panel,
+  .coding-runtime-panel,
+  .coding-execution-input-panel,
+  .refactor-panel,
+  .refactor-panel-modal,
+  .safe-refactor-dock,
+  .settings-notebooks-panel,
+  .notebooks-workbench-panel,
+  .notebook-shell,
+  .notebook-primary-column,
+  .notebook-side-column,
+  .notebook-documents-section,
+  .settings-plans-panel,
+  .settings-task-graph-panel,
+  .plans-workbench-panel,
+  .task-graph-workbench-panel,
+  .plans-workbench-shell,
+  .task-graph-workbench-shell,
+  .automation-root-layout,
+  .automation-root-nav,
+  .automation-root-stack,
+  .skills-root,
+  .skills-sidebar,
+  .skills-editor,
+  .modal-card,
+  .command-palette
+) {
+  background: var(--dark-surface-0) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] :where(
+  .support-card,
+  .memory-dock,
+  .bubble.assistant,
+  .pending-bubble,
+  .conversation-item,
+  .folder-toggle,
+  .folder-search-input,
+  .conversation-search,
+  .conversation-search-status,
+  .composer-input-shell,
+  .rich-input,
+  .compact-attachment-row,
+  .thread-inline-carousel-body,
+  .result-carousel-message-list,
+  .result-carousel-current,
+  .coding-summary,
+  .coding-preview-content,
+  .coding-result-meta,
+  .refactor-anchor-list,
+  .settings-form-card,
+  .settings-section,
+  .settings-mini-stat,
+  .settings-info-row,
+  .settings-provider-key-card,
+  .settings-cli-card,
+  .settings-visual-card,
+  .settings-banner,
+  .settings-disclosure,
+  .settings-disclosure-body,
+  .settings-monitor-grid .monitor,
+  .table-wrap,
+  .screen,
+  .monitor,
+  .doctor-check-item,
+  .doctor-check-detail,
+  .doctor-summary-card,
+  .routing-policy-decision,
+  .routing-policy-row,
+  .plan-detail-card,
+  .plan-list-item,
+  .plan-metric-card,
+  .plans-create-card,
+  .plans-browser-list,
+  .plans-browser-detail,
+  .plans-list-column,
+  .plans-detail-column,
+  .plan-next-card,
+  .plan-next-item,
+  .task-graph-create-card,
+  .task-graph-next-card,
+  .task-graph-next-item,
+  .task-graph-browser-list,
+  .task-graph-browser-detail,
+  .task-graph-node-card,
+  .task-graph-output-card,
+  .task-graph-selected-card,
+  .task-graph-plan-hint,
+  .task-graph-metric-card,
+  .automation-llm-card,
+  .automation-route-item,
+  .automation-route-row,
+  .automation-route-compact,
+  .automation-model-summary,
+  .automation-model-static,
+  .automation-model-fixed,
+  .automation-root-nav-item,
+  .automation-route-details summary,
+  .notebook-feedback-bar,
+  .notebook-metric-card,
+  .notebook-editor-card,
+  .notebook-next-card,
+  .notebook-document-card,
+  .notebook-document-handoff,
+  .notebook-quick-card,
+  .skills-metric,
+  .skills-list-item,
+  .skills-usage-card,
+  .skills-readonly-field,
+  .skills-editor-meta span,
+  .skills-loading-mark,
+  .preference-section,
+  .shortcut-row,
+  .backup-preview-card,
+  .backup-conflict-list,
+  .backup-status,
+  .command-palette-input-wrap,
+  .command-palette-input,
+  .command-palette-item:hover,
+  .command-palette-item:focus-visible
+) {
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .message-list,
+  .logic-canvas-shell,
+  .logic-canvas-surface,
+  .logic-run-output-panel,
+  .logic-run-output-scroll,
+  .modal-content
+) {
+  background:
+    radial-gradient(circle at top right, rgba(63, 91, 145, 0.18), transparent 26%),
+    linear-gradient(180deg, var(--dark-bg-2), var(--dark-bg-1)) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .input,
+  select.input,
+  .textarea,
+  textarea,
+  input,
+  select,
+  .routine-input,
+  .plan-textarea,
+  .plan-workbench-textarea,
+  .plan-workbench-constraints,
+  .logic-config-textarea,
+  .logic-inspector-textarea,
+  .logic-json-textarea,
+  .logic-detail-json-textarea,
+  .notebook-textarea,
+  .skills-body-input,
+  .command-palette-input
+) {
+  background: #0f1724 !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] input::placeholder,
+:root[data-theme="dark"] textarea::placeholder {
+  color: var(--dark-muted-2) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .btn,
+  .nav-btn,
+  .mode-btn,
+  .thread-action-btn,
+  .composer-icon-btn,
+  .selection-toggle,
+  .theme-choice,
+  .shortcut-row .input,
+  .settings-side-nav-btn,
+  .settings-tree-child,
+  .responsive-section-tab,
+  .routine-wizard-step,
+  .routine-submit-btn,
+  .logic-command-section-button,
+  .logic-command-graph-button,
+  .logic-section-nav-item,
+  .logic-section-flow-row,
+  .logic-detail-list-row,
+  .logic-section-category,
+  .logic-node-category-tab,
+  .logic-node-library-item,
+  .plan-mode-card,
+  .skills-create-strip
+) {
+  background: var(--dark-surface-2) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] :where(
+  .btn:hover,
+  .nav-btn:hover,
+  .mode-btn:hover,
+  .thread-action-btn:hover,
+  .composer-icon-btn:hover,
+  .settings-side-nav-btn:hover,
+  .settings-tree-child:hover,
+  .logic-section-nav-item:hover,
+  .logic-section-flow-row:hover,
+  .logic-detail-list-row:hover,
+  .skills-list-item:hover
+) {
+  background: #223149 !important;
+  border-color: #46617f !important;
+}
+
+:root[data-theme="dark"] :where(
+  .nav-btn.active,
+  .mode-btn.active,
+  .thread-action-btn.active,
+  .conversation-item.active,
+  .folder-toggle.selected,
+  .settings-side-nav-btn.active,
+  .settings-tree-child.active,
+  .responsive-section-tab.active,
+  .routine-wizard-step.active,
+  .logic-section-nav-item.active,
+  .logic-section-flow-row.active,
+  .logic-detail-list-row.active,
+  .logic-section-category.active,
+  .logic-node-category-tab.active,
+  .plan-mode-card.active,
+  .automation-root-nav-item.active,
+  .theme-choice.active,
+  .skills-list-item.active
+) {
+  background: var(--dark-accent-soft) !important;
+  border-color: #4a78bd !important;
+  color: #dceaff !important;
+}
+
+:root[data-theme="dark"] :where(
+  h1,
+  h2,
+  h3,
+  h4,
+  strong,
+  .brand,
+  .thread-title,
+  .item-title,
+  .logic-command-section-button,
+  .logic-command-graph-button,
+  .logic-detail-head strong,
+  .logic-run-output-head strong,
+  .logic-run-output-final strong,
+  .logic-run-output-card-head strong,
+  .settings-panel-hero h2,
+  .settings-summary-card strong,
+  .plans-panel-head h2,
+  .plans-section-head-ux strong,
+  .skills-page-head h2,
+  .skills-editor-head h3,
+  .skills-list-main strong
+) {
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] :where(
+  p,
+  small,
+  .tiny,
+  .hint,
+  .brand-sub,
+  .nav-meta,
+  .item-preview,
+  .item-time,
+  .item-meta,
+  .thread-subline,
+  .thread-mode-hint,
+  .bubble-meta,
+  .pending-message,
+  .pending-route,
+  .pending-iteration,
+  .conversation-head-count,
+  .settings-panel-hero p,
+  .settings-summary-card span,
+  .settings-side-nav-btn small,
+  .settings-tree-child,
+  .settings-section-head p,
+  .plans-section-head-ux p,
+  .plan-metric-helper,
+  .task-graph-metric-helper,
+  .automation-route-name span,
+  .automation-route-top p,
+  .automation-route-details summary span,
+  .notebook-panel-head p,
+  .notebook-next-card p,
+  .notebook-document-card p,
+  .skills-page-head p,
+  .skills-field small,
+  .skills-list-item p,
+  .skills-list-path,
+  .skills-editor-head p,
+  .skills-usage-card p,
+  .command-palette-item small
+) {
+  color: var(--dark-muted) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .pill,
+  .meta-chip,
+  .tag-chip,
+  .settings-status-chip,
+  .thread-context-badge,
+  .conversation-search-status,
+  .attachment-compact-summary,
+  .folder-badge,
+  .logic-command-status,
+  .automation-root-nav-meta,
+  .skills-scope-chip,
+  .tab-shortcut-strip span,
+  .composer-skill-scope,
+  .command-palette-group
+) {
+  background: #1c2a3d !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-muted) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .pill.ok,
+  .settings-status-chip.ok,
+  .skills-scope-chip.project,
+  .logic-command-status.ok,
+  .backup-conflict-list.clean
+) {
+  background: var(--dark-ok-bg) !important;
+  border-color: #2f6b4d !important;
+  color: var(--dark-ok-text) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .pill.warn,
+  .logic-command-status.warn
+) {
+  background: var(--dark-warn-bg) !important;
+  border-color: #795d25 !important;
+  color: var(--dark-warn-text) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .btn.danger,
+  .action-delete-btn,
+  .error-banner,
+  .skills-status-bar.error,
+  .composer-speech-error,
+  .shortcut-conflict,
+  .conversation-search-status.error,
+  .logic-command-status.error
+) {
+  background: var(--dark-danger-bg) !important;
+  border-color: #7a343a !important;
+  color: var(--dark-danger-text) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .btn.primary,
+  .composer-icon-btn.send,
+  .thread-save-btn,
+  .conversation-new-btn
+) {
+  background: linear-gradient(135deg, #367ee8 0%, #1f5fc4 100%) !important;
+  border-color: #4b87dd !important;
+  color: #ffffff !important;
+}
+
+:root[data-theme="dark"] :where(
+  .model-table,
+  .settings-table-mini,
+  table,
+  th,
+  td
+) {
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] :where(pre, code, .monitor pre, .modal-content, .logic-run-output-text) {
+  background: #0b111b !important;
+  border-color: var(--dark-border) !important;
+  color: #d7e2f2 !important;
+}
+
+:root[data-theme="dark"] :where(
+  .logic-node-card,
+  .logic-palette-item-card,
+  .logic-node-frame,
+  .logic-node-doc-card,
+  .logic-selected-node-summary,
+  .logic-node-config-group
+) {
+  --logic-node-surface: #172235;
+  --logic-node-border: #34475e;
+  --logic-node-tint: #1d304d;
+  --logic-node-badge-bg: #203655;
+  --logic-node-badge-fg: #9fc4ff;
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] :where(
+  .logic-canvas-lines,
+  .logic-canvas-preview-overlay
+) {
+  color: #6e91c5 !important;
+}
+
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #3c4d65;
+}
+
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #526781;
+}
+
+/* Dark mode coverage v3: beat older light `!important` rules by tab root specificity. */
+:root[data-theme="dark"] body .workspace-grid,
+:root[data-theme="dark"] body .workspace-mobile-shell,
+:root[data-theme="dark"] body .routine-tab,
+:root[data-theme="dark"] body .logic-tab-shell,
+:root[data-theme="dark"] body .settings,
+:root[data-theme="dark"] body .settings-root-panel,
+:root[data-theme="dark"] body .skills-root {
+  background: var(--dark-bg-1) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body .workspace-grid .conversation-panel,
+:root[data-theme="dark"] body .workspace-grid .chat-panel,
+:root[data-theme="dark"] body .workspace-mobile-shell .conversation-panel,
+:root[data-theme="dark"] body .workspace-mobile-shell .chat-panel,
+:root[data-theme="dark"] body .routine-tab :is(.routine-hero, .routine-overview-card, .routine-create-panel, .routine-library-panel, .routine-detail-panel, .routine-section-card, .routine-edit-card, .routine-detail-disclosure, .routine-empty-card, .routine-progress-panel, .routine-wizard, .routine-wizard-stepnav, .routine-stats-card, .routine-history-card, .routine-run-card),
+:root[data-theme="dark"] body .logic-tab-shell :is(.logic-command-bar, .logic-section-nav, .logic-section-block, .logic-section-category-block, .logic-detail-pane, .logic-detail-head, .logic-detail-card, .logic-canvas-pane, .logic-canvas-shell, .logic-node-card, .logic-node-frame, .logic-inspector-card, .logic-selected-node-summary, .logic-node-doc-card, .logic-node-config-group, .logic-run-output-panel, .logic-run-output-card, .logic-run-output-final, .logic-run-output-text, .logic-section-empty, .logic-detail-empty, .logic-detail-empty-state),
+:root[data-theme="dark"] body .settings :is(.settings-shell, .settings-summary, .settings-summary-card, .settings-body, .settings-side-nav, .settings-detail-stack, .settings-detail-item, .settings-optimized-panel, .settings-form-card, .settings-section, .settings-info-grid, .settings-info-row, .settings-mini-stat, .settings-provider-key-card, .settings-cli-card, .settings-visual-card, .settings-banner, .settings-disclosure, .settings-disclosure-body, .settings-monitor-grid .monitor, .settings-group-panels, .settings-root-detail-stack),
+:root[data-theme="dark"] body .settings-root-panel-notebook :is(.settings-standalone-shell, .settings-notebooks-panel, .notebook-feedback-bar, .notebook-metric-card, .notebook-shell, .notebook-primary-column, .notebook-side-column, .notebook-editor-card, .notebook-next-card, .notebook-documents-section, .notebook-document-card, .notebook-document-handoff, .notebook-quick-card),
+:root[data-theme="dark"] body .settings-root-panel-automation :is(.settings-standalone-shell, .automation-root-layout, .automation-root-nav, .automation-root-stack, .automation-llm-card, .automation-route-item, .automation-route-row, .automation-route-compact, .automation-model-summary, .automation-model-static, .automation-model-fixed, .automation-route-details, .automation-route-details summary, .plans-workbench-panel, .task-graph-workbench-panel, .plans-workbench-shell, .task-graph-workbench-shell, .plans-create-card, .plan-next-card, .plan-next-item, .plan-metric-card, .plans-browser-shell, .plans-browser-list, .plans-browser-detail, .plans-list-column, .plans-detail-column, .plan-detail-card, .plan-list-item, .task-graph-create-card, .task-graph-next-card, .task-graph-next-item, .task-graph-metric-card, .task-graph-browser-shell, .task-graph-browser-list, .task-graph-browser-detail, .task-graph-node-card, .task-graph-output-card, .task-graph-selected-card, .task-graph-plan-hint),
+:root[data-theme="dark"] body .skills-root :is(.skills-page-head, .skills-status-bar, .skills-metric, .skills-workbench, .skills-sidebar, .skills-editor, .skills-list-item, .skills-usage-card, .skills-readonly-field, .skills-empty, .skills-create-strip, .skills-editor-empty, .skills-editor-loading),
+:root[data-theme="dark"] body :is(.panel, .modal-card, .command-palette, .table-wrap, .screen, .monitor, .doctor-panel, .doctor-check-item, .doctor-check-detail, .doctor-summary-card, .routing-policy-row, .routing-policy-decision, .tool-summary-card, .tool-ux-panel, .ops-panel) {
+  background: var(--dark-surface-0) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] body .workspace-grid :is(.thread-header-shell, .thread-modebar, .thread-info-panel, .message-list, .bubble.assistant, .pending-bubble, .thread-support-stack, .support-card, .memory-dock, .coding-result, .composer, .composer-input-shell, .rich-input, .conversation-item, .folder-toggle, .conversation-search, .folder-search-input),
+:root[data-theme="dark"] body .routine-tab :is(.routine-item, .routine-list-item, .routine-form-grid, .routine-kv, .routine-detail-grid, .routine-editor-section-head, .routine-detail-head, .routine-section-head, .routine-panel-hint, .routine-mode-control, .routine-retry-notify-grid),
+:root[data-theme="dark"] body .logic-tab-shell :is(.logic-section-nav-item, .logic-section-flow-row, .logic-detail-list-row, .logic-section-category, .logic-node-category-tab, .logic-node-library-item, .logic-palette-item-card, .logic-binding-mode-panel, .logic-binding-mode-panel-edge),
+:root[data-theme="dark"] body .settings :is(.settings-side-nav-btn, .settings-tree-child, .settings-status-chip, .settings-table-mini, .model-table, .settings-save-mode, .settings-field, .meta-field, .plan-mode-card, .plan-template-strip, .preference-section, .shortcut-row, .backup-preview-card, .backup-conflict-list, .backup-status),
+:root[data-theme="dark"] body .settings-root-panel-notebook :is(.notebook-tab-card, .notebook-doc-card, .notebook-document-actions, .notebook-current-state, .notebook-action-card),
+:root[data-theme="dark"] body .settings-root-panel-automation :is(.automation-root-nav-item, .automation-root-nav-meta, .automation-model-control, .automation-chain-details, .task-graph-selected-row, .task-graph-output-grid, .plan-mode-grid),
+:root[data-theme="dark"] body .skills-root :is(.skills-search-field, .skills-field, .skills-editor-meta span, .skills-scope-chip, .skills-loading-mark),
+:root[data-theme="dark"] body :is(.input, select.input, .textarea, textarea, input, select, table, thead, tbody, tr, th, td, pre, code) {
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] body .logic-tab-shell :is(.logic-canvas-shell, .logic-canvas-surface) {
+  background-color: var(--dark-bg-2) !important;
+  background-image:
+    linear-gradient(rgba(87, 112, 151, 0.18) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(87, 112, 151, 0.18) 1px, transparent 1px),
+    linear-gradient(rgba(87, 112, 151, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(87, 112, 151, 0.08) 1px, transparent 1px) !important;
+}
+
+:root[data-theme="dark"] body :is(.btn.primary, .composer-icon-btn.send, .thread-save-btn, .conversation-new-btn) {
+  background: linear-gradient(135deg, #367ee8 0%, #1f5fc4 100%) !important;
+  border-color: #4b87dd !important;
+  color: #ffffff !important;
+}
+
+:root[data-theme="dark"] body .composer-icon-btn.mic.recording {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  border-color: #f87171 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2), 0 14px 28px rgba(239, 68, 68, 0.28) !important;
+}
+
+:root[data-theme="dark"] body .composer-icon-btn.mic.recording::after {
+  border-color: var(--dark-surface-0) !important;
+  background: #22c55e !important;
+}
+
+:root[data-theme="dark"] body :is(.nav-btn.active, .mode-btn.active, .settings-side-nav-btn.active, .settings-tree-child.active, .responsive-section-tab.active, .routine-wizard-step.active, .logic-section-nav-item.active, .logic-section-flow-row.active, .logic-detail-list-row.active, .automation-root-nav-item.active, .skills-list-item.active, .conversation-item.active, .folder-toggle.selected) {
+  background: var(--dark-accent-soft) !important;
+  border-color: #4a78bd !important;
+  color: #dceaff !important;
+}
+
+:root[data-theme="dark"] body :is(.empty, .hint, .tiny, small, p, .item-preview, .thread-subline, .settings-panel-hero p, .plans-section-head-ux p, .automation-route-name span, .notebook-panel-head p, .skills-list-path) {
+  color: var(--dark-muted) !important;
+}
+
+/* Dark mode coverage v4: direct fixes from full tab scans. */
+:root[data-theme="dark"] body :is(
+  .folder-pill,
+  .routine-progress-badge,
+  .routine-empty-state,
+  .logic-section-icon,
+  .logic-node-meta-chip,
+  .settings-summary-grid,
+  .notebook-workbench-card,
+  .notebook-source-card,
+  .notebook-status-card,
+  .notebook-next-card,
+  .notebook-document-card,
+  .notebook-project-hint,
+  .notebook-kind-card,
+  .notebook-next-item,
+  .plans-feedback-bar
+) {
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .notebook-kind-card.active,
+  .logic-node-meta-chip,
+  .folder-pill
+) {
+  background: var(--dark-accent-soft) !important;
+  border-color: #4a78bd !important;
+  color: #dceaff !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .notebook-project-hint span,
+  .notebook-next-item p,
+  .routine-empty-state,
+  .routine-progress-badge
+) {
+  color: var(--dark-muted) !important;
+}
+
+/* Dark mode coverage v5: orchestration/multi hint, routine tab,
+   recent coding result, notebook inputs, task graph order, settings basic nav.
+   Sourced from explicit user-reported gaps. */
+
+/* 1·2. Composer preset hint card (orchestration / multi-LLM 안내) */
+:root[data-theme="dark"] body .preset-hint {
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-muted) !important;
+}
+
+:root[data-theme="dark"] body .messenger-composer {
+  background: linear-gradient(180deg, var(--dark-surface-0) 0%, var(--dark-bg-1) 100%) !important;
+}
+
+/* 3. Routine tab — cards, panels, lists */
+:root[data-theme="dark"] body :is(
+  .routine-list-panel,
+  .routine-create-panel,
+  .routine-detail-panel,
+  .routine-detail-card,
+  .routine-detail-header-card,
+  .routine-detail-disclosure,
+  .routine-detail-grid,
+  .routine-edit-card,
+  .routine-editor-card,
+  .routine-empty-card,
+  .routine-history-card,
+  .routine-history-list,
+  .routine-overview-card,
+  .routine-overview-action-card,
+  .routine-progress-panel,
+  .routine-progress-stage-list,
+  .routine-run-card,
+  .routine-section-card,
+  .routine-stat-card,
+  .routine-stats-card,
+  .routine-step-card,
+  .routine-tab,
+  .routine-wizard,
+  .routine-wizard-stepheader,
+  .routine-wizard-stepnav,
+  .routine-mobile-shell,
+  .routine-mobile-tabs,
+  .routine-library-panel,
+  .routine-library-meta,
+  .routine-mode-control,
+  .routine-source-control,
+  .routine-segmented-control,
+  .routine-schedule-editor,
+  .routine-execution-config-stack,
+  .routine-form-grid,
+  .routine-form-grid-primary,
+  .routine-form-grid-tight,
+  .routine-form-grid-agent,
+  .routine-action-row,
+  .routine-retry-notify-grid,
+  .routine-output,
+  .routine-history-empty,
+  .routine-list,
+  .routine-list-item,
+  .routine-run-item,
+  .routine-progress-stage
+) {
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .routine-input,
+  .routine-input-compact,
+  .routine-field input,
+  .routine-field textarea,
+  .routine-field select,
+  .routine-schedule-editor input,
+  .routine-schedule-editor textarea,
+  .routine-schedule-editor select
+) {
+  background: var(--dark-surface-0) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .routine-segment-btn,
+  .routine-weekday-btn,
+  .routine-submit-btn,
+  .routine-output-button,
+  .routine-split-menu-summary,
+  .routine-split-menu-item,
+  .routine-split-menu-popover
+) {
+  background: var(--dark-surface-2) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .routine-segment-btn.active,
+  .routine-weekday-btn.active,
+  .routine-submit-btn.primary,
+  .routine-split-menu-primary
+) {
+  background: var(--dark-accent-soft) !important;
+  border-color: var(--dark-accent) !important;
+  color: #dceaff !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .routine-list-item.selected,
+  .routine-overview-card-selected,
+  .routine-list-item.active,
+  .routine-tab.active,
+  .routine-wizard-step.active
+) {
+  background: var(--dark-accent-soft) !important;
+  border-color: var(--dark-accent) !important;
+  color: #dceaff !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .routine-field-label,
+  .routine-detail-copy,
+  .routine-subtitle,
+  .routine-head-kicker,
+  .routine-section-head,
+  .routine-editor-section-head,
+  .routine-editor-subtitle,
+  .routine-editor-title,
+  .routine-progress-percent,
+  .routine-progress-title,
+  .routine-progress-stage-title,
+  .routine-progress-stage-index,
+  .routine-stat-label,
+  .routine-item-meta,
+  .routine-item-title,
+  .routine-kv,
+  .routine-run-meta,
+  .routine-run-summary,
+  .routine-run-next,
+  .routine-run-error,
+  .routine-run-head,
+  .routine-run-actions,
+  .routine-agent-note,
+  .routine-auto-execution-note,
+  .routine-auto-schedule-note,
+  .routine-wizard-stephint,
+  .routine-wizard-validation,
+  .routine-request-preview,
+  .routine-output-preview-image-wrap
+) {
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .routine-output-preview-image
+) {
+  filter: brightness(0.92);
+}
+
+/* 4. Recent coding result UI */
+:root[data-theme="dark"] body :is(
+  .coding-result-head,
+  .coding-result-meta,
+  .coding-result-modal,
+  .coding-result-dock,
+  .coding-result-body-grid,
+  .coding-result-primary-column,
+  .coding-result-secondary-column,
+  .coding-result-inline-action,
+  .coding-result-inline-actions,
+  .coding-result-head-actions,
+  .compact-support-dock,
+  .compact-support-dock-trigger,
+  .compact-support-dock-arrow,
+  .compact-support-dock-detail,
+  .compact-support-dock-head,
+  .compact-support-dock-copy
+) {
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] body .coding-browser-frame {
+  background: var(--dark-surface-0) !important;
+  border-color: var(--dark-border-strong) !important;
+}
+
+:root[data-theme="dark"] body .compact-support-dock-status {
+  color: var(--dark-muted) !important;
+}
+
+/* 5. Notebook inputs and cards */
+:root[data-theme="dark"] body :is(
+  .notebook-shell,
+  .notebook-action-card,
+  .notebook-doc-card,
+  .notebook-document-card,
+  .notebook-document-actions,
+  .notebook-document-empty,
+  .notebook-document-handoff,
+  .notebook-document-head,
+  .notebook-document-path,
+  .notebook-document-preview,
+  .notebook-document-stats,
+  .notebook-documents-grid,
+  .notebook-documents-head,
+  .notebook-documents-section,
+  .notebook-editor-card,
+  .notebook-empty-state,
+  .notebook-feedback-bar,
+  .notebook-next-card,
+  .notebook-next-item,
+  .notebook-next-list,
+  .notebook-panel-actions,
+  .notebook-panel-head,
+  .notebook-primary-column,
+  .notebook-quick-card,
+  .notebook-section-head,
+  .notebook-side-column,
+  .notebook-source-card,
+  .notebook-source-grid,
+  .notebook-status-card,
+  .notebook-status-list,
+  .notebook-status-row,
+  .notebook-tab-card,
+  .notebook-template-strip,
+  .notebook-workbench-card,
+  .notebook-current-state,
+  .notebook-compose-actions,
+  .notebook-draft-meta,
+  .notebooks-workbench-panel
+) {
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .notebook-textarea,
+  .notebook-text-field,
+  .notebook-text-field input,
+  .notebook-text-field textarea,
+  .notebook-project-field,
+  .notebook-project-field input,
+  .notebook-project-row input,
+  .notebook-project-row select,
+  .notebook-action-card input,
+  .notebook-action-card textarea,
+  .notebook-action-card select,
+  .notebook-editor-card input,
+  .notebook-editor-card textarea,
+  .notebook-editor-card select,
+  .notebook-quick-card input,
+  .notebook-quick-card textarea
+) {
+  background: var(--dark-surface-0) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .notebook-textarea::placeholder,
+  .notebook-text-field input::placeholder,
+  .notebook-text-field textarea::placeholder
+) {
+  color: var(--dark-muted-2) !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .notebook-template-label,
+  .notebook-feedback-text,
+  .notebook-project-hint
+) {
+  color: var(--dark-muted) !important;
+}
+
+/* 6. Task graph (작업 순서) panels and routing policy */
+:root[data-theme="dark"] body :is(
+  .task-graph-panel,
+  .task-graph-panel-head-ux,
+  .task-graph-form,
+  .task-graph-form-ux,
+  .task-graph-create-card,
+  .task-graph-create-actions,
+  .task-graph-feedback-bar,
+  .task-graph-error,
+  .task-graph-log,
+  .task-graph-node-card,
+  .task-graph-node-actions,
+  .task-graph-node-head,
+  .task-graph-node-meta,
+  .task-graph-output-card,
+  .task-graph-output-grid,
+  .task-graph-output-stack,
+  .task-graph-selected-card,
+  .task-graph-selected-row,
+  .task-graph-selected-summary,
+  .task-graph-metric-card,
+  .task-graph-metric-grid,
+  .task-graph-next-card,
+  .task-graph-next-item,
+  .task-graph-next-list,
+  .task-graph-browser-detail,
+  .task-graph-browser-list,
+  .task-graph-browser-shell,
+  .task-graph-inspector-grid,
+  .task-graph-plan-hint,
+  .task-graph-primary-column,
+  .routing-policy-panel,
+  .routing-policy-row,
+  .routing-policy-grid,
+  .routing-policy-decision,
+  .routing-policy-decision-grid
+) {
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .task-graph-form input,
+  .task-graph-form textarea,
+  .task-graph-form select,
+  .task-graph-create-card input,
+  .task-graph-create-card textarea,
+  .task-graph-create-card select,
+  .routing-policy-input,
+  .routing-policy-row input,
+  .routing-policy-row select
+) {
+  background: var(--dark-surface-0) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .task-graph-feedback-text,
+  .task-graph-metric-helper,
+  .task-graph-metric-label,
+  .task-graph-metric-value,
+  .task-graph-plan-hint
+) {
+  color: var(--dark-muted) !important;
+}
+
+/* 7. Settings basic / access section navigation */
+:root[data-theme="dark"] body :is(
+  .settings-side-nav,
+  .settings-tree-group,
+  .settings-mobile-tabs,
+  .settings-mobile-subtabs,
+  .settings-mobile-shell
+) {
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .settings-side-nav-btn,
+  .settings-tree-child,
+  .settings-mobile-tabs button,
+  .settings-mobile-subtabs button
+) {
+  background: var(--dark-surface-2) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .settings-side-nav-btn small,
+  .settings-tree-child small,
+  .settings-mobile-tabs button small,
+  .settings-mobile-subtabs button small
+) {
+  color: var(--dark-muted) !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .settings-side-nav-btn:hover,
+  .settings-tree-child:hover,
+  .settings-mobile-tabs button:hover,
+  .settings-mobile-subtabs button:hover
+) {
+  border-color: var(--dark-accent) !important;
 }
