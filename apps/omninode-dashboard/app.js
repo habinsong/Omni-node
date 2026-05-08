@@ -805,6 +805,7 @@ import {
 
     const [status, setStatus] = useState("연결 대기");
     const [authed, setAuthed] = useState(false);
+    const authedRef = useRef(false);
     const [authExpiry, setAuthExpiry] = useState("");
     const [authLocalOffset, setAuthLocalOffset] = useState(localUtcOffsetLabel());
     const [authTtlHours, setAuthTtlHours] = useState("24");
@@ -1143,6 +1144,10 @@ import {
     useEffect(() => {
       settingsStateRef.current = settingsState;
     }, [settingsState]);
+
+    useEffect(() => {
+      authedRef.current = authed;
+    }, [authed]);
 
     useEffect(() => {
       if (uiPreferencesSessionStartRef.current === null) {
@@ -3384,6 +3389,14 @@ import {
         wsRef.current = null;
         if (unmountedRef.current) {
           return;
+        }
+
+        // 인증된 적 없는 상태에서 끊김이 반복되면 stale authToken 이 매 재연결 시
+        // resume_auth 시도 → 잠시 인증됨 → 다시 끊김 으로 토글 루프를 만든다.
+        // 한 번도 인증 성공 못 했고 ws가 끊긴 경우 토큰을 비워서 OTP 요청 UI가
+        // 안정적으로 노출되도록 한다.
+        if (!authedRef.current) {
+          try { clearAuthToken(); } catch {}
         }
 
         setStatus("연결 끊김 / 재연결 중");

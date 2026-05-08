@@ -340,11 +340,11 @@ export function handleDashboardServerMessage(msg, context) {
       return true
     }
 
-    if (msg.resumed) {
-      actions.clearAuthToken()
-    }
+    // auth_result.ok === false : token이 무효이거나 OTP 인증 실패. 어떤 경우든
+    // 재연결 시 stale token으로 자동 retry하면 토글 루프가 생기므로 항상 token 정리.
+    actions.clearAuthToken()
     setters.setAuthLocalOffset(actions.localUtcOffsetLabel())
-    setters.setStatus(msg.resumed ? "세션 만료 / OTP 필요" : "인증 실패")
+    setters.setStatus(msg.resumed ? "세션 만료 / OTP 필요" : "OTP 인증 필요")
     return true
   }
 
