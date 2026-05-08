@@ -17759,3 +17759,78 @@ video {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* ============================================================
+   v12 — 저장된 작업 목록 / 작업 순서 / 작업 노드 리스트가 끝없이 아래로
+   늘어나는 것 차단. 최대 2개 카드 분량만 표시하고 나머지는 내부 스크롤.
+   ============================================================ */
+
+/* 저장된 작업 목록 (.plans-list) — 카드 2개 + gap 정도 */
+.plans-list {
+  max-height: 360px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+/* 작업 순서 (.plan-step-list) — 스텝 카드 2개 정도 */
+.plan-step-list {
+  max-height: 440px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+/* 작업 묶음의 노드 카드 스택도 같은 정책 (점검 모드) */
+.task-graph-output-stack,
+.plan-review-summary {
+  max-height: 440px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+/* 스크롤바 슬림화 (webkit) */
+.plans-list::-webkit-scrollbar,
+.plan-step-list::-webkit-scrollbar,
+.task-graph-output-stack::-webkit-scrollbar,
+.plan-review-summary::-webkit-scrollbar {
+  width: 8px;
+}
+
+.plans-list::-webkit-scrollbar-thumb,
+.plan-step-list::-webkit-scrollbar-thumb,
+.task-graph-output-stack::-webkit-scrollbar-thumb,
+.plan-review-summary::-webkit-scrollbar-thumb {
+  background: rgba(120, 130, 150, 0.45);
+  border-radius: 4px;
+}
+
+.plans-list::-webkit-scrollbar-track,
+.plan-step-list::-webkit-scrollbar-track,
+.task-graph-output-stack::-webkit-scrollbar-track,
+.plan-review-summary::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:root[data-theme="dark"] body :is(
+  .plans-list,
+  .plan-step-list,
+  .task-graph-output-stack,
+  .plan-review-summary
+)::-webkit-scrollbar-thumb {
+  background: rgba(180, 200, 230, 0.18) !important;
+}
+
+/* 좁은 화면에서는 카드가 더 커질 수 있어 max-height도 살짝 더 줌 */
+@media (max-width: 768px) {
+  .plans-list { max-height: 320px; }
+  .plan-step-list { max-height: 400px; }
+  .task-graph-output-stack,
+  .plan-review-summary { max-height: 400px; }
+}
+
+@media (max-width: 480px) {
+  .plans-list { max-height: 280px; }
+  .plan-step-list { max-height: 360px; }
+}
