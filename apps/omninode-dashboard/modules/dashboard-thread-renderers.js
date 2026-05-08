@@ -336,32 +336,33 @@ export function renderMessagesPanel(props) {
               e("span", { className: "tts-pill-label" }, isSpeaking ? "정지" : "듣기")
             )
           : null;
+        const bubbleNode = e(
+          "div",
+          { className: `bubble ${isUser ? "user" : "assistant"}${inlineMulti ? " bubble-multi-inline" : ""}` },
+          inlineMulti
+            ? e(InlineResultCarousel, {
+                e,
+                MarkdownBubbleText,
+                entries: inlineMulti.entries,
+                kicker: inlineCarouselConfig.kicker,
+                title: inlineCarouselConfig.title,
+                subtitle: inlineCarouselConfig.subtitle
+              })
+            : [
+                item.meta ? e("div", { key: "meta", className: "bubble-meta" }, item.meta) : null,
+                e(MarkdownBubbleText, { key: "body", text: bubbleText })
+              ]
+        );
+        const bubbleWithTts = ttsButton
+          ? e("div", { className: "bubble-with-tts" }, bubbleNode, ttsButton)
+          : bubbleNode;
         return e(
           "div",
           { key: `${item.createdUtc || index}-${index}`, className: `message-row ${isUser ? "user" : "assistant"}` },
           !isUser
             ? e("div", { className: `message-avatar ${isCodingScope ? "coding" : "assistant"}` }, isCodingScope ? "DEV" : "AI")
             : null,
-          e(
-            "div",
-            { className: `bubble ${isUser ? "user" : "assistant"}${inlineMulti ? " bubble-multi-inline" : ""}` },
-            inlineMulti
-              ? e(InlineResultCarousel, {
-                  e,
-                  MarkdownBubbleText,
-                  entries: inlineMulti.entries,
-                  kicker: inlineCarouselConfig.kicker,
-                  title: inlineCarouselConfig.title,
-                  subtitle: inlineCarouselConfig.subtitle
-                })
-              : [
-                  item.meta ? e("div", { key: "meta", className: "bubble-meta" }, item.meta) : null,
-                  e(MarkdownBubbleText, { key: "body", text: bubbleText })
-                ]
-          ),
-          ttsButton
-            ? e("div", { className: "message-tts-aside" }, ttsButton)
-            : null,
+          bubbleWithTts,
           isUser
             ? e("div", { className: "message-avatar self" }, "ME")
             : null
