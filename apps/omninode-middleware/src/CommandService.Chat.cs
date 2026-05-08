@@ -584,6 +584,7 @@ public sealed partial class CommandService
         var effectiveGuardFailure = preparedInput.GuardFailure;
         var responseText = ApplyListCountFallback(rawInput, generated.Text, preparedInput.Citations);
         responseText = ApplySkillCreateDirective(responseText, request.Source);
+        responseText = CleanLeakedSystemMarkers(responseText);
 
         _conversationStore.AppendMessage(thread.Id, "user", rawInput, $"{requestedProvider}:{request.Model ?? "-"}");
         _conversationStore.AppendMessage(thread.Id, "assistant", responseText, $"{generated.Provider}:{generated.Model}");
@@ -1475,6 +1476,7 @@ public sealed partial class CommandService
         var effectiveGuardFailure = basePrepared.GuardFailure;
         var responseText = ApplyListCountFallback(rawInput, generated.Text, basePrepared.Citations);
         responseText = ApplySkillCreateDirective(responseText, request.Source);
+        responseText = CleanLeakedSystemMarkers(responseText);
 
         _conversationStore.AppendMessage(thread.Id, "user", rawInput, $"orchestration:{request.Provider ?? "auto"}");
         _conversationStore.AppendMessage(thread.Id, "assistant", responseText, generated.Route);

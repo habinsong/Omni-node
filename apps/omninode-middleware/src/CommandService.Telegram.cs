@@ -1984,6 +1984,7 @@ public sealed partial class CommandService
             effectiveGuardFailure = sharedPrepared.GuardFailure;
             var orchestratedValidated = ApplyListCountFallback(text, orchestrated.Text, sharedPrepared.Citations);
             orchestratedValidated = ApplySkillCreateDirective(orchestratedValidated, "telegram");
+            orchestratedValidated = CleanLeakedSystemMarkers(orchestratedValidated);
             responseText = $"[{orchestrated.Route}]\n{FormatTelegramResponse(orchestratedValidated, TelegramMaxResponseChars)}";
             providerForMemory = NormalizeProvider(snapshot.OrchestrationProvider, allowAuto: true);
             if (providerForMemory is "auto" or "none")
@@ -2031,6 +2032,7 @@ public sealed partial class CommandService
             effectiveGuardFailure = sharedPrepared.GuardFailure;
             var multiSummaryValidated = ApplyListCountFallback(text, multi.Summary, sharedPrepared.Citations);
             multiSummaryValidated = ApplySkillCreateDirective(multiSummaryValidated, "telegram");
+            multiSummaryValidated = CleanLeakedSystemMarkers(multiSummaryValidated);
             responseText = $"""
                            [Multi 요약]
                            {FormatTelegramResponse(multiSummaryValidated, TelegramMaxResponseChars)}
@@ -2140,6 +2142,7 @@ public sealed partial class CommandService
             );
             effectiveGuardFailure = sharedPrepared.GuardFailure;
             var singleGroqText = ApplySkillCreateDirective(singleGroq.Text, "telegram");
+            singleGroqText = CleanLeakedSystemMarkers(singleGroqText);
             responseText = $"[Single {singleGroq.Provider}:{singleGroq.Model}]\n{FormatTelegramResponse(singleGroqText, TelegramMaxResponseChars)}";
             responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
             providerForMemory = singleGroq.Provider;
@@ -2232,6 +2235,7 @@ public sealed partial class CommandService
         );
         effectiveGuardFailure = sharedPrepared.GuardFailure;
         var singleText = ApplySkillCreateDirective(single.Text, "telegram");
+        singleText = CleanLeakedSystemMarkers(singleText);
         responseText = $"[Single {single.Provider}:{single.Model}]\n{FormatTelegramResponse(singleText, TelegramMaxResponseChars)}";
         responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
         providerForMemory = single.Provider;

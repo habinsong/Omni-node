@@ -50,6 +50,30 @@ public sealed partial class CommandService
         return $"{note}\n\n{responseText}";
     }
 
+    private static readonly Regex InternalMarkerLineRegex = new(
+        @"^\s*\[(?:user|assistant|system|Single\s|Multi\s|Project Context|Active Skill[^\]]*|Think\+\s[^\]]*|컨텍스트\s[^\]]*|최근 대화|공유 메모리 노트|새 요청|로컬 시간|Skill Switched[^\]]*|Skill Deactivated[^\]]*)\][^\n]*\r?\n?",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Multiline
+    );
+
+    private static readonly Regex EmptyAcknowledgmentRegex = new(
+        @"^\s*(?:확인\.?|준비되었습니다\.?|질문해\s*주세요\.?|네\.?|알겠습니다\.?)\s*$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Multiline
+    );
+
+    /// <summary>
+    /// LLM 응답에 leak 된 내부 마커 라인을 제거. 빈 인사 응답도 정리.
+    /// </summary>
+    internal static string CleanLeakedSystemMarkers(string? text)
+    {
+        var input = text ?? string.Empty;
+        if (input.Length == 0) return input;
+        var cleaned = InternalMarkerLineRegex.Replace(input, string.Empty);
+        // 너무 짧은 인사 응답이 단독으로 있으면 빈 문자열로 대체 (호출자가 fallback)
+        cleaned = cleaned.Replace("\r\n", "\n", StringComparison.Ordinal);
+        cleaned = Regex.Replace(cleaned, @"\n{3,}", "\n\n");
+        return cleaned.Trim();
+    }
+
     /// <summary>
     /// Gemini grounded web search 결과를 fetched 한 뒤 prepend용 컨텍스트 블록을 만든다.
     /// 키 없거나 실패 시 빈 문자열 반환.

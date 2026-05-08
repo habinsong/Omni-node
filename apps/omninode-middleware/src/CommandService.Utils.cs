@@ -284,6 +284,8 @@ public sealed partial class CommandService
         builder.AppendLine("- '새 요청'을 최우선으로 처리하세요.");
         builder.AppendLine("- 제공된 최근 대화/메모리와 새 요청이 충돌하면 새 요청을 따르세요.");
         builder.AppendLine("- 이전 답변 형식(예: 뉴스 N건 목록)을 관성으로 복사하지 마세요.");
+        builder.AppendLine("- 절대 답변에 [user], [assistant], [system], [Single ...], [Multi ...], [Project Context], [Active Skill ...], [Think+ ...], [컨텍스트 ...], [최근 대화], [공유 메모리 노트], [새 요청], [로컬 시간] 같은 내부 마커/헤더를 출력하지 마세요. 이 마커들은 LLM 입력 구조용이며 사용자에게 보일 답변이 아닙니다.");
+        builder.AppendLine("- '확인.', '준비되었습니다.', '질문해 주세요.' 같이 내용 없는 인사·확인 응답을 답변에 넣지 마세요. 사용자의 질문에 직접 답하세요.");
         builder.AppendLine();
         if (noteBlocks.Count > 0)
         {
