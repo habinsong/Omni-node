@@ -5,7 +5,7 @@ namespace OmniNode.Middleware;
 
 public sealed partial class CommandService
 {
-    private const int ThinkPlusContextMaxChars = 2000;
+    private const int ThinkPlusContextMaxChars = 1500;
     private readonly ConcurrentDictionary<string, bool> _thinkPlusByThread = new(StringComparer.Ordinal);
 
     private static readonly Regex ThinkPlusActivationRegex = new(
@@ -109,7 +109,22 @@ public sealed partial class CommandService
                 $"chars={capped.Length}"
             );
 
-            return $"[Think+ 모드: 최신 웹 검색 결과]\n{capped}\n\n[Think+ 답변 가이드]\n- 위 웹 검색 결과의 사실을 우선 반영해 답변하세요.\n- 부족한 부분은 본인의 지식·추론으로 자연스럽게 보강하세요.\n- 답변은 한국어로, 결론 먼저. 출처 인용은 정말 필요할 때만 간결히.\n- 웹 결과와 본인 지식이 충돌하면 웹 결과를 기준으로 하고 그 이유를 한 줄 명시하세요.\n--------------------------------------------------\n\n";
+            return $@"[Think+ 참고 자료 — 시작]
+다음은 사용자의 질문에 도움이 될 수 있는 최근 웹 검색 결과입니다.
+이 내용은 참고용 자료이며, 사용자에게 보일 답변이 아닙니다.
+
+{capped}
+[Think+ 참고 자료 — 끝]
+
+[Think+ 답변 규칙 — 반드시 따를 것]
+1. 이 참고 자료를 그대로 복사하거나 통째로 붙여넣지 마세요.
+2. 사용자의 원래 질문(아래 메시지)에 직접 답하세요.
+3. 참고 자료의 사실을 활용하되, 자신의 지식·추론으로 종합·재구성해서 답하세요.
+4. 참고 자료에 답이 없으면 솔직히 ""정보가 부족하다""고 말하고 추정 근거를 짧게 덧붙이세요.
+5. 답변은 한국어, 결론 먼저, 군더더기 없이. 출처는 핵심만 짧게(또는 생략).
+--------------------------------------------------
+
+";
         }
         catch (Exception ex)
         {
