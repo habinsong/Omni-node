@@ -17016,3 +17016,251 @@ video {
 ) {
   border-color: var(--dark-accent) !important;
 }
+
+/* Dark mode coverage v6: additional user-reported gaps. */
+
+/* 1. Routine — progress bar, request preview, auto schedule/execution notes */
+:root[data-theme="dark"] body .routine-progress-bar {
+  background: var(--dark-surface-0) !important;
+  border: 1px solid var(--dark-border) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body .routine-progress-bar > * {
+  background: linear-gradient(90deg, var(--dark-accent) 0%, #4a78bd 100%) !important;
+  color: #f4f9ff !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .routine-request-preview,
+  .routine-auto-schedule-note,
+  .routine-auto-execution-note,
+  .routine-agent-note
+) {
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .routine-request-preview *,
+  .routine-auto-schedule-note *,
+  .routine-auto-execution-note *,
+  .routine-agent-note *
+) {
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .routine-request-preview small,
+  .routine-auto-schedule-note small,
+  .routine-auto-execution-note small,
+  .routine-agent-note small
+) {
+  color: var(--dark-muted) !important;
+}
+
+/* 2. Plan step cards */
+:root[data-theme="dark"] body :is(
+  .plan-step-card,
+  .plan-step-grid,
+  .plan-step-list,
+  .plan-step-head,
+  .plan-detail-card,
+  .plan-review-card,
+  .plan-review-box,
+  .plan-review-grid,
+  .plan-review-summary,
+  .plan-metric-card,
+  .plan-next-card,
+  .plan-next-item,
+  .plan-mode-card,
+  .plan-list-item,
+  .plan-summary-grid,
+  .plan-detail
+) {
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .plan-step-card *,
+  .plan-detail-card *,
+  .plan-review-card *,
+  .plan-metric-card *,
+  .plan-next-card *,
+  .plan-list-item *
+) {
+  color: inherit;
+}
+
+:root[data-theme="dark"] body :is(
+  .plan-metric-helper,
+  .plan-metric-label,
+  .plan-status-value,
+  .plan-objective-text,
+  .plan-template-label
+) {
+  color: var(--dark-muted) !important;
+}
+
+/* 3. Settings detail head, action rows, disclosure, pricing */
+:root[data-theme="dark"] body :is(
+  .settings-detail-head,
+  .settings-detail-item,
+  .settings-action-row,
+  .settings-pricing-row,
+  .settings-disclosure
+) {
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .settings-action-row button,
+  .settings-action-row input,
+  .settings-action-row select,
+  .settings-action-row textarea,
+  .settings-pricing-row button,
+  .settings-disclosure summary,
+  .settings-disclosure button
+) {
+  background: var(--dark-surface-2) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .settings-detail-head h3,
+  .settings-detail-head h4,
+  .settings-detail-head strong,
+  .settings-detail-head .settings-section-title
+) {
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .settings-detail-head p,
+  .settings-detail-head small,
+  .settings-detail-head .settings-section-sub,
+  .settings-pricing-row small,
+  .settings-disclosure small
+) {
+  color: var(--dark-muted) !important;
+}
+
+/* 4. Settings doctor panel */
+:root[data-theme="dark"] body :is(
+  .settings-optimized-panel,
+  .settings-doctor-panel,
+  .doctor-panel,
+  .doctor-panel-head,
+  .doctor-summary-card,
+  .doctor-summary-grid,
+  .doctor-check-list,
+  .doctor-check-item,
+  .doctor-check-detail,
+  .doctor-check-summary,
+  .doctor-check-head,
+  .doctor-action-list,
+  .doctor-action-row,
+  .doctor-empty-state,
+  .doctor-report-meta
+) {
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .doctor-summary-label,
+  .doctor-report-meta,
+  .doctor-empty-state,
+  .doctor-check-summary
+) {
+  color: var(--dark-muted) !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .doctor-summary-value,
+  .doctor-check-title
+) {
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .doctor-action-row button,
+  .doctor-panel-head button,
+  .doctor-check-item button
+) {
+  background: var(--dark-surface-2) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+}
+
+/* 5. Settings tools / ops / tool-ux panel */
+:root[data-theme="dark"] body :is(
+  .settings-tools-panel,
+  .ops-panel,
+  .tool-ux-panel,
+  .tool-ux-hero,
+  .tool-ux-stack,
+  .tool-ux-section,
+  .tool-ux-section-head,
+  .tool-ux-overview-grid,
+  .tool-ux-card,
+  .tool-ux-card-head,
+  .tool-ux-table-card,
+  .tool-ux-preview-card,
+  .tool-ux-health-card,
+  .tool-ux-health-strip,
+  .tool-ux-action-strip,
+  .tool-ux-disclosure,
+  .tool-ux-disclosure-body,
+  .tool-ux-json-preview
+) {
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .tool-ux-action-strip button,
+  .tool-ux-disclosure summary,
+  .tool-ux-card-head button,
+  .tool-ux-section-head button,
+  .tool-ux-health-strip button
+) {
+  background: var(--dark-surface-2) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .tool-ux-section-head p,
+  .tool-ux-section-head small,
+  .tool-ux-card-head small,
+  .tool-ux-hero small,
+  .tool-ux-hero p,
+  .tool-ux-table-card small,
+  .tool-ux-disclosure summary small
+) {
+  color: var(--dark-muted) !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .tool-ux-json-preview,
+  .tool-ux-json-preview pre,
+  .tool-ux-json-preview code
+) {
+  background: var(--dark-bg-1) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+}
