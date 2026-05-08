@@ -31,6 +31,8 @@ public sealed class LlmRouter : IDisposable
 {
     private const int ChatContinuationRounds = 4;
     private const string CerebrasFallbackModel = "gpt-oss-120b";
+    private string? _cerebrasResolvedModelCache = null;
+    private DateTime _cerebrasResolvedModelCachedAt = DateTime.MinValue;
     private static readonly Regex GroqMaxTokensLimitRegex = new(
         @"max_tokens`?\s*must be less than or equal to `?(?<limit>\d+)`?|maximum value for `max_tokens` is(?: less than the `context_window` for this model)?\s*`?(?<limit2>\d+)`?",
         RegexOptions.Compiled | RegexOptions.IgnoreCase
@@ -1721,16 +1723,24 @@ public sealed class LlmRouter : IDisposable
                 {
                     if (!fallbackRetried
                         && response.StatusCode == System.Net.HttpStatusCode.NotFound
-                        && IsCerebrasModelNotFound(responseBody)
-                        && !string.Equals(effectiveModel, CerebrasFallbackModel, StringComparison.OrdinalIgnoreCase))
+                        && IsCerebrasModelNotFound(responseBody))
                     {
-                        fallbackRetried = true;
-                        effectiveModel = CerebrasFallbackModel;
-                        promptForTurn = userInput;
-                        mergedBuilder.Clear();
-                        turn = -1;
-                        Console.Error.WriteLine($"[cerebras] model_not_found fallback: {selectedModel} -> {effectiveModel}");
-                        continue;
+                        // catalog API로 사용자 키가 access 가능한 실제 모델 fetching → 첫 모델로 retry.
+                        var resolved = await ResolveAvailableCerebrasModelAsync(cerebrasApiKey, cancellationToken);
+                        if (!string.IsNullOrWhiteSpace(resolved)
+                            && !string.Equals(resolved, effectiveModel, StringComparison.OrdinalIgnoreCase))
+                        {
+                            fallbackRetried = true;
+                            Console.Error.WriteLine($"[cerebras] model_not_found fallback (from catalog): {effectiveModel} -> {resolved}");
+                            effectiveModel = resolved;
+                            promptForTurn = userInput;
+                            mergedBuilder.Clear();
+                            turn = -1;
+                            continue;
+                        }
+
+                        Console.Error.WriteLine($"[cerebras] chat failed ({(int)response.StatusCode}): {responseBody} | catalog로도 가용 모델을 찾지 못했습니다. API 키 권한을 확인하세요.");
+                        return $"Cerebras 키가 어떤 모델에도 접근 권한이 없습니다. https://cloud.cerebras.ai 에서 키 권한과 사용 가능한 모델 목록을 확인하세요. (요청한 모델: {effectiveModel})";
                     }
 
                     Console.Error.WriteLine($"[cerebras] chat failed ({(int)response.StatusCode}): {responseBody}");
@@ -1781,17 +1791,24 @@ public sealed class LlmRouter : IDisposable
             return "Cerebras API 키가 설정되지 않았습니다.";
         }
 
-        var selectedModel = string.IsNullOrWhiteSpace(modelOverride) ? _config.CerebrasModel : modelOverride.Trim();
+        var initialModel = string.IsNullOrWhiteSpace(modelOverride) ? _config.CerebrasModel : modelOverride.Trim();
+        // 직전 호출에서 catalog로 가용 모델을 이미 알아냈다면 그것을 우선 사용
+        if (!string.IsNullOrWhiteSpace(_cerebrasResolvedModelCache)
+            && (DateTime.UtcNow - _cerebrasResolvedModelCachedAt).TotalSeconds < 60
+            && string.IsNullOrWhiteSpace(modelOverride))
+        {
+            initialModel = _cerebrasResolvedModelCache!;
+        }
         var endpoint = $"{_config.CerebrasBaseUrl.TrimEnd('/')}/chat/completions";
         var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
             + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them.";
         var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
 
-        return await GenerateOpenAiCompatibleChatStreamingAsync(
+        var firstResult = await GenerateOpenAiCompatibleChatStreamingAsync(
             "cerebras",
             endpoint,
             cerebrasApiKey,
-            selectedModel,
+            initialModel,
             systemPrompt,
             userInput,
             "max_completion_tokens",
@@ -1799,6 +1816,84 @@ public sealed class LlmRouter : IDisposable
             deltaCallback,
             cancellationToken
         );
+
+        // 404로 시작하면 catalog 호출 후 재시도
+        if (firstResult.StartsWith("Cerebras 요청 실패: 404", StringComparison.Ordinal))
+        {
+            var resolved = await ResolveAvailableCerebrasModelAsync(cerebrasApiKey, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(resolved)
+                && !string.Equals(resolved, initialModel, StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Error.WriteLine($"[cerebras] streaming fallback (from catalog): {initialModel} -> {resolved}");
+                return await GenerateOpenAiCompatibleChatStreamingAsync(
+                    "cerebras",
+                    endpoint,
+                    cerebrasApiKey,
+                    resolved,
+                    systemPrompt,
+                    userInput,
+                    "max_completion_tokens",
+                    effectiveMaxOutputTokens,
+                    deltaCallback,
+                    cancellationToken
+                );
+            }
+            return $"Cerebras 키가 어떤 모델에도 접근 권한이 없습니다. https://cloud.cerebras.ai 에서 키 권한과 사용 가능한 모델 목록을 확인하세요. (요청한 모델: {initialModel})";
+        }
+
+        return firstResult;
+    }
+
+    private async Task<string?> ResolveAvailableCerebrasModelAsync(string apiKey, CancellationToken cancellationToken)
+    {
+        // 60초 캐시
+        if (_cerebrasResolvedModelCache != null
+            && (DateTime.UtcNow - _cerebrasResolvedModelCachedAt).TotalSeconds < 60)
+        {
+            return _cerebrasResolvedModelCache;
+        }
+        try
+        {
+            var endpoint = $"{_config.CerebrasBaseUrl.TrimEnd('/')}/models";
+            using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                Console.Error.WriteLine($"[cerebras] catalog fetch failed ({(int)response.StatusCode}): {body}");
+                return null;
+            }
+            using var doc = JsonDocument.Parse(body);
+            if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+            string? firstId = null;
+            foreach (var item in data.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object) continue;
+                if (!item.TryGetProperty("id", out var idEl)) continue;
+                var id = idEl.GetString();
+                if (!string.IsNullOrWhiteSpace(id))
+                {
+                    firstId = id;
+                    break;
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(firstId))
+            {
+                _cerebrasResolvedModelCache = firstId;
+                _cerebrasResolvedModelCachedAt = DateTime.UtcNow;
+                Console.Error.WriteLine($"[cerebras] resolved available model from catalog: {firstId}");
+            }
+            return firstId;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[cerebras] catalog fetch error: {ex.Message}");
+            return null;
+        }
     }
 
     private static bool IsCerebrasModelNotFound(string responseBody)
