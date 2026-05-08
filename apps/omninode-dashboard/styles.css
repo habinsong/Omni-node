@@ -17346,3 +17346,236 @@ video {
   border: none !important;
   box-shadow: none !important;
 }
+
+/* ============================================================
+   Automation tab (작업 계획) — responsive enhancement
+   plans-browser-shell, plan-detail-*, task-graph-*, automation-root
+   = list+detail를 단계적으로 stack해서 좁은 화면에서도 깨지지 않게
+   ============================================================ */
+
+/* Detail-column 내부 컴포넌트의 기본 반응 처리: 너비 0까지도 안 깨지도록 */
+.plans-detail-column,
+.plan-browser-detail,
+.task-graph-browser-detail {
+  min-width: 0;
+}
+
+.plan-detail,
+.plan-detail-card,
+.plan-detail-head,
+.plan-detail-actions,
+.plan-summary-grid,
+.plan-step-card,
+.plan-step-grid,
+.plan-step-head,
+.plan-review-card,
+.plan-review-box,
+.plan-review-grid,
+.plan-review-summary {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.plan-detail pre,
+.plan-detail code,
+.plan-step-card pre,
+.plan-review-card pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+.plan-detail-actions {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.plan-detail-actions > button,
+.plan-detail-actions > .btn {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* 1280px 이하 — list+detail 두 컬럼이 비좁아져 detail 쪽 텍스트가 잘림.
+   브라우저 shell을 한 컬럼으로 stack하고 list를 위, detail을 아래로. */
+@media (max-width: 1280px) {
+  .plans-browser-shell,
+  .task-graph-browser-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .plans-list-column,
+  .plan-browser-list,
+  .task-graph-browser-list {
+    max-height: none;
+  }
+
+  .plan-detail-head,
+  .plans-panel-head {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .plan-detail-head > .row,
+  .plan-detail-head .plan-detail-actions {
+    width: 100%;
+  }
+
+  .plan-summary-grid,
+  .plan-review-grid,
+  .plan-step-grid,
+  .task-graph-output-grid,
+  .task-graph-metric-grid,
+  .task-graph-inspector-grid,
+  .task-graph-form,
+  .task-graph-form-ux,
+  .routing-policy-grid,
+  .routing-policy-decision-grid,
+  .plans-create-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* 1024px 이하 — automation 좌측 nav + 우측 content를 수직 스택.
+   plan-summary-grid 등은 2-column 유지, 더 좁아지면 다음 단계에서 1-column. */
+@media (max-width: 1024px) {
+  .settings-root-panel-automation > .settings-standalone-shell .automation-root-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .automation-root-nav {
+    position: static;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .automation-root-nav-item {
+    flex: 1 1 200px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .automation-root-nav-helper {
+    grid-column: 1;
+  }
+
+  .plan-detail-actions {
+    width: 100%;
+  }
+
+  .plan-detail-actions > button,
+  .plan-detail-actions > .btn {
+    flex: 1 1 calc(50% - 6px);
+  }
+}
+
+/* 768px 이하 — 모든 plan/task grid를 단일 컬럼으로, 버튼은 가로 가득. */
+@media (max-width: 768px) {
+  .plan-summary-grid,
+  .plan-review-grid,
+  .plan-step-grid,
+  .plan-mode-grid,
+  .plans-create-grid,
+  .task-graph-output-grid,
+  .task-graph-metric-grid,
+  .task-graph-inspector-grid,
+  .task-graph-form,
+  .task-graph-form-ux,
+  .routing-policy-grid,
+  .routing-policy-decision-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .plan-detail-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .plan-detail-head > div:first-child {
+    width: 100%;
+  }
+
+  .plan-detail-actions {
+    flex-direction: column;
+  }
+
+  .plan-detail-actions > button,
+  .plan-detail-actions > .btn {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .plan-step-card,
+  .plan-review-card,
+  .plan-detail-card,
+  .task-graph-node-card,
+  .task-graph-output-card,
+  .task-graph-selected-card,
+  .task-graph-metric-card,
+  .plans-create-card,
+  .plan-next-card,
+  .task-graph-create-card,
+  .task-graph-next-card,
+  .automation-llm-card,
+  .routing-policy-panel {
+    padding: 12px;
+  }
+
+  .automation-root-nav-item {
+    padding: 10px;
+  }
+
+  .automation-root-nav-title {
+    font-size: 13px;
+  }
+
+  .plans-section-head,
+  .plans-section-head-ux {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .plan-list-item-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* 480px 이하 — 폰트/패딩 줄여서 좁은 폰에서도 가독성 유지. */
+@media (max-width: 480px) {
+  .plan-detail-head h3,
+  .plan-detail-head .h3 {
+    font-size: 18px;
+    line-height: 1.3;
+  }
+
+  .plan-list-item {
+    padding: 10px;
+  }
+
+  .plan-list-item-objective {
+    -webkit-line-clamp: 3;
+  }
+
+  .automation-root-nav {
+    padding: 6px;
+  }
+
+  .automation-root-nav-item {
+    flex: 1 1 100%;
+  }
+
+  .plan-summary-grid,
+  .plan-review-grid,
+  .plan-step-grid {
+    gap: 8px;
+  }
+
+  .plan-detail-actions > button,
+  .plan-detail-actions > .btn {
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+}
