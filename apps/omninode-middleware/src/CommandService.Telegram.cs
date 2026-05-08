@@ -1716,6 +1716,55 @@ public sealed partial class CommandService
         }
 
         var snapshotSingleModel = ResolveModel(snapshotSingleProvider, snapshot.SingleModel);
+
+        // Think+ 토글 키워드 감지 (입력 시작 부분)
+        var rawIncomingText = text ?? string.Empty;
+        var thinkPlusToggleNote = string.Empty;
+        var hasActivationKeyword = LooksLikeThinkPlusActivation(rawIncomingText);
+        var hasDeactivationKeyword = LooksLikeThinkPlusDeactivation(rawIncomingText);
+        if (hasActivationKeyword && !hasDeactivationKeyword)
+        {
+            if (!IsThinkPlusActiveForThread(session.SessionId))
+            {
+                SetThinkPlusForThread(session.SessionId, true);
+                thinkPlusToggleNote = "[추론 모드 활성화] 지금부터 모든 메시지에 대해 최신 웹 검색 결과를 참고해 답변합니다. 끄려면 \"추론 모드 꺼\"라고 말하세요.";
+            }
+        }
+        else if (hasDeactivationKeyword)
+        {
+            if (IsThinkPlusActiveForThread(session.SessionId))
+            {
+                SetThinkPlusForThread(session.SessionId, false);
+                thinkPlusToggleNote = "[추론 모드 비활성화] 일반 모드로 돌아갑니다.";
+            }
+        }
+
+        // 토글 키워드를 입력에서 제거. 결합 메시지(토글 + 질문)인 경우 남은 질문으로 LLM 흐름 진행.
+        if (!string.IsNullOrEmpty(thinkPlusToggleNote))
+        {
+            var stripped = ThinkPlusActivationRegex.Replace(rawIncomingText, " ");
+            stripped = ThinkPlusDeactivationRegex.Replace(stripped, " ");
+            stripped = Regex.Replace(stripped, @"\s+", " ").Trim();
+            // 단독 토글 명령 (남은 텍스트 너무 짧음) → 즉시 안내 메시지만 반환
+            if (stripped.Length < 6)
+            {
+                var note = thinkPlusToggleNote;
+                _conversationStore.AppendMessage(session.Thread.Id, "user", text, "telegram:user");
+                _conversationStore.AppendMessage(session.Thread.Id, "assistant", note, "telegram:think_plus_toggle");
+                await EnsureConversationTitleFromFirstTurnAsync(session.Thread.Id, "system", "-", cancellationToken);
+                SetCurrentTelegramExecutionMetadata(null, 0, 0, "-");
+                _auditLogger.Log(
+                    "telegram",
+                    "think_plus_toggle",
+                    IsThinkPlusActiveForThread(session.SessionId) ? "on" : "off",
+                    $"thread={session.Thread.Id} bare_toggle=true"
+                );
+                return note;
+            }
+            // 결합 메시지: text 자체를 정리된 질문으로 덮어쓰고 정상 흐름 진행. 노트는 응답에 prepend.
+            text = stripped;
+        }
+
         var effectiveTopicInput = BuildTelegramFollowupAwareInput(telegramThread, text);
         var resolvedWebUrls = ResolveWebUrls(effectiveTopicInput, webUrls, webSearchEnabled);
         if (resolvedWebUrls.Count > 0 && snapshot.Mode == "single" && _llmRouter.HasGeminiApiKey())
@@ -1754,43 +1803,7 @@ public sealed partial class CommandService
         var skillQueryText = text ?? string.Empty;
         var hasStickyActiveSkillForTelegram = !string.IsNullOrWhiteSpace(session.SessionId)
             && _activeSkillByThread.ContainsKey(session.SessionId);
-
-        // Think+ 모드 토글 (텔레그램 자연어 명령어)
-        var thinkPlusToggleNote = string.Empty;
-        if (LooksLikeThinkPlusActivation(skillQueryText) && !LooksLikeThinkPlusDeactivation(skillQueryText))
-        {
-            if (!IsThinkPlusActiveForThread(session.SessionId))
-            {
-                SetThinkPlusForThread(session.SessionId, true);
-                thinkPlusToggleNote = "[추론 모드 활성화] 지금부터 모든 메시지에 대해 최신 웹 검색 결과를 참고해 답변합니다. 끄려면 \"추론 모드 꺼\"라고 말하세요.";
-            }
-        }
-        else if (LooksLikeThinkPlusDeactivation(skillQueryText))
-        {
-            if (IsThinkPlusActiveForThread(session.SessionId))
-            {
-                SetThinkPlusForThread(session.SessionId, false);
-                thinkPlusToggleNote = "[추론 모드 비활성화] 일반 모드로 돌아갑니다.";
-            }
-        }
         var thinkPlusActiveForTelegram = IsThinkPlusActiveForThread(session.SessionId);
-
-        // 토글 명령만 보낸 경우 (다른 질문 없이) 즉시 안내 메시지 반환.
-        if (!string.IsNullOrEmpty(thinkPlusToggleNote))
-        {
-            var note = thinkPlusToggleNote;
-            _conversationStore.AppendMessage(session.Thread.Id, "user", text, "telegram:user");
-            _conversationStore.AppendMessage(session.Thread.Id, "assistant", note, "telegram:think_plus_toggle");
-            await EnsureConversationTitleFromFirstTurnAsync(session.Thread.Id, "system", "-", cancellationToken);
-            SetCurrentTelegramExecutionMetadata(null, 0, 0, "-");
-            _auditLogger.Log(
-                "telegram",
-                "think_plus_toggle",
-                thinkPlusActiveForTelegram ? "on" : "off",
-                $"thread={session.Thread.Id}"
-            );
-            return note;
-        }
 
         var isSkillContextQuery = LooksLikeProjectContextRequest(skillQueryText)
             || LooksLikeSkillCreationRequest(skillQueryText)
@@ -1980,6 +1993,7 @@ public sealed partial class CommandService
 
             modelForMemory = string.IsNullOrWhiteSpace(snapshot.OrchestrationModel) ? "-" : snapshot.OrchestrationModel;
             assistantMeta = $"telegram-orchestration:{orchestrated.Route}";
+            responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
             _conversationStore.AppendMessage(session.Thread.Id, "user", text, "telegram:user");
             _conversationStore.AppendMessage(session.Thread.Id, "assistant", responseText, assistantMeta);
             await EnsureConversationTitleFromFirstTurnAsync(session.Thread.Id, providerForMemory, modelForMemory, cancellationToken);
@@ -2037,6 +2051,7 @@ public sealed partial class CommandService
                 _ => "-"
             };
             assistantMeta = $"telegram-multi:summary={multi.ResolvedSummaryProvider}";
+            responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
             _conversationStore.AppendMessage(session.Thread.Id, "user", text, "telegram:user");
             _conversationStore.AppendMessage(session.Thread.Id, "assistant", responseText, assistantMeta);
             await EnsureConversationTitleFromFirstTurnAsync(session.Thread.Id, providerForMemory, modelForMemory, cancellationToken);
@@ -2064,6 +2079,7 @@ public sealed partial class CommandService
             if (!string.IsNullOrWhiteSpace(providerPrepared.UnsupportedMessage))
             {
                 responseText = $"[Single groq:{preferredModel}]\n{providerPrepared.UnsupportedMessage}";
+                responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
                 providerForMemory = "groq";
                 modelForMemory = preferredModel;
                 assistantMeta = $"telegram-single:groq:{preferredModel}:unsupported";
@@ -2125,6 +2141,7 @@ public sealed partial class CommandService
             effectiveGuardFailure = sharedPrepared.GuardFailure;
             var singleGroqText = ApplySkillCreateDirective(singleGroq.Text, "telegram");
             responseText = $"[Single {singleGroq.Provider}:{singleGroq.Model}]\n{FormatTelegramResponse(singleGroqText, TelegramMaxResponseChars)}";
+            responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
             providerForMemory = singleGroq.Provider;
             modelForMemory = singleGroq.Model;
             assistantMeta = $"telegram-single:{singleGroq.Provider}:{singleGroq.Model}";
@@ -2151,6 +2168,7 @@ public sealed partial class CommandService
         if (!string.IsNullOrWhiteSpace(providerInput.UnsupportedMessage))
         {
             responseText = $"[Single {snapshot.SingleProvider}:{singleModel}]\n{providerInput.UnsupportedMessage}";
+            responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
             providerForMemory = snapshot.SingleProvider;
             modelForMemory = singleModel;
             assistantMeta = $"telegram-single:{snapshot.SingleProvider}:{singleModel}:unsupported";
@@ -2215,6 +2233,7 @@ public sealed partial class CommandService
         effectiveGuardFailure = sharedPrepared.GuardFailure;
         var singleText = ApplySkillCreateDirective(single.Text, "telegram");
         responseText = $"[Single {single.Provider}:{single.Model}]\n{FormatTelegramResponse(singleText, TelegramMaxResponseChars)}";
+        responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
         providerForMemory = single.Provider;
         modelForMemory = single.Model;
         assistantMeta = $"telegram-single:{single.Provider}:{single.Model}";

@@ -43,6 +43,13 @@ public sealed partial class CommandService
         else _thinkPlusByThread.TryRemove(threadKey, out _);
     }
 
+    internal static string ApplyThinkPlusToggleNoteIfAny(string? note, string responseText)
+    {
+        if (string.IsNullOrEmpty(note)) return responseText;
+        if (string.IsNullOrEmpty(responseText)) return note;
+        return $"{note}\n\n{responseText}";
+    }
+
     /// <summary>
     /// Gemini grounded web search 결과를 fetched 한 뒤 prepend용 컨텍스트 블록을 만든다.
     /// 키 없거나 실패 시 빈 문자열 반환.
