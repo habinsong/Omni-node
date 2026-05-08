@@ -7716,14 +7716,11 @@ import {
           ),
           hasShortcutConflict
             ? e("div", { className: "shortcut-conflict" },
-              e("strong", null, "충돌"),
-              e("span", null, " · "),
-              ...conflictGroups.flatMap(([value, keys], idx) => {
-                const labels = keys.map((k) => labelByKey[k]).join(" ↔ ");
-                const chip = e("span", { key: `c${idx}`, className: "shortcut-chip" }, formatShortcutLabel(value));
-                const text = e("span", { key: `t${idx}` }, ` ${labels}${idx < conflictGroups.length - 1 ? " / " : ""}`);
-                return [chip, text];
-              })
+              e("strong", null, "충돌: "),
+              e("span", null, conflictGroups.map(([value, keys]) => {
+                const labels = keys.map((k) => labelByKey[k] || k).join(" ↔ ");
+                return `${formatShortcutLabel(value)} (${labels})`;
+              }).join(" / "))
             )
             : null,
           shortcutGroups.map((group) => e("div", { key: group.title, className: "shortcut-group" },
