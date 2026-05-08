@@ -684,6 +684,7 @@ import {
     const speechBaseDraftRef = useRef("");
     const speechTargetKeyRef = useRef("");
     const speechStopRequestedRef = useRef(false);
+    const sendCurrentComposerRef = useRef(null);
 
     const [status, setStatus] = useState("연결 대기");
     const [authed, setAuthed] = useState(false);
@@ -4036,6 +4037,19 @@ import {
           active: false,
           error: stoppedByUser || hadTranscript ? prev.error : (prev.error || "입력된 음성이 없습니다. 다시 눌러 말하세요.")
         }));
+        // 자동 전송: 음성 인식 결과가 있으면 composer에 채워진 내용을 그대로 전송.
+        // 사용자 의도("음성 → 자동 전송"). chat/coding 탭에서만.
+        // ref로 최신 sendCurrentComposer 호출해서 stale closure / state 회피.
+        if (hadTranscript) {
+          setTimeout(() => {
+            try {
+              const fn = sendCurrentComposerRef.current;
+              if (typeof fn === "function") {
+                fn();
+              }
+            } catch {}
+          }, 200);
+        }
       };
       try {
         recognition.start();
@@ -6589,6 +6603,9 @@ import {
         }
       }
     }
+
+    // 매 렌더마다 sendCurrentComposer ref를 최신화 (음성 자동 전송 등에서 stale closure 회피)
+    sendCurrentComposerRef.current = sendCurrentComposer;
 
     function getRichInputPayload(inputText = "") {
       return buildRichInputPayload({
