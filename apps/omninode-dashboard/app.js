@@ -4504,7 +4504,9 @@ import {
         attachments: rich.attachments,
         webUrls: rich.webUrls,
         webSearchEnabled: rich.webSearchEnabled,
-        thinkPlus: !!thinkPlusModeByKey["chat:orchestration"]
+        thinkPlus: !!thinkPlusModeByKey["chat:orchestration"],
+        skillName: selectedChatSkill?.name || undefined,
+        skillScope: selectedChatSkill?.scope || undefined
       });
 
       if (!ok) {
@@ -4551,7 +4553,9 @@ import {
         attachments: rich.attachments,
         webUrls: rich.webUrls,
         webSearchEnabled: rich.webSearchEnabled,
-        thinkPlus: !!thinkPlusModeByKey["chat:multi"]
+        thinkPlus: !!thinkPlusModeByKey["chat:multi"],
+        skillName: selectedChatSkill?.name || undefined,
+        skillScope: selectedChatSkill?.scope || undefined
       });
 
       if (!ok) {
@@ -4600,7 +4604,9 @@ import {
         attachments: rich.attachments,
         webUrls: rich.webUrls,
         webSearchEnabled: rich.webSearchEnabled,
-        thinkPlus: !!thinkPlusModeByKey["coding:single"]
+        thinkPlus: !!thinkPlusModeByKey["coding:single"],
+        skillName: selectedChatSkill?.name || undefined,
+        skillScope: selectedChatSkill?.scope || undefined
       });
 
       if (!ok) {
@@ -4663,7 +4669,9 @@ import {
         attachments: rich.attachments,
         webUrls: rich.webUrls,
         webSearchEnabled: rich.webSearchEnabled,
-        thinkPlus: !!thinkPlusModeByKey["coding:orchestration"]
+        thinkPlus: !!thinkPlusModeByKey["coding:orchestration"],
+        skillName: selectedChatSkill?.name || undefined,
+        skillScope: selectedChatSkill?.scope || undefined
       });
 
       if (!ok) {
@@ -4718,7 +4726,9 @@ import {
         attachments: rich.attachments,
         webUrls: rich.webUrls,
         webSearchEnabled: rich.webSearchEnabled,
-        thinkPlus: !!thinkPlusModeByKey["coding:multi"]
+        thinkPlus: !!thinkPlusModeByKey["coding:multi"],
+        skillName: selectedChatSkill?.name || undefined,
+        skillScope: selectedChatSkill?.scope || undefined
       });
 
       if (!ok) {
@@ -7527,7 +7537,7 @@ import {
         attachmentFileInputId,
         onAttachmentSelected,
         onClearAttachments: () => setAttachmentsByKey((prev) => clearAttachmentDraft(prev, currentKey)),
-        selectedSkill: currentKey === "chat:single" ? selectedChatSkill : null,
+        selectedSkill: (currentKey.startsWith("chat:") || currentKey.startsWith("coding:")) ? selectedChatSkill : null,
         onClearSkill: () => setSelectedChatSkill(null),
         speechState,
         onStartVoiceInput: startVoiceInput,
@@ -8406,8 +8416,6 @@ import {
           label: skill.name,
           helper: `${skill.scope === "global" ? "전역" : "프로젝트"} · ${skill.description || skill.path || "선택한 대화에 적용"}`,
           run: () => {
-            setRootTab("chat");
-            setChatMode("single");
             setSelectedChatSkill({ name: skill.name, scope: skill.scope, key: skill.key });
           }
         });

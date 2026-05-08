@@ -174,7 +174,7 @@ public sealed partial class CommandService
                 PreferBundleFallback: multiFileLike,
                 PreferDirectRecovery: false,
                 EnableGameScaffoldFallback: false,
-                RequestTimeoutSeconds: Math.Max(45, _config.NvidiaTimeoutSec),
+                RequestTimeoutSeconds: Math.Max(360, _config.NvidiaTimeoutSec * 2),
                 MaxIterations: Math.Min(baseIterations, 3),
                 LoopMaxActions: Math.Min(baseActions, 3),
                 OneShotMaxActions: Math.Max(3, Math.Min(baseActions, 4)),

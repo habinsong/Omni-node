@@ -144,7 +144,12 @@ public sealed partial class CommandService
             ));
         }
 
-        var thinkPlusPreText = preparedInput.Text;
+        var requestedSkillName = FirstNonEmptyLocal(request.SkillName, TryExtractInlineSkillName(rawInput));
+        var thinkPlusPreText = ApplySelectedSkillToPrompt(
+            preparedInput.Text,
+            requestedSkillName,
+            request.SkillScope
+        );
         if (request.ThinkPlusEnabled && request.Mode == "single")
         {
             var thinkPlusContext = await BuildThinkPlusContextAsync(rawInput, request.Source, cancellationToken).ConfigureAwait(false);
@@ -402,7 +407,12 @@ public sealed partial class CommandService
                 sharedPrepared.RetryStopReason
             ));
         }
-        var thinkPlusPreText = sharedPrepared.Text;
+        var requestedSkillName = FirstNonEmptyLocal(request.SkillName, TryExtractInlineSkillName(effectiveInput));
+        var thinkPlusPreText = ApplySelectedSkillToPrompt(
+            sharedPrepared.Text,
+            requestedSkillName,
+            request.SkillScope
+        );
         if (request.ThinkPlusEnabled)
         {
             var thinkPlusContext = await BuildThinkPlusContextAsync(effectiveInput, request.Source, cancellationToken).ConfigureAwait(false);
@@ -810,7 +820,12 @@ public sealed partial class CommandService
                 sharedPrepared.RetryStopReason
             ));
         }
-        var thinkPlusPreText = sharedPrepared.Text;
+        var requestedSkillName = FirstNonEmptyLocal(request.SkillName, TryExtractInlineSkillName(rawInput));
+        var thinkPlusPreText = ApplySelectedSkillToPrompt(
+            sharedPrepared.Text,
+            requestedSkillName,
+            request.SkillScope
+        );
         if (request.ThinkPlusEnabled)
         {
             var thinkPlusContext = await BuildThinkPlusContextAsync(rawInput, request.Source, cancellationToken).ConfigureAwait(false);

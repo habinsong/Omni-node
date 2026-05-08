@@ -173,10 +173,12 @@ public sealed partial class CommandService
             : ResolveProviderModel(normalized, model);
         var timeoutSeconds = timeoutOverrideSeconds ?? (normalized switch
         {
+            "groq" => Math.Max(90, _config.LlmTimeoutSec * 3),
+            "gemini" => Math.Max(90, _config.LlmTimeoutSec * 3),
             "copilot" => Math.Max(120, _config.LlmTimeoutSec * 3),
             "codex" => Math.Max(120, _config.LlmTimeoutSec * 3),
-            "cerebras" => Math.Max(8, _config.CerebrasTimeoutSec),
-            "nvidia" => Math.Max(8, _config.NvidiaTimeoutSec),
+            "cerebras" => Math.Max(120, _config.CerebrasTimeoutSec * 3),
+            "nvidia" => Math.Max(360, _config.NvidiaTimeoutSec * 2),
             _ => Math.Max(8, _config.LlmTimeoutSec)
         });
         var maxAttempts = normalized == "gemini" ? 2 : 1;

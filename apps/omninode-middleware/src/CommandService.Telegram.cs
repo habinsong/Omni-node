@@ -1969,6 +1969,13 @@ public sealed partial class CommandService
             ? sharedPrepared.Text
             : await PrepareTelegramInputAsync(sharedPrepared.Text, cancellationToken);
 
+        var requestedSkillName = TryExtractInlineSkillName(requestText);
+        preparedInput = ApplySelectedSkillToPrompt(
+            preparedInput,
+            requestedSkillName,
+            null
+        );
+
         // Think+ 활성이면 sharedPrepared 앞에 web context prepend
         if (thinkPlusActiveForTelegram)
         {

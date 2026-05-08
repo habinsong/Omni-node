@@ -41,7 +41,7 @@ public sealed class AppConfig
     public string? CerebrasApiKey { get; init; }
     public string NvidiaBaseUrl { get; init; } = "https://integrate.api.nvidia.com/v1";
     public string NvidiaModel { get; init; } = "meta/llama-3.1-70b-instruct";
-    public int NvidiaTimeoutSec { get; init; } = 20;
+    public int NvidiaTimeoutSec { get; init; } = 180;
     public string NvidiaKeychainService { get; init; } = NvidiaApiKeyService;
     public string NvidiaKeychainAccount { get; init; } = DefaultKeychainAccount;
     public string? NvidiaApiKey { get; init; }
@@ -185,7 +185,7 @@ public sealed class AppConfig
             ),
             NvidiaBaseUrl = GetStringEnv("OMNINODE_NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
             NvidiaModel = GetStringEnv("OMNINODE_NVIDIA_MODEL", "meta/llama-3.1-70b-instruct"),
-            NvidiaTimeoutSec = GetIntEnv("OMNINODE_NVIDIA_TIMEOUT_SEC", 20),
+            NvidiaTimeoutSec = GetIntEnv("OMNINODE_NVIDIA_TIMEOUT_SEC", 180),
             NvidiaKeychainService = GetStringEnv("OMNINODE_NVIDIA_KEYCHAIN_SERVICE", NvidiaApiKeyService),
             NvidiaKeychainAccount = GetStringEnv("OMNINODE_NVIDIA_KEYCHAIN_ACCOUNT", DefaultKeychainAccount),
             NvidiaApiKey = SecretLoader.ResolveApiKey(

@@ -106,7 +106,9 @@ public sealed record MultiChatRequest(
     bool WebSearchEnabled = true,
     string? CodexModel = null,
     string? NvidiaModel = null,
-    bool ThinkPlusEnabled = false
+    bool ThinkPlusEnabled = false,
+    string? SkillName = null,
+    string? SkillScope = null
 );
 public sealed record ChatStreamUpdate(
     string Scope,
@@ -245,7 +247,9 @@ public sealed record CodingRunRequest(
     bool WebSearchEnabled = true,
     string? CodexModel = null,
     bool ThinkPlusEnabled = false,
-    string? NvidiaModel = null
+    string? NvidiaModel = null,
+    string? SkillName = null,
+    string? SkillScope = null
 );
 public sealed record CodingWorkerResult(
     string Provider,

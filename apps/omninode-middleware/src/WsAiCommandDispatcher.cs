@@ -257,7 +257,9 @@ internal sealed class WsAiCommandDispatcher
                         WebUrls: message.WebUrls,
                         WebSearchEnabled: message.WebSearchEnabled,
                         CodexModel: message.CodexModel,
-                        ThinkPlusEnabled: message.ThinkPlus == true
+                        ThinkPlusEnabled: message.ThinkPlus == true,
+                        SkillName: message.SkillName,
+                        SkillScope: message.SkillScope
                     ),
                     cancellationToken
                 );
@@ -317,7 +319,9 @@ internal sealed class WsAiCommandDispatcher
                         WebUrls: message.WebUrls,
                         WebSearchEnabled: message.WebSearchEnabled,
                         CodexModel: message.CodexModel,
-                        ThinkPlusEnabled: message.ThinkPlus == true
+                        ThinkPlusEnabled: message.ThinkPlus == true,
+                        SkillName: message.SkillName,
+                        SkillScope: message.SkillScope
                     ),
                     cancellationToken
                 );
@@ -386,7 +390,9 @@ internal sealed class WsAiCommandDispatcher
                         Attachments: message.Attachments,
                         WebUrls: message.WebUrls,
                         WebSearchEnabled: message.WebSearchEnabled,
-                        ThinkPlusEnabled: message.ThinkPlus == true
+                        ThinkPlusEnabled: message.ThinkPlus == true,
+                        SkillName: message.SkillName,
+                        SkillScope: message.SkillScope
                     ),
                     cancellationToken,
                     progress
@@ -441,7 +447,9 @@ internal sealed class WsAiCommandDispatcher
                         WebUrls: message.WebUrls,
                         WebSearchEnabled: message.WebSearchEnabled,
                         CodexModel: message.CodexModel,
-                        ThinkPlusEnabled: message.ThinkPlus == true
+                        ThinkPlusEnabled: message.ThinkPlus == true,
+                        SkillName: message.SkillName,
+                        SkillScope: message.SkillScope
                     ),
                     cancellationToken,
                     progress
@@ -507,7 +515,9 @@ internal sealed class WsAiCommandDispatcher
                         WebUrls: message.WebUrls,
                         WebSearchEnabled: message.WebSearchEnabled,
                         CodexModel: message.CodexModel,
-                        ThinkPlusEnabled: message.ThinkPlus == true
+                        ThinkPlusEnabled: message.ThinkPlus == true,
+                        SkillName: message.SkillName,
+                        SkillScope: message.SkillScope
                     ),
                     cancellationToken,
                     progress

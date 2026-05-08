@@ -882,11 +882,18 @@ public sealed partial class CommandService
             return false;
         }
 
-        return Regex.IsMatch(
-            normalized,
-            @"(?i)((스킬|skill|skills)\s*(을|를)?\s*(만들|만들어|생성|등록|추가|작성|새로|new)|" +
-            @"(create|make|add|register|build|write)\s+(a\s+|an\s+|new\s+)?(skill|skills))"
-        );
+        var creationPattern =
+            @"(?i)(((새|신규|새로운|new)\s+)?(스킬|skill|skills)\s*(을|를)?\s*(만들|만들어|생성|등록|추가|작성)|" +
+            @"(create|make|add|register|build|write)\s+(a\s+|an\s+|new\s+)?(skill|skills))";
+        var usagePattern = @"(?i)(스킬|skill|skills)\s*(을|를)?\s*(사용|적용|활성|켜|on)\s*(해서|하여|하고)?";
+        var creationMatched = Regex.IsMatch(normalized, creationPattern);
+
+        if (Regex.IsMatch(normalized, usagePattern) && !creationMatched)
+        {
+            return false;
+        }
+
+        return creationMatched;
     }
 
     private static bool LooksLikeSkillDeactivationRequest(string input)

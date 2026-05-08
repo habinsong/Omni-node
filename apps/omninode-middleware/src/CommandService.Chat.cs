@@ -471,9 +471,10 @@ public sealed partial class CommandService
                 );
         }
 
+        var requestedSkillName = FirstNonEmptyLocal(request.SkillName, TryExtractInlineSkillName(rawInput));
         var skillPreparedText = ApplySelectedSkillToPrompt(
             preparedInput.Text,
-            request.SkillName,
+            requestedSkillName,
             request.SkillScope
         );
         // Think+ 모드 prepend (chat-single 단독 모드만)
@@ -775,20 +776,37 @@ public sealed partial class CommandService
         var normalized = (input ?? string.Empty).Trim().ToLowerInvariant();
         if (normalized.Length == 0)
         {
-            return 1600;
+            return 4096;
+        }
+
+        if (ContainsAny(
+                normalized,
+                "자세",
+                "상세",
+                "깊게",
+                "설명",
+                "가이드",
+                "분석",
+                "원리",
+                "기술",
+                "비전공자",
+                "non-expert",
+                "explain"))
+        {
+            return 4096;
         }
 
         if (LooksLikeListOutputRequest(normalized))
         {
-            return 1100;
+            return 3072;
         }
 
         if (ContainsAny(normalized, "요약", "정리", "summary", "compare", "비교"))
         {
-            return 900;
+            return 2048;
         }
 
-        return 1200;
+        return 3072;
     }
 
     private static string BuildHistoryBypassInput(string preparedInput)
@@ -1256,10 +1274,17 @@ public sealed partial class CommandService
 
     private string ApplySelectedSkillToPrompt(string input, string? skillName, string? skillScope)
     {
+        var safeInput = input ?? string.Empty;
         var normalizedName = (skillName ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(normalizedName))
         {
-            return input;
+            return safeInput;
+        }
+
+        if (safeInput.IndexOf("[Active Skill", StringComparison.OrdinalIgnoreCase) >= 0
+            && safeInput.IndexOf(normalizedName, StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return safeInput;
         }
 
         try
@@ -1274,14 +1299,14 @@ public sealed partial class CommandService
                 .FirstOrDefault();
             if (skill == null || string.IsNullOrWhiteSpace(skill.Path) || !File.Exists(skill.Path))
             {
-                return input;
+                return safeInput;
             }
 
             var raw = File.ReadAllText(skill.Path, Encoding.UTF8);
             var trimmedSkill = TrimToUtf8ByteCount(raw.Trim(), 12_000);
             if (string.IsNullOrWhiteSpace(trimmedSkill))
             {
-                return input;
+                return safeInput;
             }
 
             return $"""
@@ -1292,14 +1317,53 @@ public sealed partial class CommandService
                     [/SKILL]
 
                     사용자 요청:
-                    {input}
+                    {safeInput}
                     """;
         }
         catch (Exception ex)
         {
             _auditLogger.Log("web", "skill_prompt_apply", "failed", ex.Message);
-            return input;
+            return safeInput;
         }
+    }
+
+    private string? TryExtractInlineSkillName(string input)
+    {
+        var normalized = (input ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        try
+        {
+            var snapshot = _projectContextLoader.LoadSnapshot();
+            return snapshot.Skills
+                .OrderByDescending(skill => skill.Name.Length)
+                .FirstOrDefault(skill =>
+                    normalized.Contains(skill.Name, StringComparison.OrdinalIgnoreCase)
+                    && Regex.IsMatch(
+                        normalized,
+                        $@"(?i){Regex.Escape(skill.Name)}\s*(스킬|skill)?\s*(을|를)?\s*(사용|적용|활성|켜|on)"
+                    ))?.Name;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string FirstNonEmptyLocal(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+
+        return string.Empty;
     }
 
     private static string TrimLocalAssistantInfoText(string text, int maxChars)
@@ -1451,7 +1515,12 @@ public sealed partial class CommandService
                 basePrepared.RetryStopReason
             );
         }
-        var thinkPlusPreText = basePrepared.Text;
+        var requestedSkillName = FirstNonEmptyLocal(request.SkillName, TryExtractInlineSkillName(rawInput));
+        var thinkPlusPreText = ApplySelectedSkillToPrompt(
+            basePrepared.Text,
+            requestedSkillName,
+            request.SkillScope
+        );
         if (request.ThinkPlusEnabled)
         {
             var thinkPlusContext = await BuildThinkPlusContextAsync(rawInput, request.Source, cancellationToken).ConfigureAwait(false);
@@ -1698,7 +1767,12 @@ public sealed partial class CommandService
                 localNvidiaModel
             );
         }
-        var thinkPlusPreText = basePrepared.Text;
+        var requestedSkillName = FirstNonEmptyLocal(request.SkillName, TryExtractInlineSkillName(rawInput));
+        var thinkPlusPreText = ApplySelectedSkillToPrompt(
+            basePrepared.Text,
+            requestedSkillName,
+            request.SkillScope
+        );
         if (request.ThinkPlusEnabled)
         {
             var thinkPlusContext = await BuildThinkPlusContextAsync(rawInput, request.Source, cancellationToken).ConfigureAwait(false);

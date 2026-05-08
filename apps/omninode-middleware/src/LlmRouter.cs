@@ -27,9 +27,11 @@ public sealed record GeminiUrlContextChatResponse(
     IReadOnlyList<SearchCitationReference> Citations
 );
 
+public sealed record OpenAiCompatibleStreamChunk(string Content, string FinishReason);
+
 public sealed class LlmRouter : IDisposable
 {
-    private const int ChatContinuationRounds = 4;
+    private const int ChatContinuationRounds = 6;
     private const string CerebrasFallbackModel = "gpt-oss-120b";
     private string? _cerebrasResolvedModelCache = null;
     private DateTime _cerebrasResolvedModelCachedAt = DateTime.MinValue;
@@ -570,7 +572,7 @@ public sealed class LlmRouter : IDisposable
                     mergedBuilder.Append(chunkText);
                 }
 
-                if (!IsGroqTruncated(chunk.FinishReason) || string.IsNullOrWhiteSpace(chunkText))
+                if (!IsOpenAiCompatibleTruncated(chunk.FinishReason) || string.IsNullOrWhiteSpace(chunkText))
                 {
                     break;
                 }
@@ -1611,8 +1613,12 @@ public sealed class LlmRouter : IDisposable
     private static TimeSpan ResolveSharedHttpTimeout(AppConfig config)
     {
         var llmTimeoutMs = Math.Max(5000, config.LlmTimeoutSec * 1000);
+        var providerTimeoutMs = Math.Max(
+            Math.Max(config.NvidiaTimeoutSec, config.CerebrasTimeoutSec),
+            45
+        ) * 1000;
         var geminiWebTimeoutMs = NormalizeGeminiGroundedTimeoutMs(config.GeminiWebTimeoutMs);
-        return TimeSpan.FromMilliseconds(Math.Max(llmTimeoutMs, geminiWebTimeoutMs + 5000));
+        return TimeSpan.FromMilliseconds(Math.Max(Math.Max(llmTimeoutMs, providerTimeoutMs + 5000), geminiWebTimeoutMs + 5000));
     }
 
     private static int NormalizeGeminiGroundedTimeoutMs(int timeoutMs)
@@ -1786,7 +1792,7 @@ public sealed class LlmRouter : IDisposable
                     mergedBuilder.Append(chunkText);
                 }
 
-                if (!IsGroqTruncated(chunk.FinishReason) || string.IsNullOrWhiteSpace(chunkText))
+                if (!IsOpenAiCompatibleTruncated(chunk.FinishReason) || string.IsNullOrWhiteSpace(chunkText))
                 {
                     break;
                 }
@@ -1933,7 +1939,7 @@ public sealed class LlmRouter : IDisposable
                     mergedBuilder.Append(chunkText);
                 }
 
-                if (!IsGroqTruncated(chunk.FinishReason) || string.IsNullOrWhiteSpace(chunkText))
+                if (!IsOpenAiCompatibleTruncated(chunk.FinishReason) || string.IsNullOrWhiteSpace(chunkText))
                 {
                     break;
                 }
@@ -2663,111 +2669,143 @@ public sealed class LlmRouter : IDisposable
         CancellationToken cancellationToken
     )
     {
-        var body = BuildOpenAiCompatibleChatBody(
-            model,
-            systemPrompt,
-            userInput,
-            maxTokensProperty,
-            maxOutputTokens,
-            stream: true
-        );
         var mergedBuilder = new StringBuilder();
-        var eventBuilder = new StringBuilder();
+        var promptForTurn = userInput;
 
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-            using var response = await _httpClient.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken
-            );
-            if (provider.Equals("nvidia", StringComparison.OrdinalIgnoreCase)
-                && response.StatusCode == System.Net.HttpStatusCode.Accepted)
+            for (var turn = 0; turn < ChatContinuationRounds; turn++)
             {
-                var acceptedBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                var polled = await PollNvidiaStatusAsync(apiKey, acceptedBody, cancellationToken);
-                var finalContent = ExtractGroqContent(polled).Trim();
-                SafeEmitDelta(deltaCallback, finalContent);
-                return string.IsNullOrWhiteSpace(finalContent)
-                    ? "NVIDIA NIM 응답이 비어 있습니다."
-                    : finalContent;
-            }
+                var body = BuildOpenAiCompatibleChatBody(
+                    model,
+                    systemPrompt,
+                    promptForTurn,
+                    maxTokensProperty,
+                    maxOutputTokens,
+                    stream: true
+                );
+                var eventBuilder = new StringBuilder();
+                var turnBuilder = new StringBuilder();
+                var turnFinishReason = string.Empty;
 
-            if (!response.IsSuccessStatusCode)
-            {
-                var failureBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                Console.Error.WriteLine($"[{provider}] chat stream failed ({(int)response.StatusCode}): {failureBody}");
-                return $"{ProviderDisplayName(provider)} 요청 실패: {(int)response.StatusCode}";
-            }
+                using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+                request.Content = new StringContent(body, Encoding.UTF8, "application/json");
 
-            if (provider.Equals("groq", StringComparison.OrdinalIgnoreCase))
-            {
-                CaptureGroqRateLimitHeaders(model, response.Headers);
-            }
+                using var response = await _httpClient.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    cancellationToken
+                );
+                if (provider.Equals("nvidia", StringComparison.OrdinalIgnoreCase)
+                    && response.StatusCode == System.Net.HttpStatusCode.Accepted)
+                {
+                    var acceptedBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                    var polled = await PollNvidiaStatusAsync(apiKey, acceptedBody, cancellationToken);
+                    var polledChunk = ExtractGroqChatChunk(polled);
+                    var finalContent = polledChunk.Content.Trim();
+                    if (!string.IsNullOrWhiteSpace(finalContent))
+                    {
+                        AppendGeneratedChunk(mergedBuilder, finalContent);
+                        SafeEmitDelta(deltaCallback, finalContent);
+                    }
 
-            using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            using var reader = new StreamReader(responseStream, Encoding.UTF8);
-            while (true)
-            {
-                var line = await reader.ReadLineAsync(cancellationToken);
-                if (line == null)
+                    if (!IsOpenAiCompatibleTruncated(polledChunk.FinishReason)
+                        || string.IsNullOrWhiteSpace(finalContent))
+                    {
+                        break;
+                    }
+
+                    promptForTurn = BuildContinuationPrompt(userInput, mergedBuilder.ToString());
+                    continue;
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var failureBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                    Console.Error.WriteLine($"[{provider}] chat stream failed ({(int)response.StatusCode}): {failureBody}");
+                    return $"{ProviderDisplayName(provider)} 요청 실패: {(int)response.StatusCode}";
+                }
+
+                if (provider.Equals("groq", StringComparison.OrdinalIgnoreCase))
+                {
+                    CaptureGroqRateLimitHeaders(model, response.Headers);
+                }
+
+                using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var reader = new StreamReader(responseStream, Encoding.UTF8);
+                while (true)
+                {
+                    var line = await reader.ReadLineAsync(cancellationToken);
+                    if (line == null)
+                    {
+                        break;
+                    }
+
+                    if (line.Length == 0)
+                    {
+                        ConsumeOpenAiStreamEvent(eventBuilder.ToString());
+                        eventBuilder.Clear();
+                        continue;
+                    }
+
+                    if (line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var payloadLine = line[5..].TrimStart();
+                        if (payloadLine.Length > 0)
+                        {
+                            if (eventBuilder.Length > 0)
+                            {
+                                eventBuilder.Append('\n');
+                            }
+
+                            eventBuilder.Append(payloadLine);
+                        }
+                    }
+                }
+
+                if (eventBuilder.Length > 0)
+                {
+                    ConsumeOpenAiStreamEvent(eventBuilder.ToString());
+                }
+
+                if (!IsOpenAiCompatibleTruncated(turnFinishReason) || turnBuilder.Length == 0)
                 {
                     break;
                 }
 
-                if (line.Length == 0)
-                {
-                    ConsumeOpenAiStreamEvent(eventBuilder.ToString());
-                    eventBuilder.Clear();
-                    continue;
-                }
+                promptForTurn = BuildContinuationPrompt(userInput, mergedBuilder.ToString());
 
-                if (line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                void ConsumeOpenAiStreamEvent(string eventPayload)
                 {
-                    var payloadLine = line[5..].TrimStart();
-                    if (payloadLine.Length > 0)
+                    var payload = (eventPayload ?? string.Empty).Trim();
+                    if (payload.Length == 0 || payload.Equals("[DONE]", StringComparison.Ordinal))
                     {
-                        if (eventBuilder.Length > 0)
-                        {
-                            eventBuilder.Append('\n');
-                        }
-
-                        eventBuilder.Append(payloadLine);
+                        return;
                     }
-                }
-            }
 
-            if (eventBuilder.Length > 0)
-            {
-                ConsumeOpenAiStreamEvent(eventBuilder.ToString());
+                    var chunk = ExtractOpenAiStreamChunk(payload);
+                    if (!string.IsNullOrWhiteSpace(chunk.FinishReason))
+                    {
+                        turnFinishReason = chunk.FinishReason;
+                    }
+
+                    var delta = chunk.Content;
+                    if (delta.Length == 0)
+                    {
+                        return;
+                    }
+
+                    mergedBuilder.Append(delta);
+                    turnBuilder.Append(delta);
+                    SafeEmitDelta(deltaCallback, delta);
+                }
             }
 
             var content = mergedBuilder.ToString().Trim();
             return string.IsNullOrWhiteSpace(content)
                 ? $"{ProviderDisplayName(provider)} 응답이 비어 있습니다."
                 : content;
-
-            void ConsumeOpenAiStreamEvent(string eventPayload)
-            {
-                var payload = (eventPayload ?? string.Empty).Trim();
-                if (payload.Length == 0 || payload.Equals("[DONE]", StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                var delta = ExtractOpenAiStreamDelta(payload);
-                if (delta.Length == 0)
-                {
-                    return;
-                }
-
-                mergedBuilder.Append(delta);
-                SafeEmitDelta(deltaCallback, delta);
-            }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -2903,7 +2941,7 @@ public sealed class LlmRouter : IDisposable
         };
     }
 
-    private static string ExtractOpenAiStreamDelta(string json)
+    private static OpenAiCompatibleStreamChunk ExtractOpenAiStreamChunk(string json)
     {
         try
         {
@@ -2912,23 +2950,26 @@ public sealed class LlmRouter : IDisposable
                 || choices.ValueKind != JsonValueKind.Array
                 || choices.GetArrayLength() == 0)
             {
-                return string.Empty;
+                return new OpenAiCompatibleStreamChunk(string.Empty, string.Empty);
             }
 
             var first = choices[0];
+            var finishReason = first.TryGetProperty("finish_reason", out var finishReasonElement)
+                ? finishReasonElement.GetString() ?? string.Empty
+                : string.Empty;
             if (!first.TryGetProperty("delta", out var delta) || delta.ValueKind != JsonValueKind.Object)
             {
-                return string.Empty;
+                return new OpenAiCompatibleStreamChunk(string.Empty, finishReason);
             }
 
             if (!delta.TryGetProperty("content", out var content))
             {
-                return string.Empty;
+                return new OpenAiCompatibleStreamChunk(string.Empty, finishReason);
             }
 
             if (content.ValueKind == JsonValueKind.String)
             {
-                return content.GetString() ?? string.Empty;
+                return new OpenAiCompatibleStreamChunk(content.GetString() ?? string.Empty, finishReason);
             }
 
             if (content.ValueKind == JsonValueKind.Array)
@@ -2948,14 +2989,14 @@ public sealed class LlmRouter : IDisposable
                     }
                 }
 
-                return builder.ToString();
+                return new OpenAiCompatibleStreamChunk(builder.ToString(), finishReason);
             }
         }
         catch (JsonException)
         {
         }
 
-        return string.Empty;
+        return new OpenAiCompatibleStreamChunk(string.Empty, string.Empty);
     }
 
     private static string ExtractSttText(string json)
@@ -3240,6 +3281,29 @@ public sealed class LlmRouter : IDisposable
     private static bool IsGroqTruncated(string? finishReason)
     {
         return string.Equals(finishReason, "length", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsOpenAiCompatibleTruncated(string? finishReason)
+    {
+        return IsGroqTruncated(finishReason)
+               || string.Equals(finishReason, "max_tokens", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(finishReason, "token_limit", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void AppendGeneratedChunk(StringBuilder builder, string chunk)
+    {
+        var normalized = (chunk ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return;
+        }
+
+        if (builder.Length > 0)
+        {
+            builder.AppendLine();
+        }
+
+        builder.Append(normalized);
     }
 
     private static bool IsGeminiTruncated(string? finishReason)
