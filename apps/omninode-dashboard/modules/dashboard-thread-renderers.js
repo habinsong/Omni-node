@@ -265,8 +265,8 @@ export function renderMessagesPanel(props) {
     parseChatMultiComparisonMessage,
     parseCodingMultiComparisonMessage,
     ttsSupported,
-    onSpeakMessage,
-    onStopSpeaking
+    speakingMessageId,
+    onToggleSpeakMessage
   } = props;
 
   const optimisticUserEntry = optimisticUserByKey[currentKey];
@@ -315,6 +315,27 @@ export function renderMessagesPanel(props) {
               title: "다중 코딩",
               subtitle: "모델별 독립 완주 결과"
             };
+        const messageId = `${currentConversationId || ""}::${item.createdUtc || ""}::${index}`;
+        const isSpeaking = !isUser && ttsSupported && speakingMessageId === messageId;
+        const ttsButton = !isUser && ttsSupported && typeof onToggleSpeakMessage === "function"
+          ? e("button", {
+              type: "button",
+              className: `tts-pill ${isSpeaking ? "playing" : ""}`,
+              "aria-pressed": isSpeaking ? "true" : "false",
+              "aria-label": isSpeaking ? "재생 중지" : "음성으로 듣기",
+              title: isSpeaking ? "정지" : "듣기",
+              onClick: () => onToggleSpeakMessage(messageId, bubbleText || item.text || "")
+            },
+              e("span", { className: "tts-pill-icon", "aria-hidden": "true" },
+                e("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round" },
+                  e("polygon", { points: "11 5 6 9 2 9 2 15 6 15 11 19 11 5" }),
+                  e("path", { className: "tts-wave tts-wave-far", d: "M19.07 4.93a10 10 0 0 1 0 14.14" }),
+                  e("path", { className: "tts-wave tts-wave-near", d: "M15.54 8.46a5 5 0 0 1 0 7.07" })
+                )
+              ),
+              e("span", { className: "tts-pill-label" }, isSpeaking ? "정지" : "듣기")
+            )
+          : null;
         return e(
           "div",
           { key: `${item.createdUtc || index}-${index}`, className: `message-row ${isUser ? "user" : "assistant"}` },
@@ -335,25 +356,12 @@ export function renderMessagesPanel(props) {
                 })
               : [
                   item.meta ? e("div", { key: "meta", className: "bubble-meta" }, item.meta) : null,
-                  e(MarkdownBubbleText, { key: "body", text: bubbleText }),
-                  !isUser && ttsSupported && typeof onSpeakMessage === "function"
-                    ? e("div", { key: "tts", className: "bubble-tts-actions" },
-                        e("button", {
-                          type: "button",
-                          className: "bubble-tts-btn",
-                          title: "음성으로 듣기",
-                          onClick: () => onSpeakMessage(bubbleText || item.text || "")
-                        }, "🔊"),
-                        e("button", {
-                          type: "button",
-                          className: "bubble-tts-btn ghost",
-                          title: "정지",
-                          onClick: () => typeof onStopSpeaking === "function" ? onStopSpeaking() : null
-                        }, "⏹")
-                      )
-                    : null
+                  e(MarkdownBubbleText, { key: "body", text: bubbleText })
                 ]
           ),
+          ttsButton
+            ? e("div", { className: "message-tts-aside" }, ttsButton)
+            : null,
           isUser
             ? e("div", { className: "message-avatar self" }, "ME")
             : null

@@ -778,6 +778,7 @@ import {
     const sendCurrentComposerRef = useRef(null);
     const lastSpokenMessageRef = useRef("");
     const [availableTtsVoices, setAvailableTtsVoices] = useState(() => listSpeechVoices());
+    const [speakingMessageId, setSpeakingMessageId] = useState("");
 
     const [status, setStatus] = useState("연결 대기");
     const [authed, setAuthed] = useState(false);
@@ -7078,6 +7079,48 @@ import {
       });
     }
 
+    function speakMessageById(id, text) {
+      if (!isSpeechSynthesisSupported()) return;
+      const trimmedId = `${id || ""}`;
+      // 같은 메시지 재클릭 → 정지 토글
+      if (trimmedId && trimmedId === speakingMessageId) {
+        stopSpeaking();
+        setSpeakingMessageId("");
+        return;
+      }
+      // 다른 메시지 재생 중이면 정지
+      stopSpeaking();
+      const cleaned = sanitizeForSpeech(text, {
+        stripMarkdown: uiPreferences.speech?.stripMarkdown !== false
+      });
+      if (!cleaned) {
+        setSpeakingMessageId("");
+        return;
+      }
+      try {
+        const utter = new SpeechSynthesisUtterance(cleaned);
+        const prefs = uiPreferences.speech || {};
+        utter.lang = prefs.lang || "ko-KR";
+        utter.rate = clampNumber(prefs.rate, 0.5, 2, 1);
+        utter.pitch = clampNumber(prefs.pitch, 0.5, 2, 1);
+        utter.volume = clampNumber(prefs.volume, 0, 1, 1);
+        if (prefs.voiceURI) {
+          const match = listSpeechVoices().find((v) => v.voiceURI === prefs.voiceURI);
+          if (match) {
+            utter.voice = match;
+            if (match.lang) utter.lang = match.lang;
+          }
+        }
+        const reset = () => setSpeakingMessageId((prev) => (prev === trimmedId ? "" : prev));
+        utter.onend = reset;
+        utter.onerror = reset;
+        window.speechSynthesis.speak(utter);
+        setSpeakingMessageId(trimmedId);
+      } catch {
+        setSpeakingMessageId("");
+      }
+    }
+
     function renderMessages() {
       return renderMessagesPanelModule({
         e,
@@ -7095,8 +7138,8 @@ import {
         parseChatMultiComparisonMessage: chatMultiUtils.parseChatMultiComparisonMessage,
         parseCodingMultiComparisonMessage: chatMultiUtils.parseCodingMultiComparisonMessage,
         ttsSupported: isSpeechSynthesisSupported(),
-        onSpeakMessage: (text) => speakText(text, uiPreferences.speech),
-        onStopSpeaking: () => stopSpeaking()
+        speakingMessageId,
+        onToggleSpeakMessage: (id, text) => speakMessageById(id, text)
       });
     }
 
