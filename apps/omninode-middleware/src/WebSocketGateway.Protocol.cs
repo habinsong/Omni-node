@@ -376,6 +376,8 @@ public sealed partial class WebSocketGateway
         public string? CodexApiKey { get; set; }
         public string? RoutingPolicyJson { get; set; }
         public string? RefactorEditsJson { get; set; }
+        public string? ContentBase64 { get; set; }
+        public string? FileName { get; set; }
         public int? AuthTtlHours { get; set; }
         public int? TimeoutSeconds { get; set; }
         public int? RunTimeoutSeconds { get; set; }
@@ -397,6 +399,7 @@ public sealed partial class WebSocketGateway
         public long? Timestamp { get; set; }
         public bool? Enabled { get; set; }
         public bool? AgentUsePlaywright { get; set; }
+        public bool? Overwrite { get; set; }
         public bool? CompactConversation { get; set; }
         public bool? IncludeDisabled { get; set; }
         public bool? IncludeTools { get; set; }

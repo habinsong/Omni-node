@@ -601,6 +601,42 @@ public sealed class TelegramClient : IDisposable
                         }
                     }
                 }
+
+                if (messageElement.TryGetProperty("voice", out var voiceElement)
+                    && voiceElement.ValueKind == JsonValueKind.Object)
+                {
+                    var attachment = await DownloadTelegramAudioAttachmentAsync(
+                        botToken,
+                        voiceElement,
+                        "telegram-voice.ogg",
+                        "audio/ogg",
+                        cancellationToken
+                    );
+                    if (attachment != null)
+                    {
+                        attachments.Add(attachment);
+                    }
+                }
+
+                if (messageElement.TryGetProperty("audio", out var audioElement)
+                    && audioElement.ValueKind == JsonValueKind.Object)
+                {
+                    var fallbackName = audioElement.TryGetProperty("file_name", out var audioNameElement)
+                                       && audioNameElement.ValueKind == JsonValueKind.String
+                        ? (audioNameElement.GetString() ?? "telegram-audio")
+                        : "telegram-audio";
+                    var attachment = await DownloadTelegramAudioAttachmentAsync(
+                        botToken,
+                        audioElement,
+                        fallbackName,
+                        "audio/mpeg",
+                        cancellationToken
+                    );
+                    if (attachment != null)
+                    {
+                        attachments.Add(attachment);
+                    }
+                }
             }
 
             updates.Add(new TelegramUpdate(
@@ -2337,6 +2373,40 @@ public sealed class TelegramClient : IDisposable
         {
             return null;
         }
+    }
+
+    private async Task<InputAttachment?> DownloadTelegramAudioAttachmentAsync(
+        string botToken,
+        JsonElement audioElement,
+        string fallbackName,
+        string fallbackMimeType,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!audioElement.TryGetProperty("file_id", out var fileIdElement)
+            || fileIdElement.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        var fileId = fileIdElement.GetString();
+        if (string.IsNullOrWhiteSpace(fileId))
+        {
+            return null;
+        }
+
+        var mimeType = audioElement.TryGetProperty("mime_type", out var mimeElement)
+                       && mimeElement.ValueKind == JsonValueKind.String
+            ? (mimeElement.GetString() ?? fallbackMimeType)
+            : fallbackMimeType;
+        return await DownloadAttachmentAsync(
+            botToken,
+            fileId.Trim(),
+            fallbackName,
+            mimeType,
+            false,
+            cancellationToken
+        );
     }
 
     private async Task<string?> ResolveTelegramFilePathAsync(string botToken, string fileId, CancellationToken cancellationToken)

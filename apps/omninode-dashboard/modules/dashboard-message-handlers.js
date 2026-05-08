@@ -738,6 +738,11 @@ export function handleExecutionFlowMessage(msg, context) {
     setPendingByKey((prev) => {
       const now = Date.now()
       const base = prev[key] || {}
+      const incomingRequestId = `${msg.requestId || ""}`.trim()
+      const baseRequestId = `${base.requestId || ""}`.trim()
+      if (incomingRequestId && baseRequestId && incomingRequestId !== baseRequestId) {
+        return prev
+      }
       const baseDraft = typeof base.draftText === "string" ? base.draftText : ""
       const delta = typeof msg.delta === "string" ? msg.delta : ""
       return {
@@ -752,7 +757,8 @@ export function handleExecutionFlowMessage(msg, context) {
           provider: msg.provider || base.provider || "",
           model: msg.model || base.model || "",
           route: msg.route || base.route || "",
-          chunkIndex: Number.isFinite(msg.chunkIndex) ? msg.chunkIndex : (base.chunkIndex || 0)
+          chunkIndex: Number.isFinite(msg.chunkIndex) ? msg.chunkIndex : (base.chunkIndex || 0),
+          requestId: incomingRequestId || baseRequestId
         }
       }
     })

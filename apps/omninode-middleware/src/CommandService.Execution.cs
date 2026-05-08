@@ -8,10 +8,11 @@ public sealed partial class CommandService
         CancellationToken cancellationToken,
         IReadOnlyList<InputAttachment>? attachments = null,
         IReadOnlyList<string>? webUrls = null,
-        bool webSearchEnabled = true
+        bool webSearchEnabled = true,
+        Action<string>? streamCallback = null
     )
     {
-        return ExecuteCoreAsync(input, source, cancellationToken, attachments, webUrls, webSearchEnabled);
+        return ExecuteCoreAsync(input, source, cancellationToken, attachments, webUrls, webSearchEnabled, streamCallback);
     }
 
     private async Task<string> ExecuteCoreAsync(
@@ -20,13 +21,31 @@ public sealed partial class CommandService
         CancellationToken cancellationToken,
         IReadOnlyList<InputAttachment>? attachments = null,
         IReadOnlyList<string>? webUrls = null,
-        bool webSearchEnabled = true
+        bool webSearchEnabled = true,
+        Action<string>? streamCallback = null
     )
     {
+        var normalizedAttachments = NormalizeAttachments(attachments);
         var text = (input ?? string.Empty).Trim();
+        if (source.Equals("telegram", StringComparison.OrdinalIgnoreCase)
+            && TryGetAudioAttachment(normalizedAttachments, out var audioAttachment)
+            && (string.IsNullOrWhiteSpace(text) || text.Equals("첨부 파일을 분석해줘", StringComparison.OrdinalIgnoreCase)))
+        {
+            var transcribed = await _llmRouter.TranscribeAudioAsync(audioAttachment, cancellationToken);
+            if (transcribed.StartsWith("음성 변환 설정 필요", StringComparison.OrdinalIgnoreCase)
+                || transcribed.StartsWith("음성 변환 실패", StringComparison.OrdinalIgnoreCase)
+                || transcribed.StartsWith("음성 변환 오류", StringComparison.OrdinalIgnoreCase)
+                || transcribed.StartsWith("음성 변환 시간이 초과", StringComparison.OrdinalIgnoreCase))
+            {
+                return transcribed;
+            }
+
+            text = transcribed.Trim();
+        }
+
         if (string.IsNullOrWhiteSpace(text))
         {
-            if (attachments != null && attachments.Count > 0 && source.Equals("telegram", StringComparison.OrdinalIgnoreCase))
+            if (normalizedAttachments.Count > 0 && source.Equals("telegram", StringComparison.OrdinalIgnoreCase))
             {
                 text = "첨부 파일을 분석해줘";
             }
@@ -45,6 +64,7 @@ public sealed partial class CommandService
         {
             SetCurrentTelegramExecutionMetadata();
         }
+        attachments = normalizedAttachments;
 
         RecordEvent($"{source}:user:{text}");
         _auditLogger.Log(source, "command_received", "ok", text);
@@ -241,6 +261,7 @@ public sealed partial class CommandService
                     attachments,
                     webUrls,
                     webSearchEnabled,
+                    streamCallback,
                     cancellationToken
                 );
                 _auditLogger.Log(source, "telegram_llm_route", "ok", "mode_routed");
@@ -314,5 +335,32 @@ public sealed partial class CommandService
             _auditLogger.Log(source, "command_error", "fail", ex.Message);
             return $"error: {ex.Message}";
         }
+    }
+
+    private static bool TryGetAudioAttachment(IReadOnlyList<InputAttachment>? attachments, out InputAttachment attachment)
+    {
+        attachment = null!;
+        if (attachments == null || attachments.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var item in attachments)
+        {
+            var mime = (item.MimeType ?? string.Empty).Trim();
+            var name = (item.Name ?? string.Empty).Trim();
+            if (mime.StartsWith("audio/", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith(".oga", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith(".m4a", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+            {
+                attachment = item;
+                return true;
+            }
+        }
+
+        return false;
     }
 }

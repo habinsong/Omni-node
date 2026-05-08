@@ -25,6 +25,10 @@ public sealed class ConversationApplicationService : IConversationApplicationSer
 
     public ConversationThreadView? GetConversation(string conversationId) => _inner.GetConversation(conversationId);
     public bool DeleteConversation(string conversationId) => _inner.DeleteConversation(conversationId);
+    public ConversationSearchResult SearchConversations(string query, int? maxResults = null) => _inner.SearchConversations(query, maxResults);
+    public BackupExportResult ExportBackup() => _inner.ExportBackup();
+    public BackupImportPreviewResult PreviewBackupImport(string fileName, string contentBase64) => _inner.PreviewBackupImport(fileName, contentBase64);
+    public BackupImportApplyResult ApplyBackupImport(string previewId, bool overwrite) => _inner.ApplyBackupImport(previewId, overwrite);
 
     public ConversationThreadView UpdateConversationMetadata(
         string conversationId,

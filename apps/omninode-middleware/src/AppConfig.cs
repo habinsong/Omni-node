@@ -9,6 +9,7 @@ public sealed class AppConfig
     private const string GeminiApiKeyService = "omninode_gemini_api_key";
     private const string CerebrasApiKeyService = "omninode_cerebras_api_key";
     private const string CodexApiKeyService = "omninode_codex_api_key";
+    private const string SttApiKeyService = "omninode_stt_api_key";
 
     public int WebSocketPort { get; init; } = 8080;
     public string CoreSocketPath { get; init; } = ResolveDefaultCoreSocketPath();
@@ -38,6 +39,10 @@ public sealed class AppConfig
     public string CerebrasKeychainAccount { get; init; } = DefaultKeychainAccount;
     public string? CerebrasApiKey { get; init; }
     public string? CodexApiKey { get; init; }
+    public string SttProvider { get; init; } = string.Empty;
+    public string SttBaseUrl { get; init; } = string.Empty;
+    public string SttModel { get; init; } = string.Empty;
+    public string? SttApiKey { get; init; }
     public decimal GeminiInputPricePerMillionUsd { get; init; } = 0.50m;
     public decimal GeminiOutputPricePerMillionUsd { get; init; } = 3.00m;
     public string LlmUsageStatePath { get; init; } = ResolveDefaultStateFilePath("llm_usage.json");
@@ -176,6 +181,18 @@ public sealed class AppConfig
                 keychainServiceEnvKey: "OMNINODE_CODEX_KEYCHAIN_SERVICE",
                 keychainAccountEnvKey: "OMNINODE_CODEX_KEYCHAIN_ACCOUNT",
                 defaultKeychainService: CodexApiKeyService,
+                defaultKeychainAccount: DefaultKeychainAccount
+            ),
+            SttProvider = GetStringEnv("OMNINODE_STT_PROVIDER", string.Empty),
+            SttBaseUrl = GetStringEnv("OMNINODE_STT_BASE_URL", string.Empty),
+            SttModel = GetStringEnv("OMNINODE_STT_MODEL", string.Empty),
+            SttApiKey = SecretLoader.ResolveApiKey(
+                providerName: "stt",
+                directEnvKey: "OMNINODE_STT_API_KEY",
+                fileEnvKey: "OMNINODE_STT_API_KEY_FILE",
+                keychainServiceEnvKey: "OMNINODE_STT_KEYCHAIN_SERVICE",
+                keychainAccountEnvKey: "OMNINODE_STT_KEYCHAIN_ACCOUNT",
+                defaultKeychainService: SttApiKeyService,
                 defaultKeychainAccount: DefaultKeychainAccount
             ),
             GeminiInputPricePerMillionUsd = GetDecimalEnv("OMNINODE_GEMINI_INPUT_PRICE_PER_MILLION_USD", 0.50m),

@@ -22,7 +22,9 @@ public interface IConversationStore
         IReadOnlyList<string>? tags
     );
     ConversationThreadView? Get(string conversationId);
+    IReadOnlyList<ConversationThreadView> ListAllViews();
     bool Delete(string conversationId);
+    ConversationImportResult ImportConversations(IReadOnlyList<ConversationThreadView> conversations, bool overwrite);
     int DeleteByScope(string scope, string? mode = null);
     ConversationThreadView AppendMessage(string conversationId, string role, string text, string meta);
     ConversationThreadView SetLatestCodingResult(string conversationId, ConversationCodingResultSnapshot? result);

@@ -89,22 +89,65 @@ internal sealed class WsContextCommandDispatcher
 
         if (message.Type == "skill_get")
         {
-            var result = _skillFileService.Get(message.SkillName, message.SkillScope);
-            await SendJsonAsync(socket, sendLock, "skill_get_result", JsonSerializer.SerializeToElement(result), cancellationToken);
+            try
+            {
+                var result = _skillFileService.Get(message.SkillName, message.SkillScope);
+                await SendPayloadAsync(socket, sendLock, "skill_get_result", result, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                var result = new SkillFileGetResult(
+                    false,
+                    $"스킬 읽기 처리 중 오류: {ex.Message}",
+                    message.SkillName ?? string.Empty,
+                    message.SkillScope ?? "project",
+                    string.Empty,
+                    string.Empty,
+                    string.Empty
+                );
+                await SendPayloadAsync(socket, sendLock, "skill_get_result", result, cancellationToken);
+            }
             return true;
         }
 
         if (message.Type == "skill_save")
         {
-            var result = _skillFileService.Save(message.SkillName, message.SkillScope, message.SkillDescription, message.SkillBody);
-            await SendJsonAsync(socket, sendLock, "skill_save_result", JsonSerializer.SerializeToElement(result), cancellationToken);
+            try
+            {
+                var result = _skillFileService.Save(message.SkillName, message.SkillScope, message.SkillDescription, message.SkillBody);
+                await SendPayloadAsync(socket, sendLock, "skill_save_result", result, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                var result = new SkillFileSaveResult(
+                    false,
+                    $"스킬 저장 처리 중 오류: {ex.Message}",
+                    message.SkillName ?? string.Empty,
+                    message.SkillScope ?? "project",
+                    string.Empty
+                );
+                await SendPayloadAsync(socket, sendLock, "skill_save_result", result, cancellationToken);
+            }
             return true;
         }
 
         if (message.Type == "skill_delete")
         {
-            var result = _skillFileService.Delete(message.SkillName, message.SkillScope);
-            await SendJsonAsync(socket, sendLock, "skill_delete_result", JsonSerializer.SerializeToElement(result), cancellationToken);
+            try
+            {
+                var result = _skillFileService.Delete(message.SkillName, message.SkillScope);
+                await SendPayloadAsync(socket, sendLock, "skill_delete_result", result, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                var result = new SkillFileDeleteResult(
+                    false,
+                    $"스킬 삭제 처리 중 오류: {ex.Message}",
+                    message.SkillName ?? string.Empty,
+                    message.SkillScope ?? "project"
+                );
+                await SendPayloadAsync(socket, sendLock, "skill_delete_result", result, cancellationToken);
+            }
             return true;
         }
 
@@ -131,6 +174,25 @@ internal sealed class WsContextCommandDispatcher
             writer.WriteEndObject();
         }
         var json = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+        await WebSocketGateway.SendTextAsync(socket, sendLock, json, cancellationToken);
+    }
+
+    private static async Task SendPayloadAsync<T>(
+        WebSocket socket,
+        SemaphoreSlim sendLock,
+        string type,
+        T payload,
+        CancellationToken cancellationToken
+    )
+    {
+        var payloadJson = payload switch
+        {
+            SkillFileGetResult value => JsonSerializer.Serialize(value, ContextJsonContext.Default.SkillFileGetResult),
+            SkillFileSaveResult value => JsonSerializer.Serialize(value, ContextJsonContext.Default.SkillFileSaveResult),
+            SkillFileDeleteResult value => JsonSerializer.Serialize(value, ContextJsonContext.Default.SkillFileDeleteResult),
+            _ => throw new InvalidOperationException("지원하지 않는 스킬 응답 형식입니다.")
+        };
+        var json = $"{{\"type\":\"{type}\",\"payload\":{payloadJson}}}";
         await WebSocketGateway.SendTextAsync(socket, sendLock, json, cancellationToken);
     }
 }

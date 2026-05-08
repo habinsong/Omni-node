@@ -12,7 +12,8 @@ public sealed partial class CommandService
         int? maxOutputTokens = null,
         bool useRawCodexPrompt = false,
         string? codexWorkingDirectoryOverride = null,
-        bool optimizeCodexForCoding = false
+        bool optimizeCodexForCoding = false,
+        Action<string>? streamCallback = null
     )
     {
         var normalized = NormalizeProvider(provider, allowAuto: false);
@@ -22,14 +23,18 @@ public sealed partial class CommandService
         {
             var requested = NormalizeModelSelection(model) ?? _config.GeminiModel;
             var selected = ResolveGeminiSingleModelForLatency(requested, input);
-            var response = await _llmRouter.GenerateGeminiChatAsync(input, selected, requestedMaxOutputTokens, cancellationToken);
+            var response = streamCallback == null
+                ? await _llmRouter.GenerateGeminiChatAsync(input, selected, requestedMaxOutputTokens, cancellationToken)
+                : await _llmRouter.GenerateGeminiChatStreamingAsync(input, selected, requestedMaxOutputTokens, streamCallback, cancellationToken);
             return new LlmSingleChatResult("gemini", selected, response);
         }
 
         if (normalized == "cerebras")
         {
             var selected = NormalizeModelSelection(model) ?? _config.CerebrasModel;
-            var response = await _llmRouter.GenerateCerebrasChatAsync(input, selected, requestedMaxOutputTokens, cancellationToken);
+            var response = streamCallback == null
+                ? await _llmRouter.GenerateCerebrasChatAsync(input, selected, requestedMaxOutputTokens, cancellationToken)
+                : await _llmRouter.GenerateCerebrasChatStreamingAsync(input, selected, requestedMaxOutputTokens, streamCallback, cancellationToken);
             return new LlmSingleChatResult("cerebras", selected, response);
         }
 
@@ -60,7 +65,9 @@ public sealed partial class CommandService
         }
 
         var groqModel = ResolveGroqModelForInput(input, model);
-        var groqResponse = await _llmRouter.GenerateGroqChatAsync(input, groqModel, requestedMaxOutputTokens, cancellationToken);
+        var groqResponse = streamCallback == null
+            ? await _llmRouter.GenerateGroqChatAsync(input, groqModel, requestedMaxOutputTokens, cancellationToken)
+            : await _llmRouter.GenerateGroqChatStreamingAsync(input, groqModel, requestedMaxOutputTokens, streamCallback, cancellationToken);
         if (IsGroqMaxTokensResponse(groqResponse) && requestedMaxOutputTokens > 8192)
         {
             groqResponse = await _llmRouter.GenerateGroqChatAsync(input, groqModel, 8192, cancellationToken);
@@ -147,7 +154,8 @@ public sealed partial class CommandService
         bool useRawCodexPrompt = false,
         string? codexWorkingDirectoryOverride = null,
         bool optimizeCodexForCoding = false,
-        int? timeoutOverrideSeconds = null
+        int? timeoutOverrideSeconds = null,
+        Action<string>? streamCallback = null
     )
     {
         var normalized = NormalizeProvider(provider, allowAuto: false);
@@ -180,7 +188,8 @@ public sealed partial class CommandService
                     maxOutputTokens,
                     useRawCodexPrompt,
                     codexWorkingDirectoryOverride,
-                    optimizeCodexForCoding
+                    optimizeCodexForCoding,
+                    streamCallback
                 );
                 lastException = null;
                 if (normalized == "gemini"
@@ -257,7 +266,8 @@ public sealed partial class CommandService
         string input,
         string? preferredModel,
         CancellationToken cancellationToken,
-        int maxOutputTokens
+        int maxOutputTokens,
+        Action<string>? streamCallback = null
     )
     {
         var explicitPreferredModel = NormalizeModelSelection(preferredModel);
@@ -295,7 +305,8 @@ public sealed partial class CommandService
                 model,
                 currentInput,
                 cancellationToken,
-                effectiveMaxTokens
+                effectiveMaxTokens,
+                streamCallback: i == 0 ? streamCallback : null
             );
             var cleaned = SanitizeChatOutput(generated.Text);
             if (!IsGroqRateLimitResponse(cleaned))

@@ -145,6 +145,80 @@ public sealed class LlmRouter : IDisposable
         return !string.IsNullOrWhiteSpace(_runtimeSettings.GetCerebrasApiKey());
     }
 
+    public bool HasSttSettings()
+    {
+        return !string.IsNullOrWhiteSpace(_config.SttBaseUrl)
+               && !string.IsNullOrWhiteSpace(_config.SttModel)
+               && !string.IsNullOrWhiteSpace(_runtimeSettings.GetSttApiKey());
+    }
+
+    public async Task<string> TranscribeAudioAsync(InputAttachment attachment, CancellationToken cancellationToken)
+    {
+        if (!HasSttSettings())
+        {
+            return "음성 변환 설정 필요: OMNINODE_STT_BASE_URL, OMNINODE_STT_MODEL, OMNINODE_STT_API_KEY를 설정하세요.";
+        }
+
+        if (attachment == null || string.IsNullOrWhiteSpace(attachment.DataBase64))
+        {
+            return "음성 파일이 비어 있습니다.";
+        }
+
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(attachment.DataBase64);
+        }
+        catch
+        {
+            return "음성 파일을 읽을 수 없습니다.";
+        }
+
+        if (bytes.Length == 0)
+        {
+            return "음성 파일이 비어 있습니다.";
+        }
+
+        var baseUrl = _config.SttBaseUrl.Trim();
+        var endpoint = baseUrl.EndsWith("/audio/transcriptions", StringComparison.OrdinalIgnoreCase)
+            ? baseUrl
+            : $"{baseUrl.TrimEnd('/')}/audio/transcriptions";
+        var apiKey = _runtimeSettings.GetSttApiKey() ?? string.Empty;
+        var fileName = string.IsNullOrWhiteSpace(attachment.Name) ? "telegram-audio.ogg" : attachment.Name.Trim();
+        var mimeType = string.IsNullOrWhiteSpace(attachment.MimeType) ? "audio/ogg" : attachment.MimeType.Trim();
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            using var form = new MultipartFormDataContent();
+            form.Add(new StringContent(_config.SttModel.Trim(), Encoding.UTF8), "model");
+            var fileContent = new ByteArrayContent(bytes);
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue(mimeType);
+            form.Add(fileContent, "file", fileName);
+            request.Content = form;
+
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                Console.Error.WriteLine($"[stt] failed ({(int)response.StatusCode}): {responseBody}");
+                return $"음성 변환 실패: {(int)response.StatusCode}";
+            }
+
+            var text = ExtractSttText(responseBody).Trim();
+            return string.IsNullOrWhiteSpace(text) ? "음성 변환 결과가 비어 있습니다." : text;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return "음성 변환 시간이 초과되었습니다.";
+        }
+        catch (Exception ex)
+        {
+            return $"음성 변환 오류: {ex.Message}";
+        }
+    }
+
     public async Task<RouterIntent> ClassifyIntentAsync(string input, CancellationToken cancellationToken)
     {
         var fallback = ClassifyIntentFallback(input);
@@ -485,6 +559,42 @@ public sealed class LlmRouter : IDisposable
         }
     }
 
+    public async Task<string> GenerateGroqChatStreamingAsync(
+        string userInput,
+        string? modelOverride,
+        int maxOutputTokens,
+        Action<string>? deltaCallback,
+        CancellationToken cancellationToken
+    )
+    {
+        var groqApiKey = _runtimeSettings.GetGroqApiKey();
+        if (string.IsNullOrWhiteSpace(groqApiKey))
+        {
+            return "Groq API 키가 설정되지 않았습니다.";
+        }
+
+        var model = string.IsNullOrWhiteSpace(modelOverride) ? GetSelectedGroqModel() : modelOverride.Trim();
+        var endpoint = $"{_config.GroqBaseUrl.TrimEnd('/')}/chat/completions";
+        var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
+            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them.";
+        var requestedMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
+        var effectiveMaxOutputTokens = ClampGroqMaxOutputTokensForModel(model, requestedMaxOutputTokens);
+        var promptForRequest = TruncatePromptForGroq(userInput, ResolveGroqPromptBudgetChars(model));
+
+        return await GenerateOpenAiCompatibleChatStreamingAsync(
+            "groq",
+            endpoint,
+            groqApiKey,
+            model,
+            systemPrompt,
+            promptForRequest,
+            "max_tokens",
+            effectiveMaxOutputTokens,
+            deltaCallback,
+            cancellationToken
+        );
+    }
+
     public async Task<string> GenerateGroqMultimodalChatAsync(
         string userInput,
         string? modelOverride,
@@ -680,6 +790,138 @@ public sealed class LlmRouter : IDisposable
         {
             Console.Error.WriteLine($"[gemini] chat error: {ex.Message}");
             return $"Gemini 호출 오류: {ex.Message}";
+        }
+    }
+
+    public async Task<string> GenerateGeminiChatStreamingAsync(
+        string userInput,
+        string? modelOverride,
+        int maxOutputTokens,
+        Action<string>? deltaCallback,
+        CancellationToken cancellationToken
+    )
+    {
+        var geminiApiKey = _runtimeSettings.GetGeminiApiKey();
+        if (string.IsNullOrWhiteSpace(geminiApiKey))
+        {
+            return "Gemini API 키가 설정되지 않았습니다.";
+        }
+
+        var selectedModel = string.IsNullOrWhiteSpace(modelOverride) ? _config.GeminiModel : modelOverride.Trim();
+        var endpoint = $"{_config.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:streamGenerateContent?alt=sse";
+        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
+        var prompt = "한국어로 실무적으로 답변하세요.\n\n사용자 입력:\n" + userInput;
+        var body = "{"
+            + "\"contents\":[{"
+            + "\"role\":\"user\","
+            + "\"parts\":["
+            + $"{{\"text\":\"{EscapeJson(prompt)}\"}}"
+            + "]"
+            + "}],"
+            + $"\"generationConfig\":{{\"temperature\":0.3,\"maxOutputTokens\":{effectiveMaxOutputTokens}}}"
+            + "}";
+
+        var mergedBuilder = new StringBuilder();
+        var eventBuilder = new StringBuilder();
+        string? usagePayload = null;
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+            request.Headers.Add("x-goog-api-key", geminiApiKey);
+            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+
+            using var response = await _httpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken
+            );
+            if (!response.IsSuccessStatusCode)
+            {
+                var failureBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                Console.Error.WriteLine($"[gemini] chat stream failed ({(int)response.StatusCode}): {failureBody}");
+                return $"Gemini 요청 실패: {(int)response.StatusCode}";
+            }
+
+            using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var reader = new StreamReader(responseStream, Encoding.UTF8);
+            while (true)
+            {
+                var line = await reader.ReadLineAsync(cancellationToken);
+                if (line == null)
+                {
+                    break;
+                }
+
+                if (line.Length == 0)
+                {
+                    ConsumeEvent(eventBuilder.ToString());
+                    eventBuilder.Clear();
+                    continue;
+                }
+
+                if (line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var payloadLine = line[5..].TrimStart();
+                    if (payloadLine.Length > 0)
+                    {
+                        if (eventBuilder.Length > 0)
+                        {
+                            eventBuilder.Append('\n');
+                        }
+
+                        eventBuilder.Append(payloadLine);
+                    }
+                }
+            }
+
+            if (eventBuilder.Length > 0)
+            {
+                ConsumeEvent(eventBuilder.ToString());
+            }
+
+            if (!string.IsNullOrWhiteSpace(usagePayload))
+            {
+                CaptureGeminiUsage(usagePayload);
+            }
+
+            var content = mergedBuilder.ToString().Trim();
+            return string.IsNullOrWhiteSpace(content) ? "Gemini 응답이 비어 있습니다." : content;
+
+            void ConsumeEvent(string eventPayload)
+            {
+                var trimmedPayload = (eventPayload ?? string.Empty).Trim();
+                if (trimmedPayload.Length == 0 || trimmedPayload.Equals("[DONE]", StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                if (trimmedPayload.Contains("\"usageMetadata\"", StringComparison.Ordinal))
+                {
+                    usagePayload = trimmedPayload;
+                }
+
+                var chunk = ExtractGeminiChatChunk(trimmedPayload);
+                var delta = NormalizeGeminiStreamDelta(chunk.Content, mergedBuilder.ToString());
+                if (delta.Length == 0)
+                {
+                    return;
+                }
+
+                mergedBuilder.Append(delta);
+                SafeEmitDelta(deltaCallback, delta);
+            }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            Console.Error.WriteLine($"[gemini] chat stream timeout (model={selectedModel})");
+            var partial = mergedBuilder.ToString().Trim();
+            return string.IsNullOrWhiteSpace(partial) ? "Gemini 응답 시간이 초과되었습니다." : partial;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[gemini] chat stream error: {ex.Message}");
+            var partial = mergedBuilder.ToString().Trim();
+            return string.IsNullOrWhiteSpace(partial) ? $"Gemini 호출 오류: {ex.Message}" : partial;
         }
     }
 
@@ -1525,6 +1767,40 @@ public sealed class LlmRouter : IDisposable
         }
     }
 
+    public async Task<string> GenerateCerebrasChatStreamingAsync(
+        string userInput,
+        string? modelOverride,
+        int maxOutputTokens,
+        Action<string>? deltaCallback,
+        CancellationToken cancellationToken
+    )
+    {
+        var cerebrasApiKey = _runtimeSettings.GetCerebrasApiKey();
+        if (string.IsNullOrWhiteSpace(cerebrasApiKey))
+        {
+            return "Cerebras API 키가 설정되지 않았습니다.";
+        }
+
+        var selectedModel = string.IsNullOrWhiteSpace(modelOverride) ? _config.CerebrasModel : modelOverride.Trim();
+        var endpoint = $"{_config.CerebrasBaseUrl.TrimEnd('/')}/chat/completions";
+        var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
+            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them.";
+        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
+
+        return await GenerateOpenAiCompatibleChatStreamingAsync(
+            "cerebras",
+            endpoint,
+            cerebrasApiKey,
+            selectedModel,
+            systemPrompt,
+            userInput,
+            "max_completion_tokens",
+            effectiveMaxOutputTokens,
+            deltaCallback,
+            cancellationToken
+        );
+    }
+
     private static bool IsCerebrasModelNotFound(string responseBody)
     {
         if (string.IsNullOrWhiteSpace(responseBody))
@@ -2129,6 +2405,240 @@ public sealed class LlmRouter : IDisposable
     private static string ExtractGeminiText(string json)
     {
         return ExtractGeminiChatChunk(json).Content;
+    }
+
+    private async Task<string> GenerateOpenAiCompatibleChatStreamingAsync(
+        string provider,
+        string endpoint,
+        string apiKey,
+        string model,
+        string systemPrompt,
+        string userInput,
+        string maxTokensProperty,
+        int maxOutputTokens,
+        Action<string>? deltaCallback,
+        CancellationToken cancellationToken
+    )
+    {
+        var body = "{"
+            + $"\"model\":\"{EscapeJson(model)}\","
+            + "\"temperature\":0.3,"
+            + "\"stream\":true,"
+            + $"\"{EscapeJson(maxTokensProperty)}\":{maxOutputTokens},"
+            + "\"messages\":["
+            + $"{{\"role\":\"system\",\"content\":\"{EscapeJson(systemPrompt)}\"}},"
+            + $"{{\"role\":\"user\",\"content\":\"{EscapeJson(userInput)}\"}}"
+            + "]"
+            + "}";
+        var mergedBuilder = new StringBuilder();
+        var eventBuilder = new StringBuilder();
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+
+            using var response = await _httpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken
+            );
+            if (!response.IsSuccessStatusCode)
+            {
+                var failureBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                Console.Error.WriteLine($"[{provider}] chat stream failed ({(int)response.StatusCode}): {failureBody}");
+                return $"{ProviderDisplayName(provider)} 요청 실패: {(int)response.StatusCode}";
+            }
+
+            if (provider.Equals("groq", StringComparison.OrdinalIgnoreCase))
+            {
+                CaptureGroqRateLimitHeaders(model, response.Headers);
+            }
+
+            using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var reader = new StreamReader(responseStream, Encoding.UTF8);
+            while (true)
+            {
+                var line = await reader.ReadLineAsync(cancellationToken);
+                if (line == null)
+                {
+                    break;
+                }
+
+                if (line.Length == 0)
+                {
+                    ConsumeOpenAiStreamEvent(eventBuilder.ToString());
+                    eventBuilder.Clear();
+                    continue;
+                }
+
+                if (line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var payloadLine = line[5..].TrimStart();
+                    if (payloadLine.Length > 0)
+                    {
+                        if (eventBuilder.Length > 0)
+                        {
+                            eventBuilder.Append('\n');
+                        }
+
+                        eventBuilder.Append(payloadLine);
+                    }
+                }
+            }
+
+            if (eventBuilder.Length > 0)
+            {
+                ConsumeOpenAiStreamEvent(eventBuilder.ToString());
+            }
+
+            var content = mergedBuilder.ToString().Trim();
+            return string.IsNullOrWhiteSpace(content)
+                ? $"{ProviderDisplayName(provider)} 응답이 비어 있습니다."
+                : content;
+
+            void ConsumeOpenAiStreamEvent(string eventPayload)
+            {
+                var payload = (eventPayload ?? string.Empty).Trim();
+                if (payload.Length == 0 || payload.Equals("[DONE]", StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                var delta = ExtractOpenAiStreamDelta(payload);
+                if (delta.Length == 0)
+                {
+                    return;
+                }
+
+                mergedBuilder.Append(delta);
+                SafeEmitDelta(deltaCallback, delta);
+            }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            Console.Error.WriteLine($"[{provider}] chat stream timeout (model={model})");
+            var partial = mergedBuilder.ToString().Trim();
+            return string.IsNullOrWhiteSpace(partial)
+                ? $"{ProviderDisplayName(provider)} 응답 시간이 초과되었습니다."
+                : partial;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[{provider}] chat stream error: {ex.Message}");
+            var partial = mergedBuilder.ToString().Trim();
+            return string.IsNullOrWhiteSpace(partial)
+                ? $"{ProviderDisplayName(provider)} 호출 오류: {ex.Message}"
+                : partial;
+        }
+    }
+
+    private static void SafeEmitDelta(Action<string>? deltaCallback, string delta)
+    {
+        if (deltaCallback == null || string.IsNullOrEmpty(delta))
+        {
+            return;
+        }
+
+        try
+        {
+            deltaCallback(delta);
+        }
+        catch
+        {
+        }
+    }
+
+    private static string ProviderDisplayName(string provider)
+    {
+        return provider.ToLowerInvariant() switch
+        {
+            "groq" => "Groq",
+            "gemini" => "Gemini",
+            "cerebras" => "Cerebras",
+            _ => provider
+        };
+    }
+
+    private static string ExtractOpenAiStreamDelta(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("choices", out var choices)
+                || choices.ValueKind != JsonValueKind.Array
+                || choices.GetArrayLength() == 0)
+            {
+                return string.Empty;
+            }
+
+            var first = choices[0];
+            if (!first.TryGetProperty("delta", out var delta) || delta.ValueKind != JsonValueKind.Object)
+            {
+                return string.Empty;
+            }
+
+            if (!delta.TryGetProperty("content", out var content))
+            {
+                return string.Empty;
+            }
+
+            if (content.ValueKind == JsonValueKind.String)
+            {
+                return content.GetString() ?? string.Empty;
+            }
+
+            if (content.ValueKind == JsonValueKind.Array)
+            {
+                var builder = new StringBuilder();
+                foreach (var part in content.EnumerateArray())
+                {
+                    if (part.ValueKind == JsonValueKind.String)
+                    {
+                        builder.Append(part.GetString());
+                    }
+                    else if (part.ValueKind == JsonValueKind.Object
+                             && part.TryGetProperty("text", out var textPart)
+                             && textPart.ValueKind == JsonValueKind.String)
+                    {
+                        builder.Append(textPart.GetString());
+                    }
+                }
+
+                return builder.ToString();
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return string.Empty;
+    }
+
+    private static string ExtractSttText(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("text", out var textElement)
+                && textElement.ValueKind == JsonValueKind.String)
+            {
+                return textElement.GetString() ?? string.Empty;
+            }
+        }
+        catch
+        {
+            return json;
+        }
+
+        return json;
     }
 
     private static GroqChatChunk ExtractGroqChatChunk(string json)

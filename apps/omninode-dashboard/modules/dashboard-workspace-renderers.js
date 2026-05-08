@@ -38,6 +38,43 @@ function renderSendIcon(e) {
   );
 }
 
+function renderMicIcon(e) {
+  return e(
+    "svg",
+    { viewBox: "0 0 24 24", className: "icon-svg", "aria-hidden": "true" },
+    e("path", {
+      d: "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "1.9",
+      strokeLinecap: "round",
+      strokeLinejoin: "round"
+    }),
+    e("path", {
+      d: "M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "1.9",
+      strokeLinecap: "round",
+      strokeLinejoin: "round"
+    })
+  );
+}
+
+function renderCloseIcon(e) {
+  return e(
+    "svg",
+    { viewBox: "0 0 24 24", className: "icon-svg", "aria-hidden": "true" },
+    e("path", {
+      d: "M6 6l12 12M18 6 6 18",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2",
+      strokeLinecap: "round"
+    })
+  );
+}
+
 function renderRichInputControls(props) {
   const {
     e,
@@ -112,12 +149,37 @@ export function renderComposerInputBar(props) {
     handleAttachmentDrop,
     attachmentFileInputId,
     onAttachmentSelected,
-    onClearAttachments
+    onClearAttachments,
+    selectedSkill,
+    onClearSkill,
+    speechState,
+    onStartVoiceInput
   } = props;
+  const skillName = `${selectedSkill?.name || ""}`.trim();
+  const skillScope = `${selectedSkill?.scope || "project"}`.trim() || "project";
+  const speechSupported = speechState ? speechState.supported !== false : true;
+  const speechActive = !!speechState?.active;
 
   return e(
     "div",
     { className: "composer-message-stack" },
+    skillName
+      ? e("div", { className: "composer-skill-strip" },
+        e("div", { className: "composer-skill-copy" },
+          e("span", { className: `composer-skill-scope ${skillScope}` }, skillScope === "global" ? "전역 스킬" : "프로젝트 스킬"),
+          e("strong", null, skillName)
+        ),
+        e("button", {
+          type: "button",
+          className: "composer-skill-clear",
+          title: "스킬 해제",
+          onClick: onClearSkill
+        }, renderCloseIcon(e))
+      )
+      : null,
+    speechState?.error
+      ? e("div", { className: "composer-speech-error" }, speechState.error)
+      : null,
     e("div", { className: "composer-input-shell" },
       e("textarea", {
         className: "textarea composer-main-input",
@@ -130,6 +192,14 @@ export function renderComposerInputBar(props) {
         placeholder
       }),
       e("div", { className: "composer-side-actions" },
+        e("button", {
+          type: "button",
+          className: `composer-icon-btn mic ${speechActive ? "active recording" : ""}`,
+          title: speechActive ? "음성 입력 중지" : (speechSupported ? "음성 입력" : "이 브라우저는 음성 입력을 지원하지 않습니다."),
+          onClick: onStartVoiceInput,
+          disabled: (pending && !speechActive) || !speechSupported,
+          "aria-pressed": speechActive ? "true" : "false"
+        }, renderMicIcon(e)),
         e("button", {
           type: "button",
           className: `composer-icon-btn attach ${attachmentPanelVisible ? "active" : ""}`,

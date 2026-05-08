@@ -8,7 +8,8 @@ public interface ICommandExecutionService
         CancellationToken cancellationToken,
         IReadOnlyList<InputAttachment>? attachments = null,
         IReadOnlyList<string>? webUrls = null,
-        bool webSearchEnabled = true
+        bool webSearchEnabled = true,
+        Action<string>? streamCallback = null
     );
 
     TelegramExecutionMetadata GetCurrentTelegramExecutionMetadata();
@@ -161,6 +162,10 @@ public interface IConversationApplicationService
     );
     ConversationThreadView? GetConversation(string conversationId);
     bool DeleteConversation(string conversationId);
+    ConversationSearchResult SearchConversations(string query, int? maxResults = null);
+    BackupExportResult ExportBackup();
+    BackupImportPreviewResult PreviewBackupImport(string fileName, string contentBase64);
+    BackupImportApplyResult ApplyBackupImport(string previewId, bool overwrite);
     ConversationThreadView UpdateConversationMetadata(
         string conversationId,
         string? title,

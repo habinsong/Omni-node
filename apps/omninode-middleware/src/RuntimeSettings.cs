@@ -9,6 +9,7 @@ public sealed class RuntimeSettings
     private const string GeminiApiKeyService = "omninode_gemini_api_key";
     private const string CerebrasApiKeyService = "omninode_cerebras_api_key";
     private const string CodexApiKeyService = "omninode_codex_api_key";
+    private const string SttApiKeyService = "omninode_stt_api_key";
 
     private readonly object _lock = new();
     private string? _telegramBotToken;
@@ -17,6 +18,7 @@ public sealed class RuntimeSettings
     private string? _geminiApiKey;
     private string? _cerebrasApiKey;
     private string? _codexApiKey;
+    private string? _sttApiKey;
     private readonly string _cerebrasKeychainService;
     private readonly string _cerebrasKeychainAccount;
 
@@ -28,6 +30,7 @@ public sealed class RuntimeSettings
         _geminiApiKey = config.GeminiApiKey;
         _cerebrasApiKey = config.CerebrasApiKey;
         _codexApiKey = config.CodexApiKey;
+        _sttApiKey = config.SttApiKey;
         _cerebrasKeychainService = string.IsNullOrWhiteSpace(config.CerebrasKeychainService)
             ? CerebrasApiKeyService
             : config.CerebrasKeychainService.Trim();
@@ -81,6 +84,14 @@ public sealed class RuntimeSettings
         lock (_lock)
         {
             return _codexApiKey;
+        }
+    }
+
+    public string? GetSttApiKey()
+    {
+        lock (_lock)
+        {
+            return _sttApiKey;
         }
     }
 

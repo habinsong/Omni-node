@@ -190,7 +190,11 @@ internal sealed class WsAiCommandDispatcher
                         null,
                         message.Attachments,
                         message.WebUrls,
-                        message.WebSearchEnabled
+                        message.WebSearchEnabled,
+                        message.CodexModel,
+                        message.RequestId,
+                        message.SkillName,
+                        message.SkillScope
                     ),
                     cancellationToken,
                     stream

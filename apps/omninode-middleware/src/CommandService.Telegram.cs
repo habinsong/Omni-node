@@ -1672,9 +1672,19 @@ public sealed partial class CommandService
         IReadOnlyList<InputAttachment>? attachments,
         IReadOnlyList<string>? webUrls,
         bool webSearchEnabled,
+        Action<string>? streamCallback,
         CancellationToken cancellationToken
     )
     {
+        Action<ChatStreamUpdate>? telegramChatStream = streamCallback == null
+            ? null
+            : update =>
+            {
+                if (!string.IsNullOrEmpty(update.Delta))
+                {
+                    streamCallback(update.Delta);
+                }
+            };
         TelegramLlmPreferences snapshot;
         lock (_telegramLlmLock)
         {
@@ -1716,7 +1726,7 @@ public sealed partial class CommandService
                 memoryHint,
                 allowMarkdownTable,
                 enforceTelegramOutputStyle: true,
-                streamCallback: null,
+                streamCallback: telegramChatStream,
                 scope: session.Scope,
                 mode: session.Mode,
                 conversationId: session.Thread.Id,
@@ -1787,7 +1797,7 @@ public sealed partial class CommandService
                     shouldFallbackToGeminiWeb,
                     allowMarkdownTable,
                     true,
-                    null,
+                    telegramChatStream,
                     session.Scope,
                     session.Mode,
                     session.Thread.Id,
@@ -2012,6 +2022,7 @@ public sealed partial class CommandService
                 providerPrepared.Text,
                 snapshot,
                 thinkingLevel,
+                streamCallback,
                 cancellationToken
             );
             var citationBundle = BuildAndLogCitationMappings(
@@ -2066,7 +2077,8 @@ public sealed partial class CommandService
             snapshot.SingleModel,
             "telegram",
             cancellationToken,
-            ResolveSingleChatMaxOutputTokens(text)
+            ResolveSingleChatMaxOutputTokens(text),
+            streamCallback
         );
         if (!_config.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(text, single.Text))
         {
@@ -2077,7 +2089,8 @@ public sealed partial class CommandService
                 snapshot.SingleModel,
                 "telegram",
                 cancellationToken,
-                ResolveSingleChatMaxOutputTokens(text)
+                ResolveSingleChatMaxOutputTokens(text),
+                streamCallback
             );
             if (!string.IsNullOrWhiteSpace(recovered.Text)
                 && !ShouldRetrySingleChatWithoutHistory(text, recovered.Text))
@@ -2298,6 +2311,7 @@ public sealed partial class CommandService
         string profiledInput,
         TelegramLlmPreferences snapshot,
         string thinkingLevel,
+        Action<string>? streamCallback,
         CancellationToken cancellationToken
     )
     {
@@ -2313,7 +2327,8 @@ public sealed partial class CommandService
             profiledInput,
             selectedModel,
             cancellationToken,
-            maxTokens
+            maxTokens,
+            streamCallback
         );
         return new LlmSingleChatResult(generated.Provider, generated.Model, SanitizeChatOutput(generated.Text));
     }

@@ -52,10 +52,11 @@ public sealed partial class CommandService
         string? model,
         string source,
         CancellationToken cancellationToken,
-        int? maxOutputTokens = null
+        int? maxOutputTokens = null,
+        Action<string>? streamCallback = null
     )
     {
-        return ChatSingleCoreAsync(input, provider, model, source, cancellationToken, maxOutputTokens);
+        return ChatSingleCoreAsync(input, provider, model, source, cancellationToken, maxOutputTokens, streamCallback);
     }
 
     public Task<LlmOrchestrationResult> ChatOrchestrationAsync(
@@ -155,7 +156,8 @@ public sealed partial class CommandService
                 "local:assistant_info",
                 localInfoUpdated,
                 null,
-                null
+                null,
+                RequestId: request.RequestId
             );
         }
 
@@ -181,7 +183,8 @@ public sealed partial class CommandService
                 "local:copilot_usage",
                 localUpdated,
                 null,
-                null
+                null,
+                RequestId: request.RequestId
             );
         }
 
@@ -257,7 +260,8 @@ public sealed partial class CommandService
                 0,
                 0,
                 "-",
-                urlResult.Latency
+                urlResult.Latency,
+                request.RequestId
             );
         }
 
@@ -353,7 +357,8 @@ public sealed partial class CommandService
                     0,
                     0,
                     "-",
-                    webResult.Latency
+                    webResult.Latency,
+                    request.RequestId
                 );
             }
         }
@@ -407,7 +412,8 @@ public sealed partial class CommandService
                 blockedCitationBundle.Validation,
                 preparedInput.RetryAttempt,
                 preparedInput.RetryMaxAttempts,
-                preparedInput.RetryStopReason
+                preparedInput.RetryStopReason,
+                RequestId: request.RequestId
             );
         }
 
@@ -415,6 +421,29 @@ public sealed partial class CommandService
         var effectiveSingleToken = singleRequestToken;
         var singleGenerationProvider = requestedProvider;
         var singleGenerationModel = resolvedModel;
+        var streamedChunkIndex = 0;
+        Action<string>? singleStreamCallback = streamCallback == null
+            ? null
+            : delta =>
+            {
+                if (string.IsNullOrEmpty(delta))
+                {
+                    return;
+                }
+
+                streamedChunkIndex += 1;
+                streamCallback(new ChatStreamUpdate(
+                    session.Scope,
+                    session.Mode,
+                    thread.Id,
+                    singleGenerationProvider,
+                    singleGenerationModel,
+                    "chat-single",
+                    delta,
+                    streamedChunkIndex,
+                    request.RequestId
+                ));
+            };
 
         async Task<LlmSingleChatResult> GenerateSingleAsync(string prompt, CancellationToken token)
         {
@@ -423,7 +452,8 @@ public sealed partial class CommandService
                     prompt,
                     singleGenerationModel,
                     token,
-                    singleMaxOutputTokens
+                    singleMaxOutputTokens,
+                    singleStreamCallback
                 )
                 : await ChatSingleAsync(
                     prompt,
@@ -431,13 +461,19 @@ public sealed partial class CommandService
                     singleGenerationModel,
                     request.Source,
                     token,
-                    singleMaxOutputTokens
+                    singleMaxOutputTokens,
+                    singleStreamCallback
                 );
         }
 
+        var skillPreparedText = ApplySelectedSkillToPrompt(
+            preparedInput.Text,
+            request.SkillName,
+            request.SkillScope
+        );
         var contextualInput = BuildContextualInput(
             session.SessionId,
-            preparedInput.Text,
+            skillPreparedText,
             session.LinkedMemoryNotes,
             includeLocalTimeHint: true
         );
@@ -532,7 +568,8 @@ public sealed partial class CommandService
             citationBundle.Validation,
             preparedInput.RetryAttempt,
             preparedInput.RetryMaxAttempts,
-            preparedInput.RetryStopReason
+            preparedInput.RetryStopReason,
+            RequestId: request.RequestId
         );
     }
 
@@ -1098,6 +1135,54 @@ public sealed partial class CommandService
         }
     }
 
+    private string ApplySelectedSkillToPrompt(string input, string? skillName, string? skillScope)
+    {
+        var normalizedName = (skillName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalizedName))
+        {
+            return input;
+        }
+
+        try
+        {
+            var normalizedScope = (skillScope ?? string.Empty).Trim();
+            var snapshot = _projectContextLoader.LoadSnapshot();
+            var skill = snapshot.Skills
+                .Where(item => item.Name.Equals(normalizedName, StringComparison.OrdinalIgnoreCase))
+                .Where(item => string.IsNullOrWhiteSpace(normalizedScope)
+                               || item.Scope.Equals(normalizedScope, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(item => item.Scope.Equals("project", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .FirstOrDefault();
+            if (skill == null || string.IsNullOrWhiteSpace(skill.Path) || !File.Exists(skill.Path))
+            {
+                return input;
+            }
+
+            var raw = File.ReadAllText(skill.Path, Encoding.UTF8);
+            var trimmedSkill = TrimToUtf8ByteCount(raw.Trim(), 12_000);
+            if (string.IsNullOrWhiteSpace(trimmedSkill))
+            {
+                return input;
+            }
+
+            return $"""
+                    다음 SKILL.md 지침을 이번 답변에 적용하세요.
+
+                    [SKILL name={skill.Name} scope={skill.Scope} path={skill.Path}]
+                    {trimmedSkill}
+                    [/SKILL]
+
+                    사용자 요청:
+                    {input}
+                    """;
+        }
+        catch (Exception ex)
+        {
+            _auditLogger.Log("web", "skill_prompt_apply", "failed", ex.Message);
+            return input;
+        }
+    }
+
     private static string TrimLocalAssistantInfoText(string text, int maxChars)
     {
         var normalized = Regex.Replace((text ?? string.Empty).Trim(), @"\s+", " ");
@@ -1107,6 +1192,35 @@ public sealed partial class CommandService
         }
 
         return normalized[..maxChars].TrimEnd() + "...";
+    }
+
+    private static string TrimToUtf8ByteCount(string value, int maxBytes)
+    {
+        if (string.IsNullOrEmpty(value) || maxBytes <= 0)
+        {
+            return string.Empty;
+        }
+
+        if (Encoding.UTF8.GetByteCount(value) <= maxBytes)
+        {
+            return value;
+        }
+
+        var builder = new StringBuilder(value.Length);
+        var used = 0;
+        foreach (var rune in value.EnumerateRunes())
+        {
+            var bytes = rune.Utf8SequenceLength;
+            if (used + bytes > maxBytes)
+            {
+                break;
+            }
+
+            builder.Append(rune);
+            used += bytes;
+        }
+
+        return builder.ToString();
     }
 
     private async Task<ConversationChatResult> ChatOrchestrationWithStateCoreAsync(
@@ -1564,7 +1678,8 @@ public sealed partial class CommandService
         string? model,
         string source,
         CancellationToken cancellationToken,
-        int? maxOutputTokens = null
+        int? maxOutputTokens = null,
+        Action<string>? streamCallback = null
     )
     {
         var text = (input ?? string.Empty).Trim();
@@ -1578,7 +1693,8 @@ public sealed partial class CommandService
             model,
             text,
             cancellationToken,
-            maxOutputTokens
+            maxOutputTokens,
+            streamCallback: streamCallback
         );
         var cleaned = SanitizeChatOutput(generated.Text);
         _auditLogger.Log(source, "chat_single", "ok", $"provider={generated.Provider} model={generated.Model}");

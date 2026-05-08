@@ -43,6 +43,17 @@ public sealed class ConversationStore : IConversationStore
         }
     }
 
+    public IReadOnlyList<ConversationThreadView> ListAllViews()
+    {
+        lock (_lock)
+        {
+            return _state.Conversations
+                .OrderByDescending(x => x.UpdatedUtc)
+                .Select(ToView)
+                .ToArray();
+        }
+    }
+
     public ConversationThreadView Create(
         string scope,
         string mode,
@@ -179,6 +190,84 @@ public sealed class ConversationStore : IConversationStore
             SaveLocked();
             return true;
         }
+    }
+
+    public ConversationImportResult ImportConversations(IReadOnlyList<ConversationThreadView> conversations, bool overwrite)
+    {
+        if (conversations == null || conversations.Count == 0)
+        {
+            return new ConversationImportResult(0, 0, 0);
+        }
+
+        var imported = 0;
+        var skipped = 0;
+        var overwritten = 0;
+
+        lock (_lock)
+        {
+            foreach (var view in conversations)
+            {
+                if (view == null || string.IsNullOrWhiteSpace(view.Id))
+                {
+                    skipped += 1;
+                    continue;
+                }
+
+                var normalizedId = view.Id.Trim();
+                var existingIndex = _state.Conversations.FindIndex(item => item.Id.Equals(normalizedId, StringComparison.Ordinal));
+                if (existingIndex >= 0 && !overwrite)
+                {
+                    skipped += 1;
+                    continue;
+                }
+
+                var importedThread = new ConversationThread
+                {
+                    Id = normalizedId,
+                    Scope = NormalizeToken(view.Scope, "chat"),
+                    Mode = NormalizeToken(view.Mode, "single"),
+                    Title = string.IsNullOrWhiteSpace(view.Title) ? ResolveTitle(null, view.Scope, view.Mode) : view.Title.Trim(),
+                    Project = NormalizeLabel(view.Project, "기본"),
+                    Category = NormalizeLabel(view.Category, "일반"),
+                    Tags = NormalizeTags(view.Tags).ToList(),
+                    CreatedUtc = view.CreatedUtc == default ? DateTimeOffset.UtcNow : view.CreatedUtc,
+                    UpdatedUtc = view.UpdatedUtc == default ? DateTimeOffset.UtcNow : view.UpdatedUtc,
+                    LinkedMemoryNotes = (view.LinkedMemoryNotes ?? Array.Empty<string>())
+                        .Where(item => !string.IsNullOrWhiteSpace(item))
+                        .Select(item => item.Trim())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList(),
+                    LatestCodingResult = view.LatestCodingResult,
+                    Messages = (view.Messages ?? Array.Empty<ConversationMessageView>())
+                        .Select(message => new ConversationMessage
+                        {
+                            Role = NormalizeRole(message.Role),
+                            Text = (message.Text ?? string.Empty).Trim(),
+                            Meta = (message.Meta ?? string.Empty).Trim(),
+                            CreatedUtc = message.CreatedUtc == default ? DateTimeOffset.UtcNow : message.CreatedUtc
+                        })
+                        .ToList()
+                };
+
+                if (existingIndex >= 0)
+                {
+                    _state.Conversations[existingIndex] = importedThread;
+                    overwritten += 1;
+                }
+                else
+                {
+                    _state.Conversations.Add(importedThread);
+                    imported += 1;
+                }
+            }
+
+            if (imported > 0 || overwritten > 0)
+            {
+                SaveLocked();
+            }
+        }
+
+        return new ConversationImportResult(imported, skipped, overwritten);
     }
 
     public int DeleteByScope(string scope, string? mode = null)

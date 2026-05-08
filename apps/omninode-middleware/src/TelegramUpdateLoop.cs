@@ -104,13 +104,17 @@ public sealed class TelegramUpdateLoop
                             typingTask = RunTypingLoopAsync(progressCts.Token);
                         }
 
+                        var progressStream = progressMessageId.HasValue && progressMessageId.Value > 0
+                            ? CreateProgressStreamCallback(progressMessageId.Value, cancellationToken)
+                            : null;
                         var result = await _commandService.ExecuteAsync(
                             input,
                             "telegram",
                             cancellationToken,
                             update.Attachments ?? Array.Empty<InputAttachment>(),
                             null,
-                            true
+                            true,
+                            progressStream
                         );
                         await SendTelegramReplyAsync(progressMessageId, result, cancellationToken);
                     }
@@ -201,6 +205,78 @@ public sealed class TelegramUpdateLoop
                 }
             }
         }, cancellationToken);
+    }
+
+    private Action<string> CreateProgressStreamCallback(int messageId, CancellationToken cancellationToken)
+    {
+        var gate = new object();
+        var builder = new System.Text.StringBuilder();
+        var lastEditUtc = DateTimeOffset.MinValue;
+        var editInFlight = 0;
+
+        return delta =>
+        {
+            if (string.IsNullOrEmpty(delta) || cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            lock (gate)
+            {
+                builder.Append(delta);
+                if (DateTimeOffset.UtcNow - lastEditUtc < TimeSpan.FromSeconds(1))
+                {
+                    return;
+                }
+
+                lastEditUtc = DateTimeOffset.UtcNow;
+            }
+
+            if (Interlocked.Exchange(ref editInFlight, 1) == 1)
+            {
+                return;
+            }
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    string snapshot;
+                    lock (gate)
+                    {
+                        snapshot = builder.ToString();
+                    }
+
+                    var preview = TrimTelegramProgressPreview(snapshot);
+                    if (!string.IsNullOrWhiteSpace(preview))
+                    {
+                        await _telegramClient.ReplaceMessageAsync(
+                            messageId,
+                            $"작성 중...\n\n{preview}",
+                            cancellationToken
+                        );
+                    }
+                }
+                catch
+                {
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref editInFlight, 0);
+                }
+            }, CancellationToken.None);
+        };
+    }
+
+    private static string TrimTelegramProgressPreview(string text)
+    {
+        var normalized = (text ?? string.Empty).Trim();
+        if (normalized.Length <= 3000)
+        {
+            return normalized;
+        }
+
+        return normalized[^3000..];
     }
 
     private static bool ShouldShowProgressMessage(string input, bool hasAttachments)

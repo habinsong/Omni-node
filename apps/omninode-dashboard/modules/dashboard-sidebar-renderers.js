@@ -29,10 +29,15 @@ export function renderConversationPanel(props) {
     toggleSelectionMode,
     clearScopeMemory,
     selectedDeleteConversationIds,
-    deleteConversation
+    deleteConversation,
+    conversationSearchState,
+    onConversationSearch,
+    clearConversationSearch
   } = props;
 
   const keyword = currentConversationFilter.trim();
+  const searchState = conversationSearchState || { query: "", loading: false, results: [], error: "" };
+  const searchResultCount = Array.isArray(searchState.results) ? searchState.results.length : 0;
   return e(
     "section",
     { className: "conversation-panel" },
@@ -48,8 +53,34 @@ export function renderConversationPanel(props) {
         className: "input folder-search-input",
         value: currentConversationFilter,
         onChange: (event) => setConversationFilterByKey((prev) => ({ ...prev, [currentKey]: event.target.value })),
-        placeholder: "프로젝트/카테고리/태그/제목 검색"
-      })
+        placeholder: "제목, 미리보기, 본문 검색"
+      }),
+      e("div", { className: "conversation-search-actions" },
+        e("button", {
+          type: "button",
+          className: "btn ghost conversation-search-btn",
+          onClick: onConversationSearch,
+          disabled: keyword.length < 2 || searchState.loading
+        }, searchState.loading ? "검색 중..." : "본문 검색"),
+        keyword
+          ? e("button", {
+            type: "button",
+            className: "btn ghost conversation-search-clear",
+            onClick: clearConversationSearch
+          }, "지우기")
+          : null
+      ),
+      keyword.length >= 2
+        ? e("div", { className: `conversation-search-status ${searchState.error ? "error" : ""}` },
+          searchState.error
+            ? searchState.error
+            : searchState.loading
+              ? "대화 본문까지 찾는 중입니다."
+              : searchResultCount > 0
+                ? `본문 검색 ${searchResultCount}건을 목록에 반영했습니다.`
+                : "제목과 본문에서 검색합니다."
+        )
+        : null
     ),
     e("div", { className: "conversation-list" },
       currentConversationList.length === 0

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq;
 using System.Net.WebSockets;
 
@@ -309,6 +310,88 @@ internal sealed class WsConversationMemoryDispatcher
             return true;
         }
 
+        if (message.Type == "conversation_search")
+        {
+            var query = string.IsNullOrWhiteSpace(message.Query)
+                ? message.Text
+                : message.Query;
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                await WebSocketGateway.SendTextAsync(socket, sendLock, "{\"type\":\"error\",\"message\":\"query is required\"}", cancellationToken);
+                return true;
+            }
+
+            var result = _conversationService.SearchConversations(query.Trim(), message.MaxResults);
+            await WebSocketGateway.SendTextAsync(
+                socket,
+                sendLock,
+                BuildConversationSearchResultJson(result),
+                cancellationToken
+            );
+            return true;
+        }
+
+        if (message.Type == "backup_export_prepare")
+        {
+            var result = _conversationService.ExportBackup();
+            await WebSocketGateway.SendTextAsync(
+                socket,
+                sendLock,
+                BuildBackupExportResultJson(result),
+                cancellationToken
+            );
+            return true;
+        }
+
+        if (message.Type == "backup_import_preview")
+        {
+            if (string.IsNullOrWhiteSpace(message.ContentBase64))
+            {
+                await WebSocketGateway.SendTextAsync(socket, sendLock, "{\"type\":\"error\",\"message\":\"contentBase64 is required\"}", cancellationToken);
+                return true;
+            }
+
+            var result = _conversationService.PreviewBackupImport(
+                message.FileName ?? "backup.zip",
+                message.ContentBase64
+            );
+            await WebSocketGateway.SendTextAsync(
+                socket,
+                sendLock,
+                BuildBackupImportPreviewResultJson(result),
+                cancellationToken
+            );
+            return true;
+        }
+
+        if (message.Type == "backup_import_apply")
+        {
+            if (string.IsNullOrWhiteSpace(message.PreviewId))
+            {
+                await WebSocketGateway.SendTextAsync(socket, sendLock, "{\"type\":\"error\",\"message\":\"previewId is required\"}", cancellationToken);
+                return true;
+            }
+
+            var result = _conversationService.ApplyBackupImport(
+                message.PreviewId.Trim(),
+                message.Overwrite ?? false
+            );
+            await WebSocketGateway.SendTextAsync(
+                socket,
+                sendLock,
+                BuildBackupImportApplyResultJson(result),
+                cancellationToken
+            );
+            if (result.Ok)
+            {
+                await _sendConversationsAsync(socket, sendLock, "chat", "single", cancellationToken);
+                await _sendConversationsAsync(socket, sendLock, "coding", "single", cancellationToken);
+                await _sendMemoryNotesAsync(socket, sendLock, cancellationToken);
+            }
+
+            return true;
+        }
+
         if (message.Type == "memory_get")
         {
             var requestedPath = message.MemoryPath;
@@ -421,8 +504,123 @@ internal sealed class WsConversationMemoryDispatcher
     private static bool RequiresAuthentication(string messageType)
     {
         return messageType is "memory_search"
+            or "conversation_search"
+            or "backup_export_prepare"
+            or "backup_import_preview"
+            or "backup_import_apply"
             or "memory_get"
             or "update_conversation_meta"
             or "read_workspace_file";
+    }
+
+    private static string BuildConversationSearchResultJson(ConversationSearchResult result)
+    {
+        var builder = new System.Text.StringBuilder();
+        builder.Append("{");
+        builder.Append("\"type\":\"conversation_search_result\",");
+        builder.Append($"\"query\":\"{WebSocketGateway.EscapeJson(result.Query)}\",");
+        builder.Append($"\"disabled\":{(result.Disabled ? "true" : "false")},");
+        builder.Append("\"results\":[");
+        for (var i = 0; i < result.Results.Count; i++)
+        {
+            var item = result.Results[i];
+            if (i > 0)
+            {
+                builder.Append(",");
+            }
+
+            builder.Append("{");
+            builder.Append($"\"conversationId\":\"{WebSocketGateway.EscapeJson(item.ConversationId)}\",");
+            builder.Append($"\"title\":\"{WebSocketGateway.EscapeJson(item.Title)}\",");
+            builder.Append($"\"scope\":\"{WebSocketGateway.EscapeJson(item.Scope)}\",");
+            builder.Append($"\"mode\":\"{WebSocketGateway.EscapeJson(item.Mode)}\",");
+            builder.Append($"\"role\":\"{WebSocketGateway.EscapeJson(item.Role)}\",");
+            builder.Append($"\"snippet\":\"{WebSocketGateway.EscapeJson(item.Snippet)}\",");
+            builder.Append($"\"updatedUtc\":\"{WebSocketGateway.EscapeJson(item.UpdatedUtc.ToString("O"))}\",");
+            builder.Append($"\"messageUtc\":\"{WebSocketGateway.EscapeJson(item.MessageUtc.ToString("O"))}\",");
+            builder.Append($"\"score\":{item.Score.ToString("0.####", CultureInfo.InvariantCulture)}");
+            builder.Append("}");
+        }
+
+        builder.Append("]");
+        if (!string.IsNullOrWhiteSpace(result.Error))
+        {
+            builder.Append($",\"error\":\"{WebSocketGateway.EscapeJson(result.Error)}\"");
+        }
+
+        builder.Append("}");
+        return builder.ToString();
+    }
+
+    private static string BuildBackupExportResultJson(BackupExportResult result)
+    {
+        var builder = new System.Text.StringBuilder();
+        builder.Append("{");
+        builder.Append("\"type\":\"backup_export_result\",");
+        builder.Append($"\"ok\":{(result.Ok ? "true" : "false")},");
+        builder.Append($"\"fileName\":\"{WebSocketGateway.EscapeJson(result.FileName)}\",");
+        builder.Append($"\"contentBase64\":\"{WebSocketGateway.EscapeJson(result.ContentBase64)}\",");
+        builder.Append($"\"sizeBytes\":{Math.Max(0, result.SizeBytes)},");
+        AppendStringArray(builder, "included", result.Included);
+        builder.Append(",");
+        AppendStringArray(builder, "excluded", result.Excluded);
+        if (!string.IsNullOrWhiteSpace(result.Error))
+        {
+            builder.Append($",\"error\":\"{WebSocketGateway.EscapeJson(result.Error)}\"");
+        }
+
+        builder.Append("}");
+        return builder.ToString();
+    }
+
+    private static string BuildBackupImportPreviewResultJson(BackupImportPreviewResult result)
+    {
+        var builder = new System.Text.StringBuilder();
+        builder.Append("{");
+        builder.Append("\"type\":\"backup_import_preview_result\",");
+        builder.Append($"\"ok\":{(result.Ok ? "true" : "false")},");
+        builder.Append($"\"previewId\":\"{WebSocketGateway.EscapeJson(result.PreviewId)}\",");
+        builder.Append($"\"fileName\":\"{WebSocketGateway.EscapeJson(result.FileName)}\",");
+        builder.Append($"\"conversationCount\":{Math.Max(0, result.ConversationCount)},");
+        builder.Append($"\"conversationConflictCount\":{Math.Max(0, result.ConversationConflictCount)},");
+        builder.Append($"\"fileCount\":{Math.Max(0, result.FileCount)},");
+        AppendStringArray(builder, "conflicts", result.Conflicts);
+        if (!string.IsNullOrWhiteSpace(result.Error))
+        {
+            builder.Append($",\"error\":\"{WebSocketGateway.EscapeJson(result.Error)}\"");
+        }
+
+        builder.Append("}");
+        return builder.ToString();
+    }
+
+    private static string BuildBackupImportApplyResultJson(BackupImportApplyResult result)
+    {
+        return "{"
+            + "\"type\":\"backup_import_result\","
+            + $"\"ok\":{(result.Ok ? "true" : "false")},"
+            + $"\"importedConversations\":{Math.Max(0, result.ImportedConversations)},"
+            + $"\"skippedConversations\":{Math.Max(0, result.SkippedConversations)},"
+            + $"\"overwrittenConversations\":{Math.Max(0, result.OverwrittenConversations)},"
+            + $"\"importedFiles\":{Math.Max(0, result.ImportedFiles)},"
+            + $"\"skippedFiles\":{Math.Max(0, result.SkippedFiles)},"
+            + $"\"error\":\"{WebSocketGateway.EscapeJson(result.Error ?? string.Empty)}\""
+            + "}";
+    }
+
+    private static void AppendStringArray(System.Text.StringBuilder builder, string name, IReadOnlyList<string> values)
+    {
+        builder.Append($"\"{WebSocketGateway.EscapeJson(name)}\":[");
+        for (var i = 0; i < values.Count; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append(",");
+            }
+
+            builder.Append($"\"{WebSocketGateway.EscapeJson(values[i])}\"");
+        }
+
+        builder.Append("]");
     }
 }

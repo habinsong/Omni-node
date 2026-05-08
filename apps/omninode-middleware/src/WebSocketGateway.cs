@@ -2725,6 +2725,7 @@ public sealed partial class WebSocketGateway
             + $"\"provider\":\"{EscapeJson(result.Provider)}\","
             + $"\"model\":\"{EscapeJson(result.Model)}\","
             + $"\"route\":\"{EscapeJson(result.Route)}\","
+            + $"\"requestId\":\"{EscapeJson(result.RequestId ?? string.Empty)}\","
             + $"\"text\":\"{EscapeJson(result.Text)}\","
             + $"\"conversation\":{BuildConversationJson(result.Conversation)},"
             + $"\"autoMemoryNote\":{BuildMemoryNoteJson(result.AutoMemoryNote)},"
@@ -2783,6 +2784,7 @@ public sealed partial class WebSocketGateway
             + $"\"provider\":\"{EscapeJson(update.Provider)}\","
             + $"\"model\":\"{EscapeJson(update.Model)}\","
             + $"\"route\":\"{EscapeJson(update.Route)}\","
+            + $"\"requestId\":\"{EscapeJson(update.RequestId ?? string.Empty)}\","
             + $"\"delta\":\"{EscapeJson(update.Delta)}\","
             + $"\"conversationId\":\"{EscapeJson(update.ConversationId)}\","
             + $"\"chunkIndex\":{Math.Max(0, update.ChunkIndex)}"
@@ -3400,8 +3402,11 @@ public sealed partial class WebSocketGateway
             string? groqApiKey = null;
             string? geminiApiKey = null;
             string? cerebrasApiKey = null;
+            string? codexApiKey = null;
             string? routingPolicyJson = null;
             string? refactorEditsJson = null;
+            string? contentBase64 = null;
+            string? fileName = null;
             int? authTtlHours = null;
             int? timeoutSeconds = null;
             int? runTimeoutSeconds = null;
@@ -3423,6 +3428,7 @@ public sealed partial class WebSocketGateway
             long? timestamp = null;
             bool? enabled = null;
             bool? agentUsePlaywright = null;
+            bool? overwrite = null;
             bool? compactConversation = null;
             bool? includeDisabled = null;
             bool? includeTools = null;
@@ -3750,6 +3756,16 @@ public sealed partial class WebSocketGateway
             if (doc.RootElement.TryGetProperty("previewId", out var previewIdElement))
             {
                 previewId = previewIdElement.GetString();
+            }
+
+            if (doc.RootElement.TryGetProperty("fileName", out var fileNameElement))
+            {
+                fileName = fileNameElement.GetString();
+            }
+
+            if (doc.RootElement.TryGetProperty("contentBase64", out var contentBase64Element))
+            {
+                contentBase64 = contentBase64Element.GetString();
             }
 
             if (doc.RootElement.TryGetProperty("tags", out var tagsElement)
@@ -4162,6 +4178,11 @@ public sealed partial class WebSocketGateway
                 cerebrasApiKey = cerebrasKey.GetString();
             }
 
+            if (doc.RootElement.TryGetProperty("codexApiKey", out var codexKey))
+            {
+                codexApiKey = codexKey.GetString();
+            }
+
             if (doc.RootElement.TryGetProperty("persist", out var persistElement) && persistElement.ValueKind == JsonValueKind.True)
             {
                 persist = true;
@@ -4188,6 +4209,18 @@ public sealed partial class WebSocketGateway
                 else if (agentUsePlaywrightElement.ValueKind == JsonValueKind.False)
                 {
                     agentUsePlaywright = false;
+                }
+            }
+
+            if (doc.RootElement.TryGetProperty("overwrite", out var overwriteElement))
+            {
+                if (overwriteElement.ValueKind == JsonValueKind.True)
+                {
+                    overwrite = true;
+                }
+                else if (overwriteElement.ValueKind == JsonValueKind.False)
+                {
+                    overwrite = false;
                 }
             }
 
@@ -4530,8 +4563,11 @@ public sealed partial class WebSocketGateway
                 GroqApiKey = groqApiKey,
                 GeminiApiKey = geminiApiKey,
                 CerebrasApiKey = cerebrasApiKey,
+                CodexApiKey = codexApiKey,
                 RoutingPolicyJson = routingPolicyJson,
                 RefactorEditsJson = refactorEditsJson,
+                ContentBase64 = contentBase64,
+                FileName = fileName,
                 AuthTtlHours = authTtlHours,
                 TimeoutSeconds = timeoutSeconds,
                 RunTimeoutSeconds = runTimeoutSeconds,
@@ -4553,6 +4589,7 @@ public sealed partial class WebSocketGateway
                 Timestamp = timestamp,
                 Enabled = enabled,
                 AgentUsePlaywright = agentUsePlaywright,
+                Overwrite = overwrite,
                 CompactConversation = compactConversation,
                 IncludeDisabled = includeDisabled,
                 IncludeTools = includeTools,

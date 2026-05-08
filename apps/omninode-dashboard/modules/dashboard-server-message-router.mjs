@@ -381,17 +381,21 @@ export function handleDashboardServerMessage(msg, context) {
   }
 
   if (msg.type === "skill_get_result") {
-    const ok = msg.Ok !== false && msg.ok !== false
-    const name = msg.Name || msg.name || ""
-    const scope = msg.Scope || msg.scope || "project"
-    const description = msg.Description || msg.description || ""
-    const body = msg.Body || msg.body || ""
-    const error = msg.Error || msg.error || null
+    const payload = msg.payload || msg
+    const ok = payload.Ok !== false && payload.ok !== false
+    const name = payload.Name || payload.name || ""
+    const scope = payload.Scope || payload.scope || "project"
+    const description = payload.Description || payload.description || ""
+    const body = payload.Body || payload.body || ""
+    const error = payload.Error || payload.error || null
+    setters.setLoadingSkillKey && setters.setLoadingSkillKey("")
     if (typeof setters.setSkillEditor === "function") {
       if (ok) {
         setters.setSkillEditor({ name, scope, description, body, isNew: false })
+        setters.setSelectedSkillKey && setters.setSelectedSkillKey(`${scope}:${name}`)
         setters.setSkillStatus && setters.setSkillStatus({ kind: "ok", message: `'${name}' 스킬을 불러왔습니다.` })
       } else {
+        setters.setSkillEditor && setters.setSkillEditor(null)
         setters.setSkillStatus && setters.setSkillStatus({ kind: "error", message: error || "스킬을 불러오지 못했습니다." })
       }
     }
@@ -399,9 +403,12 @@ export function handleDashboardServerMessage(msg, context) {
   }
 
   if (msg.type === "skill_save_result") {
-    const ok = msg.Ok !== false && msg.ok !== false
-    const name = msg.Name || msg.name || ""
-    const error = msg.Error || msg.error || null
+    const payload = msg.payload || msg
+    const ok = payload.Ok !== false && payload.ok !== false
+    const name = payload.Name || payload.name || ""
+    const scope = payload.Scope || payload.scope || "project"
+    const error = payload.Error || payload.error || null
+    setters.setLoadingSkillKey && setters.setLoadingSkillKey("")
     if (typeof setters.setSkillStatus === "function") {
       setters.setSkillStatus(
         ok
@@ -413,15 +420,20 @@ export function handleDashboardServerMessage(msg, context) {
       setters.refreshSkillsList()
     }
     if (ok && typeof setters.setSkillEditor === "function") {
-      setters.setSkillEditor((prev) => (prev ? { ...prev, isNew: false } : prev))
+      setters.setSkillEditor((prev) => (prev ? { ...prev, name: name || prev.name, scope: scope || prev.scope, isNew: false } : prev))
+    }
+    if (ok && typeof setters.setSelectedSkillKey === "function" && name) {
+      setters.setSelectedSkillKey(`${scope}:${name}`)
     }
     return true
   }
 
   if (msg.type === "skill_delete_result") {
-    const ok = msg.Ok !== false && msg.ok !== false
-    const name = msg.Name || msg.name || ""
-    const error = msg.Error || msg.error || null
+    const payload = msg.payload || msg
+    const ok = payload.Ok !== false && payload.ok !== false
+    const name = payload.Name || payload.name || ""
+    const error = payload.Error || payload.error || null
+    setters.setLoadingSkillKey && setters.setLoadingSkillKey("")
     if (typeof setters.setSkillStatus === "function") {
       setters.setSkillStatus(
         ok

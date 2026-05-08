@@ -13,6 +13,9 @@ namespace OmniNode.Middleware;
 [JsonSerializable(typeof(ProjectContextSnapshot))]
 [JsonSerializable(typeof(SkillManifestListResult))]
 [JsonSerializable(typeof(CommandTemplateListResult))]
+[JsonSerializable(typeof(SkillFileGetResult))]
+[JsonSerializable(typeof(SkillFileSaveResult))]
+[JsonSerializable(typeof(SkillFileDeleteResult))]
 internal partial class ContextJsonContext : JsonSerializerContext
 {
 }

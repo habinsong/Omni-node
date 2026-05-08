@@ -76,7 +76,10 @@ public sealed record ChatRequest(
     IReadOnlyList<InputAttachment>? Attachments = null,
     IReadOnlyList<string>? WebUrls = null,
     bool WebSearchEnabled = true,
-    string? CodexModel = null
+    string? CodexModel = null,
+    string? RequestId = null,
+    string? SkillName = null,
+    string? SkillScope = null
 );
 public sealed record MultiChatRequest(
     string Input,
@@ -107,7 +110,8 @@ public sealed record ChatStreamUpdate(
     string Model,
     string Route,
     string Delta,
-    int ChunkIndex
+    int ChunkIndex,
+    string? RequestId = null
 );
 public sealed record ChatLatencyMetrics(
     long DecisionMs,
@@ -133,7 +137,58 @@ public sealed record ConversationChatResult(
     int RetryAttempt = 0,
     int RetryMaxAttempts = 0,
     string RetryStopReason = "-",
-    ChatLatencyMetrics? Latency = null
+    ChatLatencyMetrics? Latency = null,
+    string? RequestId = null
+);
+public sealed record ConversationSearchHit(
+    string ConversationId,
+    string Title,
+    string Scope,
+    string Mode,
+    string Role,
+    string Snippet,
+    DateTimeOffset UpdatedUtc,
+    DateTimeOffset MessageUtc,
+    double Score
+);
+public sealed record ConversationSearchResult(
+    string Query,
+    IReadOnlyList<ConversationSearchHit> Results,
+    bool Disabled,
+    string? Error = null
+);
+public sealed record ConversationImportResult(
+    int Imported,
+    int Skipped,
+    int Overwritten
+);
+public sealed record BackupExportResult(
+    bool Ok,
+    string FileName,
+    string ContentBase64,
+    long SizeBytes,
+    IReadOnlyList<string> Included,
+    IReadOnlyList<string> Excluded,
+    string? Error = null
+);
+public sealed record BackupImportPreviewResult(
+    bool Ok,
+    string PreviewId,
+    string FileName,
+    int ConversationCount,
+    int ConversationConflictCount,
+    int FileCount,
+    IReadOnlyList<string> Conflicts,
+    string? Error = null
+);
+public sealed record BackupImportApplyResult(
+    bool Ok,
+    int ImportedConversations,
+    int SkippedConversations,
+    int OverwrittenConversations,
+    int ImportedFiles,
+    int SkippedFiles,
+    string? Error = null
 );
 public sealed record ConversationMultiResult(
     string ConversationId,
