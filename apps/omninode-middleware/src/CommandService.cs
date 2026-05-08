@@ -21,10 +21,13 @@ public sealed partial class CommandService :
     private const string LegacyCerebrasLlamaModel = "llama3.1-8b";
     private const string DefaultCopilotModel = "gpt-5-mini";
     private const int TelegramUpgradeDailyCap = 100;
-    private const int TelegramMaxResponseChars = 3600;
+    // 텔레그램 응답 길이 제한 — TelegramClient가 3900자 단위로 자동 분할 송신하므로
+    // 응답 자체는 거의 무제한으로 생성 후 분할하도록 큰 값으로 설정.
+    private const int TelegramMaxResponseChars = 60000;
     private const int TelegramFastModeMaxOutputTokens = 1024;
     private const int TelegramComplexModeMaxOutputTokens = 1536;
-    private const int TelegramLongContextThresholdChars = 2800;
+    // 텔레그램 입력 압축 임계값 — 대화탭과 동일하게 사실상 비활성화 (LLM 컨텍스트 한도까지 그대로 전달).
+    private const int TelegramLongContextThresholdChars = 200000;
     private const int TelegramLongContextTargetChars = 1200;
     private static readonly Regex CodeFenceRegex = new("```([a-zA-Z0-9#+._-]*)\\s*\\n(.*?)```", RegexOptions.Compiled | RegexOptions.Singleline);
     private static readonly Regex JsonObjectRegex = new("\\{[\\s\\S]*\\}", RegexOptions.Compiled);
