@@ -123,8 +123,17 @@ public sealed partial class CommandService
                 }
 
                 SkillManifest? skillToActivate = null;
+                string? previousSkillName = null;
                 if (explicitlyMentionedSkill != null)
                 {
+                    // 새 스킬로 전환되는지 검사 (이전 활성 스킬 이름이 다르면 switch)
+                    if (!string.IsNullOrWhiteSpace(threadKey)
+                        && _activeSkillByThread.TryGetValue(threadKey, out var existingActive)
+                        && !string.IsNullOrWhiteSpace(existingActive)
+                        && !string.Equals(existingActive, explicitlyMentionedSkill.Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        previousSkillName = existingActive;
+                    }
                     skillToActivate = explicitlyMentionedSkill;
                     if (!string.IsNullOrWhiteSpace(threadKey))
                     {
@@ -148,10 +157,16 @@ public sealed partial class CommandService
                     try
                     {
                         var skillText = System.IO.File.ReadAllText(skillToActivate.Path, Encoding.UTF8);
+                        if (!string.IsNullOrWhiteSpace(previousSkillName))
+                        {
+                            contextBuilder.AppendLine($"[Skill Switched: {previousSkillName} → {skillToActivate.Name}]");
+                            contextBuilder.AppendLine($"이전 `{previousSkillName}` 스킬은 즉시 종료되었습니다. 이번 응답부터는 `{skillToActivate.Name}` 스킬만 적용하고, 이전 스킬의 톤·규칙·관점·관심사는 절대 사용하지 마세요.");
+                            contextBuilder.AppendLine();
+                        }
                         var activationLabel = explicitlyMentionedSkill != null ? "Active Skill (sticky)" : "Active Skill (sticky, persisted)";
                         contextBuilder.AppendLine($"[{activationLabel}: {skillToActivate.Name}]");
                         contextBuilder.AppendLine($"이 대화는 `{skillToActivate.Name}` 스킬이 활성화된 상태로 진행됩니다.");
-                        contextBuilder.AppendLine("매 응답마다 스킬의 목적·말투·규칙을 우선 적용하세요. 사용자가 \"스킬 그만 / 종료 / 해제 / off\" 같이 명시적으로 끄기 전까지 계속 적용합니다.");
+                        contextBuilder.AppendLine("매 응답마다 스킬의 목적·말투·규칙을 우선 적용하세요. 사용자가 \"스킬 그만 / 종료 / 해제 / off\" 같이 명시적으로 끄거나 다른 스킬을 호출하기 전까지 계속 적용합니다.");
                         contextBuilder.AppendLine("스킬과 무관한 감정 위로·잡담·주제 전환을 추가하지 마세요.");
                         contextBuilder.AppendLine(skillText);
                         contextBuilder.AppendLine();
