@@ -17855,3 +17855,47 @@ video {
   font-size: 11px;
   line-height: 1.35;
 }
+
+/* ============================================================
+   v15 — 세 카드 하단 끝선만 정렬 (viewport 강제 없음, 자연 흐름 유지).
+   대상: .plan-next-card / .plan-browser-list / .plan-browser-detail
+   ============================================================ */
+.plans-workbench-shell {
+  align-items: stretch !important;
+}
+
+.plans-primary-column {
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  min-height: 0;
+}
+
+.plan-next-card {
+  align-self: stretch;
+  min-height: 0;
+}
+
+.plans-browser-shell {
+  align-items: stretch !important;
+}
+
+.plans-list-column,
+.plan-browser-list,
+.plans-detail-column,
+.plan-browser-detail {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0;
+  height: 100%;
+}
+
+/* 1024px 이하 stack 시에는 정책 해제 — 자연 흐름 */
+@media (max-width: 1024px) {
+  .plans-list-column,
+  .plan-browser-list,
+  .plans-detail-column,
+  .plan-browser-detail,
+  .plan-next-card {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+}
