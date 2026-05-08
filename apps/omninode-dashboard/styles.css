@@ -17579,3 +17579,86 @@ video {
     padding: 8px 10px;
   }
 }
+
+/* ============================================================
+   v9 — Plan detail head/actions 안전망. 모든 폭에서 튀어나감 방지.
+   원인: .plan-detail-head는 flex이지만 wrap이 없어서 우측 .row.plan-detail-actions가
+   부모 폭을 넘어도 줄바꿈하지 않고 컨테이너를 뚫고 나갔음.
+   .row의 margin-top:12px도 head 안에서 잘못 적용됐음.
+   ============================================================ */
+.plan-detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.plan-detail-head > div:first-child {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.plan-detail-head .plan-detail-actions.row,
+.plan-detail-head .plan-detail-actions {
+  margin-top: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.plan-detail-actions > button,
+.plan-detail-actions > .btn {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* 1024px↓ : 좌측 메타 / 우측 actions 모두 한 줄 가득 차게 */
+@media (max-width: 1024px) {
+  .plan-detail-head > div:first-child,
+  .plan-detail-head .plan-detail-actions.row,
+  .plan-detail-head .plan-detail-actions {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .plan-detail-head .plan-detail-actions {
+    justify-content: flex-start;
+  }
+
+  .plan-detail-actions > button,
+  .plan-detail-actions > .btn {
+    flex: 1 1 calc(50% - 6px);
+  }
+}
+
+/* 768px↓ : 4개 버튼을 2x2 grid로 — wrap 의존하지 않고 항상 균등 분할 */
+@media (max-width: 768px) {
+  .plan-detail-head .plan-detail-actions.row,
+  .plan-detail-head .plan-detail-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    justify-content: stretch;
+  }
+
+  .plan-detail-actions > button,
+  .plan-detail-actions > .btn {
+    flex: initial;
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* 480px↓ : 1열로 stack */
+@media (max-width: 480px) {
+  .plan-detail-head .plan-detail-actions.row,
+  .plan-detail-head .plan-detail-actions {
+    grid-template-columns: 1fr;
+  }
+}
