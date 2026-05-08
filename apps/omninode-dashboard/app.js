@@ -258,12 +258,10 @@ import {
     { id: "gemini-3.1-pro-preview", label: "Gemini: gemini-3.1-pro-preview" },
     { id: "gemini-3.1-flash-lite-preview", label: "Gemini: gemini-3.1-flash-lite-preview" }
   ];
-  const DEFAULT_CEREBRAS_MODEL = "llama-4-scout-17b-16e-instruct";
+  const DEFAULT_CEREBRAS_MODEL = "gpt-oss-120b";
   const CEREBRAS_MODEL_CHOICES = [
     { id: DEFAULT_CEREBRAS_MODEL, label: `Cerebras 기본: ${DEFAULT_CEREBRAS_MODEL}` },
-    { id: "llama-4-maverick-17b-128e-instruct", label: "Cerebras: llama-4-maverick-17b-128e-instruct" },
-    { id: "llama3.3-70b", label: "Cerebras: llama3.3-70b" },
-    { id: "qwen-3-32b", label: "Cerebras: qwen-3-32b" }
+    { id: "zai-glm-4.7", label: "Cerebras: zai-glm-4.7 (preview)" }
   ];
   const UI_PREFERENCES_KEY = "omninode_ui_preferences_v1";
   const DEFAULT_UI_PREFERENCES = {
@@ -815,6 +813,7 @@ import {
     const [codexStatus, setCodexStatus] = useState("확인 전");
     const [codexDetail, setCodexDetail] = useState("-");
     const [groqModels, setGroqModels] = useState([]);
+    const [cerebrasModels, setCerebrasModels] = useState([]);
     const [copilotModels, setCopilotModels] = useState([]);
     const [selectedGroqModel, setSelectedGroqModel] = useState("");
     const [selectedCopilotModel, setSelectedCopilotModel] = useState("");
@@ -3228,6 +3227,7 @@ import {
 
       groqAutoRefreshWindowRef.current = windowKeys;
       send({ type: "get_groq_models" }, { silent: true, queueIfClosed: false });
+      send({ type: "get_cerebras_models" }, { silent: true, queueIfClosed: false });
     }, [authed, clockTick]);
 
     function saveAuthToken(token, expiresAtUtc) {
@@ -5017,6 +5017,7 @@ import {
           setCodexStatus,
           setCodexDetail,
           setGroqModels,
+          setCerebrasModels,
           setSelectedGroqModel,
           setCopilotModels,
           setSelectedCopilotModel,
@@ -6897,13 +6898,16 @@ import {
       const copilotBaseOptions = Array.isArray(copilotModels) && copilotModels.length > 0
         ? copilotModels.map((item) => ({ value: item.id, label: item.id }))
         : [{ value: "", label: "Copilot 모델 로딩 전" }];
+      const cerebrasBaseOptions = Array.isArray(cerebrasModels) && cerebrasModels.length > 0
+        ? cerebrasModels.map((item) => ({ value: item.id, label: item.owned_by ? `${item.id} · ${item.owned_by}` : item.id }))
+        : CEREBRAS_MODEL_CHOICES.map((item) => ({ value: item.id, label: item.label }));
 
       return {
         groqModelOptions: groqBaseOptions,
         copilotModelOptions: copilotBaseOptions,
         codexModelOptions: CODEX_MODEL_CHOICES.map((item) => ({ value: item.id, label: item.label })),
         geminiModelOptions: GEMINI_MODEL_CHOICES.map((item) => ({ value: item.id, label: item.label })),
-        cerebrasModelOptions: CEREBRAS_MODEL_CHOICES.map((item) => ({ value: item.id, label: item.label })),
+        cerebrasModelOptions: cerebrasBaseOptions,
         groqWorkerOptions: dedupeOptions([
           { value: NONE_MODEL, label: "Groq: 선택 안 함" },
           { value: DEFAULT_GROQ_WORKER_MODEL, label: `Groq 기본: ${DEFAULT_GROQ_WORKER_MODEL}` },
@@ -6915,7 +6919,7 @@ import {
         ]),
         cerebrasWorkerOptions: dedupeOptions([
           { value: NONE_MODEL, label: "Cerebras: 선택 안 함" },
-          ...CEREBRAS_MODEL_CHOICES.map((item) => ({ value: item.id, label: item.label }))
+          ...cerebrasBaseOptions
         ]),
         copilotWorkerOptions: dedupeOptions([
           { value: NONE_MODEL, label: "Copilot: 선택 안 함" },
@@ -6932,7 +6936,7 @@ import {
             : (item?.id || "")
         }))
       };
-    }, [groqModels, copilotModels, routines]);
+    }, [groqModels, copilotModels, cerebrasModels, routines]);
 
     const {
       groqRows,

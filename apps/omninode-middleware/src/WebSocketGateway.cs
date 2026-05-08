@@ -60,6 +60,7 @@ public sealed partial class WebSocketGateway
     private readonly ICodingApplicationService _codingService;
     private readonly LlmRouter _llmRouter;
     private readonly GroqModelCatalog _groqModelCatalog;
+    private readonly CerebrasModelCatalog _cerebrasModelCatalog;
     private readonly GuardRetryTimelineStore _guardRetryTimelineStore;
     private readonly AuditLogger _auditLogger;
     private readonly HttpStaticFileEndpoint _staticFileEndpoint;
@@ -132,6 +133,7 @@ public sealed partial class WebSocketGateway
         ICodingApplicationService codingService,
         LlmRouter llmRouter,
         GroqModelCatalog groqModelCatalog,
+        CerebrasModelCatalog cerebrasModelCatalog,
         GuardRetryTimelineStore guardRetryTimelineStore,
         AuditLogger auditLogger
     )
@@ -155,6 +157,7 @@ public sealed partial class WebSocketGateway
         _codingService = codingService;
         _llmRouter = llmRouter;
         _groqModelCatalog = groqModelCatalog;
+        _cerebrasModelCatalog = cerebrasModelCatalog;
         _guardRetryTimelineStore = guardRetryTimelineStore;
         _auditLogger = auditLogger;
         _staticFileEndpoint = new HttpStaticFileEndpoint(config.DashboardIndexPath);
@@ -163,9 +166,11 @@ public sealed partial class WebSocketGateway
         _setupCommandDispatcher = new WsSetupCommandDispatcher(
             settingsService,
             groqModelCatalog,
+            cerebrasModelCatalog,
             llmRouter,
             SendSettingsStateAsync,
             SendGroqModelsAsync,
+            SendCerebrasModelsAsync,
             SendCopilotModelsAsync,
             (socket, sendLock, token, forceRefresh) => SendUsageStatsAsync(socket, sendLock, token, forceRefresh),
             SendRoutingPolicyResultAsync,
@@ -600,6 +605,28 @@ public sealed partial class WebSocketGateway
             + "}",
             cancellationToken
         );
+    }
+
+    private async Task SendCerebrasModelsAsync(WebSocket socket, SemaphoreSlim sendLock, CancellationToken cancellationToken)
+    {
+        var models = await _cerebrasModelCatalog.GetModelsAsync(cancellationToken);
+        var selectedModel = _config.CerebrasModel ?? string.Empty;
+        var builder = new StringBuilder();
+        builder.Append("{\"type\":\"cerebras_models\",");
+        builder.Append($"\"selected\":\"{EscapeJson(selectedModel)}\",");
+        builder.Append("\"items\":[");
+        for (var i = 0; i < models.Count; i++)
+        {
+            var model = models[i];
+            if (i > 0) builder.Append(",");
+            builder.Append("{");
+            builder.Append($"\"id\":\"{EscapeJson(model.Id)}\",");
+            builder.Append($"\"owned_by\":\"{EscapeJson(model.OwnedBy)}\",");
+            builder.Append($"\"created\":{(model.CreatedUnixSeconds.HasValue ? model.CreatedUnixSeconds.Value.ToString() : "null")}");
+            builder.Append("}");
+        }
+        builder.Append("]}");
+        await SendTextAsync(socket, sendLock, builder.ToString(), cancellationToken);
     }
 
     private async Task SendGroqModelsAsync(WebSocket socket, SemaphoreSlim sendLock, CancellationToken cancellationToken)

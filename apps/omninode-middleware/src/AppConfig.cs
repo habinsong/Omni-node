@@ -33,7 +33,7 @@ public sealed class AppConfig
     public string GeminiModel { get; init; } = "gemini-3-flash-preview";
     public string GeminiSearchModel { get; init; } = "gemini-3.1-flash-lite-preview";
     public string CerebrasBaseUrl { get; init; } = "https://api.cerebras.ai/v1";
-    public string CerebrasModel { get; init; } = "llama-4-scout-17b-16e-instruct";
+    public string CerebrasModel { get; init; } = "gpt-oss-120b";
     public int CerebrasTimeoutSec { get; init; } = 20;
     public string CerebrasKeychainService { get; init; } = CerebrasApiKeyService;
     public string CerebrasKeychainAccount { get; init; } = DefaultKeychainAccount;
@@ -161,7 +161,7 @@ public sealed class AppConfig
             GeminiModel = GetStringEnv("OMNINODE_GEMINI_MODEL", "gemini-3-flash-preview"),
             GeminiSearchModel = GetStringEnv("OMNINODE_GEMINI_SEARCH_MODEL", "gemini-3.1-flash-lite-preview"),
             CerebrasBaseUrl = GetStringEnv("OMNINODE_CEREBRAS_BASE_URL", "https://api.cerebras.ai/v1"),
-            CerebrasModel = GetStringEnv("OMNINODE_CEREBRAS_MODEL", "llama-4-scout-17b-16e-instruct"),
+            CerebrasModel = GetStringEnv("OMNINODE_CEREBRAS_MODEL", "gpt-oss-120b"),
             CerebrasTimeoutSec = GetIntEnv("OMNINODE_CEREBRAS_TIMEOUT_SEC", 20),
             CerebrasKeychainService = GetStringEnv("OMNINODE_CEREBRAS_KEYCHAIN_SERVICE", CerebrasApiKeyService),
             CerebrasKeychainAccount = GetStringEnv("OMNINODE_CEREBRAS_KEYCHAIN_ACCOUNT", DefaultKeychainAccount),

@@ -1135,6 +1135,14 @@ export function handleDashboardServerMessage(msg, context) {
     return true
   }
 
+  if (msg.type === "cerebras_models") {
+    const items = Array.isArray(msg.items) ? msg.items : []
+    if (typeof setters.setCerebrasModels === "function") {
+      setters.setCerebrasModels(items)
+    }
+    return true
+  }
+
   if (msg.type === "copilot_models") {
     const items = Array.isArray(msg.items) ? msg.items : []
     setters.setCopilotModels(items)

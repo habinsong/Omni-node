@@ -5,9 +5,11 @@ internal sealed class WsSetupCommandDispatcher
 {
     private readonly ISettingsApplicationService _settingsService;
     private readonly GroqModelCatalog _groqModelCatalog;
+    private readonly CerebrasModelCatalog _cerebrasModelCatalog;
     private readonly LlmRouter _llmRouter;
     private readonly Func<WebSocket, SemaphoreSlim, CancellationToken, Task> _sendSettingsStateAsync;
     private readonly Func<WebSocket, SemaphoreSlim, CancellationToken, Task> _sendGroqModelsAsync;
+    private readonly Func<WebSocket, SemaphoreSlim, CancellationToken, Task> _sendCerebrasModelsAsync;
     private readonly Func<WebSocket, SemaphoreSlim, CancellationToken, Task> _sendCopilotModelsAsync;
     private readonly Func<WebSocket, SemaphoreSlim, CancellationToken, bool, Task> _sendUsageStatsAsync;
     private readonly Func<WebSocket, SemaphoreSlim, string, RoutingPolicyActionResult, CancellationToken, Task> _sendRoutingPolicyResultAsync;
@@ -16,9 +18,11 @@ internal sealed class WsSetupCommandDispatcher
     public WsSetupCommandDispatcher(
         ISettingsApplicationService settingsService,
         GroqModelCatalog groqModelCatalog,
+        CerebrasModelCatalog cerebrasModelCatalog,
         LlmRouter llmRouter,
         Func<WebSocket, SemaphoreSlim, CancellationToken, Task> sendSettingsStateAsync,
         Func<WebSocket, SemaphoreSlim, CancellationToken, Task> sendGroqModelsAsync,
+        Func<WebSocket, SemaphoreSlim, CancellationToken, Task> sendCerebrasModelsAsync,
         Func<WebSocket, SemaphoreSlim, CancellationToken, Task> sendCopilotModelsAsync,
         Func<WebSocket, SemaphoreSlim, CancellationToken, bool, Task> sendUsageStatsAsync,
         Func<WebSocket, SemaphoreSlim, string, RoutingPolicyActionResult, CancellationToken, Task> sendRoutingPolicyResultAsync,
@@ -27,9 +31,11 @@ internal sealed class WsSetupCommandDispatcher
     {
         _settingsService = settingsService;
         _groqModelCatalog = groqModelCatalog;
+        _cerebrasModelCatalog = cerebrasModelCatalog;
         _llmRouter = llmRouter;
         _sendSettingsStateAsync = sendSettingsStateAsync;
         _sendGroqModelsAsync = sendGroqModelsAsync;
+        _sendCerebrasModelsAsync = sendCerebrasModelsAsync;
         _sendCopilotModelsAsync = sendCopilotModelsAsync;
         _sendUsageStatsAsync = sendUsageStatsAsync;
         _sendRoutingPolicyResultAsync = sendRoutingPolicyResultAsync;
@@ -297,6 +303,12 @@ internal sealed class WsSetupCommandDispatcher
         if (message.Type == "get_groq_models")
         {
             await _sendGroqModelsAsync(socket, sendLock, cancellationToken);
+            return true;
+        }
+
+        if (message.Type == "get_cerebras_models")
+        {
+            await _sendCerebrasModelsAsync(socket, sendLock, cancellationToken);
             return true;
         }
 

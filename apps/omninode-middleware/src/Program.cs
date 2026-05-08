@@ -64,6 +64,7 @@ internal static class Program
         var sessionManager = new SessionManager(config.AuthSessionStatePath);
         using var llmRouter = new LlmRouter(config, runtimeSettings);
         using var groqModelCatalog = new GroqModelCatalog(config, runtimeSettings);
+        using var cerebrasModelCatalog = new CerebrasModelCatalog(config, runtimeSettings);
         var memoryNoteStore = new MemoryNoteStore(config.MemoryNotesRootDir);
         var conversationStore = new ConversationStore(config.ConversationStatePath);
         IMemoryNoteStore memoryNoteStoreService = memoryNoteStore;
@@ -255,6 +256,7 @@ internal static class Program
             codingApplicationService,
             llmRouter,
             groqModelCatalog,
+            cerebrasModelCatalog,
             new GuardRetryTimelineStore(config.GuardRetryTimelineStatePath),
             auditLogger
         );
