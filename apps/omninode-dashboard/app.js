@@ -7075,6 +7075,11 @@ import {
         responsiveWorkspaceKey,
         renderThreadModebar,
         renderThreadInfoPanel,
+        ttsSupported: isSpeechSynthesisSupported(),
+        autoSpeakOn: !!uiPreferences.speech?.autoSpeak,
+        onToggleAutoSpeak: () => updateUiPreference({
+          speech: { ...(uiPreferences.speech || {}), autoSpeak: !uiPreferences.speech?.autoSpeak }
+        }),
         options
       });
     }

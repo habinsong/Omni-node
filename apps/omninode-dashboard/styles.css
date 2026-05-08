@@ -18127,11 +18127,11 @@ video {
   color: var(--dark-muted) !important;
 }
 
-/* v19 — Per-message TTS pill (bubble 바로 옆 오른쪽 하단) */
+/* v19 — Per-message TTS pill (bubble 바로 옆 오른쪽 하단, 거의 붙음) */
 .bubble-with-tts {
   display: inline-flex;
   align-items: flex-end;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
   max-width: 100%;
 }
@@ -18145,6 +18145,18 @@ video {
   display: flex;
   align-items: flex-end;
   align-self: flex-end;
+}
+
+/* 아이콘 전용 변형: 라벨 없음, 정사각형 가까운 둥근 버튼 */
+.tts-pill.tts-pill-icon-only {
+  padding: 0;
+  width: 30px;
+  min-width: 30px;
+  justify-content: center;
+}
+
+.tts-pill.tts-pill-icon-only .tts-pill-label {
+  display: none;
 }
 
 .tts-pill {
@@ -18273,10 +18285,32 @@ video {
   .message-row.assistant .tts-pill {
     opacity: 1;
   }
-  .tts-pill-label {
-    display: none;
-  }
   .tts-pill {
     padding: 5px 9px;
+  }
+}
+
+/* v20 — thread-actions 아래 자동 읽기 토글 row */
+.thread-tts-row {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 8px 0;
+}
+
+.tts-pill.thread-tts-toggle {
+  height: 28px;
+  min-height: 28px;
+  padding: 4px 12px 4px 10px;
+  font-size: 11.5px;
+}
+
+.tts-pill.thread-tts-toggle .tts-pill-label {
+  display: inline;
+}
+
+@media (max-width: 640px) {
+  .thread-tts-row {
+    justify-content: flex-start;
+    padding: 4px 8px 0;
   }
 }
