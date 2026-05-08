@@ -18054,3 +18054,75 @@ video {
     flex: 0 0 auto;
   }
 }
+
+/* v17 — TTS (음성 출력) 컨트롤 */
+.tts-controls {
+  display: grid;
+  gap: 12px;
+}
+
+.tts-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #d6e0ec);
+  border-radius: 10px;
+  background: var(--surface-soft, #f4f7fb);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.tts-toggle-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.tts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.tts-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.tts-field > span {
+  color: var(--text-secondary, #5b6b7e);
+  font-weight: 700;
+}
+
+.tts-field > select.input {
+  width: 100%;
+}
+
+.tts-field > input[type="range"] {
+  width: 100%;
+}
+
+.tts-unsupported {
+  padding: 12px;
+  border: 1px dashed var(--line, #d6e0ec);
+  border-radius: 10px;
+  background: var(--surface-soft, #f4f7fb);
+  color: var(--muted, #8392a2);
+  font-size: 12px;
+}
+
+:root[data-theme="dark"] body :is(
+  .tts-toggle-row,
+  .tts-unsupported
+) {
+  background: var(--dark-surface-2) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body .tts-field > span {
+  color: var(--dark-muted) !important;
+}

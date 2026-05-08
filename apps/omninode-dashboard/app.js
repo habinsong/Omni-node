@@ -283,9 +283,20 @@ import {
       tabNotebook: "mod+5",
       tabAutomation: "mod+6",
       tabSkills: "mod+7",
-      tabSettings: "mod+8"
+      tabSettings: "mod+8",
+      toggleAutoSpeak: "mod+shift+a",
+      stopSpeaking: "mod+shift+s"
     },
-    speech: { lang: "ko-KR" }
+    speech: {
+      lang: "ko-KR",
+      autoSpeak: false,
+      voiceURI: "",
+      rate: 1.0,
+      pitch: 1.0,
+      volume: 1.0,
+      stripMarkdown: true,
+      maxChars: 1500
+    }
   };
   const TAB_SHORTCUTS = [
     ["chat", "대화"],
@@ -572,6 +583,85 @@ import {
     return dedup.join("+");
   }
 
+  function clampNumber(value, lo, hi, fallback) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return fallback;
+    return Math.max(lo, Math.min(hi, num));
+  }
+
+  function sanitizeForSpeech(text, opts) {
+    const { stripMarkdown = true, maxChars = 1500 } = opts || {};
+    let cleaned = `${text || ""}`;
+    if (!cleaned) return "";
+    if (stripMarkdown) {
+      cleaned = cleaned.replace(/```[\s\S]*?```/g, " 코드 블록 생략. ");
+      cleaned = cleaned.replace(/`([^`]+)`/g, "$1");
+      cleaned = cleaned.replace(/^\s{0,3}#+\s+/gm, "");
+      cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, "$1");
+      cleaned = cleaned.replace(/\*([^*]+)\*/g, "$1");
+      cleaned = cleaned.replace(/__([^_]+)__/g, "$1");
+      cleaned = cleaned.replace(/_([^_]+)_/g, "$1");
+      cleaned = cleaned.replace(/~~([^~]+)~~/g, "$1");
+      cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+      cleaned = cleaned.replace(/!\[[^\]]*\]\([^)]+\)/g, " 이미지 생략. ");
+      cleaned = cleaned.replace(/https?:\/\/\S+/g, "링크");
+      cleaned = cleaned.replace(/^\s*[-*+]\s+/gm, "");
+      cleaned = cleaned.replace(/^\s*>\s+/gm, "");
+    }
+    cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
+    if (cleaned.length > maxChars) {
+      cleaned = cleaned.slice(0, maxChars) + " 이하 생략.";
+    }
+    return cleaned;
+  }
+
+  function listSpeechVoices() {
+    if (typeof window === "undefined" || !window.speechSynthesis) return [];
+    try {
+      return window.speechSynthesis.getVoices() || [];
+    } catch {
+      return [];
+    }
+  }
+
+  function speakText(text, prefs) {
+    if (typeof window === "undefined" || !window.speechSynthesis) return false;
+    const cleaned = sanitizeForSpeech(text, {
+      stripMarkdown: prefs?.stripMarkdown !== false,
+      maxChars: prefs?.maxChars || 1500
+    });
+    if (!cleaned) return false;
+    try {
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(cleaned);
+      utter.lang = prefs?.lang || "ko-KR";
+      utter.rate = clampNumber(prefs?.rate, 0.5, 2, 1);
+      utter.pitch = clampNumber(prefs?.pitch, 0.5, 2, 1);
+      utter.volume = clampNumber(prefs?.volume, 0, 1, 1);
+      if (prefs?.voiceURI) {
+        const match = listSpeechVoices().find((v) => v.voiceURI === prefs.voiceURI);
+        if (match) {
+          utter.voice = match;
+          if (match.lang) utter.lang = match.lang;
+        }
+      }
+      window.speechSynthesis.speak(utter);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function stopSpeaking() {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      try { window.speechSynthesis.cancel(); } catch {}
+    }
+  }
+
+  function isSpeechSynthesisSupported() {
+    return typeof window !== "undefined" && !!window.speechSynthesis && typeof window.SpeechSynthesisUtterance !== "undefined";
+  }
+
   function isValidShortcut(value) {
     const normalized = normalizeShortcut(value);
     if (!normalized) return false;
@@ -685,6 +775,8 @@ import {
     const speechTargetKeyRef = useRef("");
     const speechStopRequestedRef = useRef(false);
     const sendCurrentComposerRef = useRef(null);
+    const lastSpokenMessageRef = useRef("");
+    const [availableTtsVoices, setAvailableTtsVoices] = useState(() => listSpeechVoices());
 
     const [status, setStatus] = useState("연결 대기");
     const [authed, setAuthed] = useState(false);
@@ -1017,6 +1109,48 @@ import {
       setUiPreferencesSavedAt(Date.now());
     }, [uiPreferences]);
 
+    // 시스템 TTS 음성 목록 갱신 (브라우저가 비동기로 voice를 로드하므로 onvoiceschanged 후 한 번 더 받기)
+    useEffect(() => {
+      if (!isSpeechSynthesisSupported()) return undefined;
+      const refresh = () => setAvailableTtsVoices(listSpeechVoices());
+      refresh();
+      try {
+        window.speechSynthesis.addEventListener("voiceschanged", refresh);
+        return () => window.speechSynthesis.removeEventListener("voiceschanged", refresh);
+      } catch {
+        return undefined;
+      }
+    }, []);
+
+    // 새 assistant 메시지 도착 시 auto-speak (chat/coding 탭에서, 설정에 따라)
+    useEffect(() => {
+      if (!uiPreferences.speech?.autoSpeak) return;
+      if (rootTab !== "chat" && rootTab !== "coding") return;
+      if (!isSpeechSynthesisSupported()) return;
+      if (!Array.isArray(currentMessages) || currentMessages.length === 0) return;
+
+      let lastAssistant = null;
+      for (let i = currentMessages.length - 1; i >= 0; i -= 1) {
+        if (currentMessages[i]?.role === "assistant") {
+          lastAssistant = currentMessages[i];
+          break;
+        }
+      }
+      if (!lastAssistant) return;
+
+      const text = lastAssistant.text || lastAssistant.content || "";
+      if (!`${text}`.trim()) return;
+      const id = `${currentConversationId}|${lastAssistant.ts || lastAssistant.id || currentMessages.length}|${`${text}`.slice(0, 48)}`;
+      if (id === lastSpokenMessageRef.current) return;
+      // 첫 마운트 시 기존 메시지를 자동으로 읽지 않도록: ref가 비어있으면 기록만 하고 발화 X
+      if (!lastSpokenMessageRef.current) {
+        lastSpokenMessageRef.current = id;
+        return;
+      }
+      lastSpokenMessageRef.current = id;
+      speakText(text, uiPreferences.speech);
+    }, [currentMessages, currentConversationId, uiPreferences.speech, rootTab]);
+
     useEffect(() => {
       if (typeof document === "undefined") {
         return undefined;
@@ -1174,6 +1308,20 @@ import {
           if (micBtn && typeof micBtn.click === "function") {
             micBtn.click();
           }
+          return;
+        }
+
+        if (shortcutMatches(event, shortcuts.toggleAutoSpeak)) {
+          event.preventDefault();
+          updateUiPreference({
+            speech: { ...(uiPreferences.speech || {}), autoSpeak: !uiPreferences.speech?.autoSpeak }
+          });
+          return;
+        }
+
+        if (shortcutMatches(event, shortcuts.stopSpeaking)) {
+          event.preventDefault();
+          stopSpeaking();
           return;
         }
 
@@ -7606,7 +7754,9 @@ import {
             { key: "newChat", label: "새 대화 시작", helper: "현재 모드에서 새 thread" },
             { key: "searchConversations", label: "대화 검색", helper: "사이드바 검색창 포커스" },
             { key: "toggleTheme", label: "테마 전환", helper: "시스템 → 라이트 → 다크 순환" },
-            { key: "toggleVoice", label: "음성 입력 토글", helper: "마이크 버튼 클릭과 동일" }
+            { key: "toggleVoice", label: "음성 입력 토글", helper: "마이크 버튼 클릭과 동일" },
+            { key: "toggleAutoSpeak", label: "자동 읽어주기 토글", helper: "응답을 음성으로 읽기 ON/OFF" },
+            { key: "stopSpeaking", label: "읽기 중단", helper: "재생 중인 음성 즉시 정지" }
           ]
         },
         {
@@ -7771,6 +7921,119 @@ import {
             }, "세션 변경 되돌리기"),
             e("span", { className: "shortcut-save-hint" }, sessionDirty ? "변경 후 자동 저장됨" : "현재까지 모두 저장됨")
           )
+        ),
+        e("div", { className: "preference-section" },
+          e("div", { className: "preference-section-head" },
+            e("strong", null, "음성 출력 (TTS)"),
+            e("span", null, isSpeechSynthesisSupported() ? "브라우저의 시스템 음성을 사용합니다." : "이 브라우저는 음성 출력을 지원하지 않습니다.")
+          ),
+          isSpeechSynthesisSupported()
+            ? e("div", { className: "tts-controls" },
+              e("label", { className: "tts-toggle-row" },
+                e("input", {
+                  type: "checkbox",
+                  checked: !!uiPreferences.speech?.autoSpeak,
+                  onChange: (event) => updateUiPreference({
+                    speech: { ...(uiPreferences.speech || {}), autoSpeak: event.target.checked }
+                  })
+                }),
+                e("span", null, "응답이 도착하면 자동으로 음성으로 읽기")
+              ),
+              e("div", { className: "tts-grid" },
+                e("label", { className: "tts-field" },
+                  e("span", null, "음성"),
+                  e("select", {
+                    className: "input",
+                    value: uiPreferences.speech?.voiceURI || "",
+                    onChange: (event) => updateUiPreference({
+                      speech: { ...(uiPreferences.speech || {}), voiceURI: event.target.value }
+                    })
+                  },
+                    e("option", { value: "" }, "시스템 기본"),
+                    availableTtsVoices.map((voice) => e("option", {
+                      key: voice.voiceURI,
+                      value: voice.voiceURI
+                    }, `${voice.name} (${voice.lang})${voice.default ? " · 기본" : ""}`))
+                  )
+                ),
+                e("label", { className: "tts-field" },
+                  e("span", null, `속도: ${(uiPreferences.speech?.rate ?? 1).toFixed(2)}x`),
+                  e("input", {
+                    type: "range",
+                    min: "0.5",
+                    max: "2",
+                    step: "0.05",
+                    value: uiPreferences.speech?.rate ?? 1,
+                    onChange: (event) => updateUiPreference({
+                      speech: { ...(uiPreferences.speech || {}), rate: parseFloat(event.target.value) }
+                    })
+                  })
+                ),
+                e("label", { className: "tts-field" },
+                  e("span", null, `음높이: ${(uiPreferences.speech?.pitch ?? 1).toFixed(2)}`),
+                  e("input", {
+                    type: "range",
+                    min: "0.5",
+                    max: "2",
+                    step: "0.05",
+                    value: uiPreferences.speech?.pitch ?? 1,
+                    onChange: (event) => updateUiPreference({
+                      speech: { ...(uiPreferences.speech || {}), pitch: parseFloat(event.target.value) }
+                    })
+                  })
+                ),
+                e("label", { className: "tts-field" },
+                  e("span", null, `음량: ${Math.round((uiPreferences.speech?.volume ?? 1) * 100)}%`),
+                  e("input", {
+                    type: "range",
+                    min: "0",
+                    max: "1",
+                    step: "0.05",
+                    value: uiPreferences.speech?.volume ?? 1,
+                    onChange: (event) => updateUiPreference({
+                      speech: { ...(uiPreferences.speech || {}), volume: parseFloat(event.target.value) }
+                    })
+                  })
+                )
+              ),
+              e("label", { className: "tts-toggle-row" },
+                e("input", {
+                  type: "checkbox",
+                  checked: uiPreferences.speech?.stripMarkdown !== false,
+                  onChange: (event) => updateUiPreference({
+                    speech: { ...(uiPreferences.speech || {}), stripMarkdown: event.target.checked }
+                  })
+                }),
+                e("span", null, "코드 블록·markdown 기호 제거 후 읽기 (권장)")
+              ),
+              e("div", { className: "settings-action-row" },
+                e("button", {
+                  type: "button",
+                  className: "btn",
+                  onClick: () => speakText("음성 출력 테스트입니다. 들리시면 정상입니다.", uiPreferences.speech)
+                }, "샘플 재생"),
+                e("button", {
+                  type: "button",
+                  className: "btn ghost",
+                  onClick: () => stopSpeaking()
+                }, "정지"),
+                e("button", {
+                  type: "button",
+                  className: "btn ghost",
+                  onClick: () => updateUiPreference({
+                    speech: {
+                      ...(uiPreferences.speech || {}),
+                      rate: 1,
+                      pitch: 1,
+                      volume: 1,
+                      voiceURI: "",
+                      stripMarkdown: true
+                    }
+                  })
+                }, "음성 설정 초기화")
+              )
+            )
+            : e("div", { className: "tts-unsupported" }, "Chrome / Edge / Safari 등 SpeechSynthesis API를 지원하는 브라우저에서 사용할 수 있습니다.")
         ),
         e("div", { className: "preference-section" },
           e("div", { className: "preference-section-head" },
