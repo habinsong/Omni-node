@@ -263,6 +263,40 @@ import {
     { id: DEFAULT_CEREBRAS_MODEL, label: `Cerebras 기본: ${DEFAULT_CEREBRAS_MODEL}` },
     { id: "zai-glm-4.7", label: "Cerebras: zai-glm-4.7 (preview)" }
   ];
+  const UI_PREFERENCES_KEY = "omninode_ui_preferences_v1";
+  const DEFAULT_UI_PREFERENCES = {
+    theme: { mode: "system" },
+    shortcuts: {
+      palette: "mod+k",
+      paletteAlt: "mod+p",
+      send: "ctrl+enter",
+      close: "escape",
+      newChat: "mod+n",
+      searchConversations: "mod+shift+f",
+      focusComposer: "mod+/",
+      toggleTheme: "mod+shift+l",
+      toggleVoice: "mod+shift+v",
+      tabChat: "mod+1",
+      tabRoutine: "mod+2",
+      tabLogic: "mod+3",
+      tabCoding: "mod+4",
+      tabNotebook: "mod+5",
+      tabAutomation: "mod+6",
+      tabSkills: "mod+7",
+      tabSettings: "mod+8"
+    },
+    speech: { lang: "ko-KR" }
+  };
+  const TAB_SHORTCUTS = [
+    ["chat", "대화"],
+    ["routine", "루틴"],
+    ["logic", "로직"],
+    ["coding", "코딩"],
+    ["notebook", "노트북"],
+    ["automation", "작업 계획"],
+    ["skills", "스킬"],
+    ["settings", "설정"]
+  ];
   const CONVERSATION_STATE_DEFAULTS = createConversationState();
   const CHAT_STATE_DEFAULTS = createChatState({
     noneModel: NONE_MODEL,
@@ -405,10 +439,251 @@ import {
     window: typeof window !== "undefined" ? window : undefined
   });
 
+  function mergeUiPreferences(value) {
+    const source = value && typeof value === "object" ? value : {};
+    return {
+      theme: {
+        ...DEFAULT_UI_PREFERENCES.theme,
+        ...(source.theme && typeof source.theme === "object" ? source.theme : {})
+      },
+      shortcuts: {
+        ...DEFAULT_UI_PREFERENCES.shortcuts,
+        ...(source.shortcuts && typeof source.shortcuts === "object" ? source.shortcuts : {})
+      },
+      speech: {
+        ...DEFAULT_UI_PREFERENCES.speech,
+        ...(source.speech && typeof source.speech === "object" ? source.speech : {})
+      }
+    };
+  }
+
+  function loadUiPreferences() {
+    if (typeof window === "undefined" || !window.localStorage) {
+      return DEFAULT_UI_PREFERENCES;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(UI_PREFERENCES_KEY);
+      return raw ? mergeUiPreferences(JSON.parse(raw)) : DEFAULT_UI_PREFERENCES;
+    } catch {
+      return DEFAULT_UI_PREFERENCES;
+    }
+  }
+
+  function formatRelativeTime(ms) {
+    const seconds = Math.max(0, Math.floor(ms / 1000));
+    if (seconds < 5) return "방금";
+    if (seconds < 60) return `${seconds}초 전`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}분 전`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}시간 전`;
+    const days = Math.floor(hours / 24);
+    return `${days}일 전`;
+  }
+
+  function persistUiPreferences(value) {
+    if (typeof window === "undefined" || !window.localStorage) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(UI_PREFERENCES_KEY, JSON.stringify(value));
+    } catch {
+    }
+  }
+
+  function normalizeShortcut(value) {
+    return `${value || ""}`.trim().toLowerCase().replace(/\s+/g, "");
+  }
+
+  function isMacOs() {
+    if (typeof navigator === "undefined") return false;
+    if (navigator.userAgentData?.platform) {
+      return /mac/i.test(navigator.userAgentData.platform);
+    }
+    return /Mac|iPhone|iPad|iPod/i.test(navigator.platform || "") || /Mac/i.test(navigator.userAgent || "");
+  }
+
+  const KEY_LABEL_MAP_BASE = {
+    enter: "Enter",
+    escape: "Esc",
+    space: "Space",
+    arrowup: "↑",
+    arrowdown: "↓",
+    arrowleft: "←",
+    arrowright: "→",
+    backspace: "⌫",
+    delete: "Del",
+    tab: "Tab",
+    home: "Home",
+    end: "End",
+    pageup: "PgUp",
+    pagedown: "PgDn",
+    "/": "/",
+    ".": ".",
+    ",": ",",
+    "-": "-",
+    "=": "=",
+    "[": "[",
+    "]": "]",
+    ";": ";",
+    "'": "'",
+    "`": "`"
+  };
+
+  function formatShortcutLabel(value) {
+    const normalized = normalizeShortcut(value);
+    if (!normalized) return "";
+    const isMac = isMacOs();
+    const parts = normalized.split("+").filter(Boolean);
+    return parts.map((part) => {
+      if (part === "mod") return isMac ? "⌘" : "Ctrl";
+      if (part === "cmd" || part === "meta") return "⌘";
+      if (part === "ctrl") return isMac ? "⌃" : "Ctrl";
+      if (part === "alt") return isMac ? "⌥" : "Alt";
+      if (part === "shift") return isMac ? "⇧" : "Shift";
+      if (KEY_LABEL_MAP_BASE[part]) return KEY_LABEL_MAP_BASE[part];
+      if (part.length === 1) return part.toUpperCase();
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    }).join(isMac ? "" : "+");
+  }
+
+  function shortcutFromEvent(event) {
+    const key = `${event.key || ""}`.toLowerCase();
+    if (!key || key === "control" || key === "shift" || key === "alt" || key === "meta") {
+      return "";
+    }
+    const parts = [];
+    if (event.metaKey) parts.push(isMacOs() ? "mod" : "cmd");
+    if (event.ctrlKey && !(isMacOs() && event.metaKey)) parts.push(isMacOs() ? "ctrl" : "mod");
+    // dedupe (mod이 ctrl+meta 둘 다 커버하니, 한쪽만)
+    const dedup = [];
+    parts.forEach((p) => {
+      if (!dedup.includes(p)) dedup.push(p);
+    });
+    if (event.altKey) dedup.push("alt");
+    if (event.shiftKey) dedup.push("shift");
+    let normalizedKey = key;
+    if (key === " ") normalizedKey = "space";
+    if (key === "esc") normalizedKey = "escape";
+    dedup.push(normalizedKey);
+    // mod와 cmd/ctrl 둘 다 들어간 경우 정리
+    return dedup.join("+");
+  }
+
+  function isValidShortcut(value) {
+    const normalized = normalizeShortcut(value);
+    if (!normalized) return false;
+    const parts = normalized.split("+").filter(Boolean);
+    if (parts.length === 0) return false;
+    const last = parts[parts.length - 1];
+    const modifiers = ["mod", "ctrl", "cmd", "meta", "alt", "shift"];
+    // 단일 modifier-only는 무효
+    if (parts.length === 1 && modifiers.includes(last)) return false;
+    // escape 같은 단일 키는 허용
+    return true;
+  }
+
+  function shortcutMatches(event, shortcut) {
+    const normalized = normalizeShortcut(shortcut);
+    if (!normalized) {
+      return false;
+    }
+
+    const parts = normalized.split("+").filter(Boolean);
+    const key = parts[parts.length - 1] || "";
+    const actualKey = `${event.key || ""}`.toLowerCase();
+    if (key && key !== actualKey) {
+      return false;
+    }
+
+    const wantsMod = parts.includes("mod");
+    const wantsCtrl = parts.includes("ctrl");
+    const wantsMeta = parts.includes("cmd") || parts.includes("meta");
+    const wantsAlt = parts.includes("alt");
+    const wantsShift = parts.includes("shift");
+    const allowsCtrl = wantsCtrl || wantsMod;
+    const allowsMeta = wantsMeta || wantsMod;
+    if (wantsMod && !(event.ctrlKey || event.metaKey)) {
+      return false;
+    }
+    if (wantsCtrl && !event.ctrlKey) {
+      return false;
+    }
+    if (wantsMeta && !event.metaKey) {
+      return false;
+    }
+    if (!allowsCtrl && event.ctrlKey) {
+      return false;
+    }
+    if (!allowsMeta && event.metaKey) {
+      return false;
+    }
+    if (wantsAlt !== !!event.altKey) {
+      return false;
+    }
+    if (wantsShift !== !!event.shiftKey) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function buildRequestId(prefix) {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function normalizePaletteSkills(skills) {
+    return (Array.isArray(skills) ? skills : [])
+      .map((skill) => {
+        const name = `${skill.name || skill.Name || ""}`.trim();
+        const scope = `${skill.scope || skill.Scope || "project"}`.trim().toLowerCase() === "global" ? "global" : "project";
+        return {
+          name,
+          scope,
+          key: `${scope}:${name}`,
+          description: `${skill.description || skill.Description || ""}`.trim(),
+          path: `${skill.path || skill.Path || ""}`.trim()
+        };
+      })
+      .filter((skill) => skill.name)
+      .sort((a, b) => {
+        if (a.scope !== b.scope) {
+          return a.scope === "project" ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name, "ko");
+      });
+  }
+
   function App() {
     const [rootTab, setRootTab] = useState("chat");
     const [chatMode, setChatMode] = useState("single");
     const [codingMode, setCodingMode] = useState("single");
+    const [uiPreferences, setUiPreferences] = useState(() => loadUiPreferences());
+    const [uiPreferencesSavedAt, setUiPreferencesSavedAt] = useState(0);
+    const [recordingShortcutKey, setRecordingShortcutKey] = useState(null);
+    const uiPreferencesSessionStartRef = useRef(null);
+    const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+    const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
+    const [selectedChatSkill, setSelectedChatSkill] = useState(null);
+    const [conversationSearchByKey, setConversationSearchByKey] = useState({});
+    const [backupState, setBackupState] = useState({
+      status: "",
+      exportBusy: false,
+      importBusy: false,
+      preview: null
+    });
+    const [speechState, setSpeechState] = useState({
+      active: false,
+      supported: typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+      error: ""
+    });
+    const speechRecognitionRef = useRef(null);
+    const speechTranscriptRef = useRef("");
+    const speechBaseDraftRef = useRef("");
+    const speechTargetKeyRef = useRef("");
+    const speechStopRequestedRef = useRef(false);
 
     const [status, setStatus] = useState("연결 대기");
     const [authed, setAuthed] = useState(false);
@@ -446,6 +721,8 @@ import {
     const [selectedSkillKey, setSelectedSkillKey] = useState("");
     const [skillEditor, setSkillEditor] = useState(null);
     const [skillStatus, setSkillStatus] = useState(null);
+    const [loadingSkillKey, setLoadingSkillKey] = useState("");
+    const [skillSearch, setSkillSearch] = useState("");
     const [routingPolicyState, setRoutingPolicyState] = useState(() => createRoutingPolicyState());
     const [taskGraphState, setTaskGraphState] = useState(() => createTaskGraphState());
     const [refactorState, setRefactorState] = useState(() => createRefactorState());
@@ -650,6 +927,12 @@ import {
     const attachmentDragActive = !!attachmentDragActiveByKey[currentKey];
     const attachmentPanelVisible = attachmentPanelOpen || attachmentDragActive;
     const currentConversationFilter = conversationFilterByKey[currentKey] || "";
+    const currentConversationSearchState = conversationSearchByKey[currentKey] || {
+      query: "",
+      loading: false,
+      results: [],
+      error: ""
+    };
     const selectionMode = !!selectionModeByKey[currentKey];
     const currentSelectedConversationIds = Array.isArray(selectedConversationIdsByKey[currentKey])
       ? selectedConversationIdsByKey[currentKey]
@@ -686,14 +969,20 @@ import {
 
     const groupedConversationList = useMemo(() => {
       const keyword = currentConversationFilter.trim().toLowerCase();
+      const fullTextHits = Array.isArray(currentConversationSearchState.results)
+        ? currentConversationSearchState.results
+        : [];
+      const fullTextById = new Map(fullTextHits.map((item) => [item.conversationId, item]));
       const groups = {};
       currentConversationList.forEach((item) => {
         const detail = conversationDetails[item.id] || null;
+        const fullTextHit = fullTextById.get(item.id);
         const merged = {
           ...item,
           project: detail?.project ?? item.project,
           category: detail?.category ?? item.category,
-          tags: Array.isArray(detail?.tags) ? detail.tags : item.tags
+          tags: Array.isArray(detail?.tags) ? detail.tags : item.tags,
+          preview: fullTextHit?.snippet || detail?.preview || item.preview
         };
         const project = (merged.project || "기본").trim() || "기본";
         const category = (merged.category || "일반").trim() || "일반";
@@ -701,7 +990,7 @@ import {
         const title = `${merged.title || ""}`.toLowerCase();
         const preview = `${merged.preview || ""}`.toLowerCase();
         const searchable = [project.toLowerCase(), category.toLowerCase(), ...tags.map((x) => x.toLowerCase()), title, preview];
-        if (keyword && !searchable.some((text) => text.includes(keyword))) {
+        if (keyword && !fullTextHit && !searchable.some((text) => text.includes(keyword))) {
           return;
         }
 
@@ -717,7 +1006,185 @@ import {
           project,
           items: groups[project].slice().sort((a, b) => (b.updatedUtc || "").localeCompare(a.updatedUtc || ""))
         }));
-    }, [conversationDetails, currentConversationFilter, currentConversationList]);
+    }, [conversationDetails, currentConversationFilter, currentConversationList, currentConversationSearchState.results]);
+
+    useEffect(() => {
+      if (uiPreferencesSessionStartRef.current === null) {
+        uiPreferencesSessionStartRef.current = uiPreferences;
+      }
+      persistUiPreferences(uiPreferences);
+      setUiPreferencesSavedAt(Date.now());
+    }, [uiPreferences]);
+
+    useEffect(() => {
+      if (typeof document === "undefined") {
+        return undefined;
+      }
+
+      const mode = uiPreferences.theme?.mode || "system";
+      const media = typeof window !== "undefined" && window.matchMedia
+        ? window.matchMedia("(prefers-color-scheme: dark)")
+        : null;
+      const applyTheme = () => {
+        const resolved = mode === "system"
+          ? (media && media.matches ? "dark" : "light")
+          : mode;
+        document.documentElement.dataset.theme = resolved === "dark" ? "dark" : "light";
+        document.documentElement.dataset.themeMode = mode;
+      };
+      applyTheme();
+      if (mode !== "system" || !media) {
+        return undefined;
+      }
+
+      media.addEventListener?.("change", applyTheme);
+      return () => media.removeEventListener?.("change", applyTheme);
+    }, [uiPreferences.theme?.mode]);
+
+    useEffect(() => () => {
+      const recognition = speechRecognitionRef.current;
+      if (!recognition) {
+        return;
+      }
+
+      try {
+        recognition.abort();
+      } catch {
+      }
+      speechRecognitionRef.current = null;
+    }, []);
+
+    useEffect(() => {
+      const query = currentConversationFilter.trim();
+      if (!authed || query.length < 2) {
+        setConversationSearchByKey((prev) => ({
+          ...prev,
+          [currentKey]: { query, loading: false, results: [], error: "" }
+        }));
+        return undefined;
+      }
+
+      const timer = window.setTimeout(() => {
+        setConversationSearchByKey((prev) => ({
+          ...prev,
+          [currentKey]: {
+            ...(prev[currentKey] || {}),
+            query,
+            loading: true,
+            error: ""
+          }
+        }));
+        send({ type: "conversation_search", query, maxResults: 24 }, { silent: true });
+      }, 350);
+      return () => window.clearTimeout(timer);
+    }, [authed, currentConversationFilter, currentKey]);
+
+    useEffect(() => {
+      function handleGlobalKeyDown(event) {
+        const native = event.nativeEvent || event;
+        if (event.defaultPrevented) {
+          return;
+        }
+        if (native.isComposing || native.keyCode === 229) {
+          return;
+        }
+
+        const shortcuts = uiPreferences.shortcuts || DEFAULT_UI_PREFERENCES.shortcuts;
+        if (shortcutMatches(event, shortcuts.close)) {
+          if (commandPaletteOpen) {
+            event.preventDefault();
+            setCommandPaletteOpen(false);
+            return;
+          }
+        }
+
+        if (commandPaletteOpen) {
+          return;
+        }
+
+        if (shortcutMatches(event, shortcuts.palette) || shortcutMatches(event, shortcuts.paletteAlt)) {
+          event.preventDefault();
+          setCommandPaletteOpen(true);
+          return;
+        }
+
+        const tabKeyMap = {
+          tabChat: "chat",
+          tabRoutine: "routine",
+          tabLogic: "logic",
+          tabCoding: "coding",
+          tabNotebook: "notebook",
+          tabAutomation: "automation",
+          tabSkills: "skills",
+          tabSettings: "settings"
+        };
+        let matchedTab = null;
+        for (const [shortcutKey, tabKey] of Object.entries(tabKeyMap)) {
+          if (shortcuts[shortcutKey] && shortcutMatches(event, shortcuts[shortcutKey])) {
+            matchedTab = tabKey;
+            break;
+          }
+        }
+        if (matchedTab) {
+          event.preventDefault();
+          setRootTab(matchedTab);
+          return;
+        }
+
+        if (shortcutMatches(event, shortcuts.newChat)) {
+          event.preventDefault();
+          if (typeof createConversation === "function") {
+            createConversation();
+          }
+          return;
+        }
+
+        if (shortcutMatches(event, shortcuts.searchConversations)) {
+          event.preventDefault();
+          const searchInput = document.querySelector(".conversation-search input.input");
+          if (searchInput && typeof searchInput.focus === "function") {
+            searchInput.focus();
+            searchInput.select?.();
+          }
+          return;
+        }
+
+        if (shortcutMatches(event, shortcuts.toggleTheme)) {
+          event.preventDefault();
+          const order = ["system", "light", "dark"];
+          const current = uiPreferences.theme?.mode || "system";
+          const next = order[(order.indexOf(current) + 1) % order.length];
+          updateUiPreference({ theme: { ...(uiPreferences.theme || {}), mode: next } });
+          return;
+        }
+
+        if (shortcutMatches(event, shortcuts.focusComposer)) {
+          event.preventDefault();
+          const composerInput = document.querySelector(".composer textarea, .composer .rich-input, .composer input.input");
+          if (composerInput && typeof composerInput.focus === "function") {
+            composerInput.focus();
+          }
+          return;
+        }
+
+        if (shortcutMatches(event, shortcuts.toggleVoice)) {
+          event.preventDefault();
+          const micBtn = document.querySelector(".composer-icon-btn.mic");
+          if (micBtn && typeof micBtn.click === "function") {
+            micBtn.click();
+          }
+          return;
+        }
+
+        if (shortcutMatches(event, shortcuts.send)) {
+          event.preventDefault();
+          sendCurrentComposer();
+        }
+      }
+
+      window.addEventListener("keydown", handleGlobalKeyDown);
+      return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+    }, [commandPaletteOpen, uiPreferences.shortcuts, uiPreferences.theme, rootTab, chatMode, codingMode, chatInputSingle, chatInputOrch, chatInputMulti, codingInputSingle, codingInputOrch, codingInputMulti]);
     const selectedDeleteConversationIds = useMemo(() => {
       const ids = new Set();
       currentSelectedConversationIds.forEach((id) => {
@@ -2704,7 +3171,28 @@ import {
       setErrorByKey((prev) => ({ ...prev, [key]: value || "" }));
     }
 
-    function beginPendingRequest(key, userText, isCoding, conversationId) {
+    function downloadBase64File(fileName, contentBase64, mimeType) {
+      try {
+        const binary = window.atob(contentBase64);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index);
+        }
+        const blob = new Blob([bytes], { type: mimeType || "application/octet-stream" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName || "download";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (error) {
+        setBackupState((prev) => ({ ...prev, status: `다운로드 준비 실패: ${error.message || error}` }));
+      }
+    }
+
+    function beginPendingRequest(key, userText, isCoding, conversationId, requestId = "") {
       const now = Date.now();
       const normalizedConversationId = (conversationId || "").trim();
       setPendingByKey((prev) => ({
@@ -2718,7 +3206,8 @@ import {
           provider: "",
           model: "",
           route: "",
-          chunkIndex: 0
+          chunkIndex: 0,
+          requestId
         }
       }));
       setError(key, "");
@@ -3319,7 +3808,8 @@ import {
             ? (chatSingleModel || DEFAULT_CEREBRAS_MODEL)
           : undefined;
       const conversationId = activeConversationByKey["chat:single"] || "";
-      beginPendingRequest("chat:single", effectiveText, false, conversationId);
+      const requestId = buildRequestId("chat-single");
+      beginPendingRequest("chat:single", effectiveText, false, conversationId, requestId);
       setChatInputSingle("");
 
       const ok = send({
@@ -3327,6 +3817,7 @@ import {
         scope: "chat",
         mode: "single",
         conversationId: conversationId || undefined,
+        requestId,
         text: effectiveText,
         project: metaProject.trim() || "기본",
         category: metaCategory.trim() || "일반",
@@ -3336,7 +3827,9 @@ import {
         memoryNotes: currentMemoryNotes,
         attachments: rich.attachments,
         webUrls: rich.webUrls,
-        webSearchEnabled: rich.webSearchEnabled
+        webSearchEnabled: rich.webSearchEnabled,
+        skillName: selectedChatSkill?.name || undefined,
+        skillScope: selectedChatSkill?.scope || undefined
       });
 
       if (!ok) {
@@ -3345,6 +3838,310 @@ import {
       } else {
         clearRichInputDraft("chat:single");
       }
+    }
+
+    function appendTextToCurrentComposer(text) {
+      const value = `${text || ""}`.trim();
+      if (!value) {
+        return;
+      }
+
+      const append = (prev) => {
+        const base = `${prev || ""}`.trimEnd();
+        return base ? `${base}\n${value}` : value;
+      };
+      if (currentKey === "chat:single") {
+        setChatInputSingle(append);
+      } else if (currentKey === "chat:orchestration") {
+        setChatInputOrch(append);
+      } else if (currentKey === "chat:multi") {
+        setChatInputMulti(append);
+      } else if (currentKey === "coding:single") {
+        setCodingInputSingle(append);
+      } else if (currentKey === "coding:orchestration") {
+        setCodingInputOrch(append);
+      } else if (currentKey === "coding:multi") {
+        setCodingInputMulti(append);
+      }
+    }
+
+    function getComposerTextByKey(key) {
+      if (key === "chat:single") {
+        return chatInputSingle;
+      }
+      if (key === "chat:orchestration") {
+        return chatInputOrch;
+      }
+      if (key === "chat:multi") {
+        return chatInputMulti;
+      }
+      if (key === "coding:single") {
+        return codingInputSingle;
+      }
+      if (key === "coding:orchestration") {
+        return codingInputOrch;
+      }
+      if (key === "coding:multi") {
+        return codingInputMulti;
+      }
+      return "";
+    }
+
+    function setComposerTextByKey(key, value) {
+      const nextValue = `${value || ""}`;
+      if (key === "chat:single") {
+        setChatInputSingle(nextValue);
+      } else if (key === "chat:orchestration") {
+        setChatInputOrch(nextValue);
+      } else if (key === "chat:multi") {
+        setChatInputMulti(nextValue);
+      } else if (key === "coding:single") {
+        setCodingInputSingle(nextValue);
+      } else if (key === "coding:orchestration") {
+        setCodingInputOrch(nextValue);
+      } else if (key === "coding:multi") {
+        setCodingInputMulti(nextValue);
+      }
+    }
+
+    function buildSpeechComposerText(baseText, transcript) {
+      const base = `${baseText || ""}`.trimEnd();
+      const spoken = `${transcript || ""}`.trim();
+      if (!spoken) {
+        return base;
+      }
+      return base ? `${base}\n${spoken}` : spoken;
+    }
+
+    function extractSpeechTranscript(event) {
+      const results = event?.results || [];
+      const parts = [];
+      for (let index = 0; index < results.length; index += 1) {
+        const item = results[index];
+        const text = item && item[0] ? `${item[0].transcript || ""}`.trim() : "";
+        if (text) {
+          parts.push(text);
+        }
+      }
+      return parts.join(" ").replace(/\s+/g, " ").trim();
+    }
+
+    function getSpeechErrorMessage(errorName) {
+      const normalized = `${errorName || ""}`.trim().toLowerCase();
+      if (normalized === "not-allowed"
+        || normalized === "service-not-allowed"
+        || normalized === "notallowederror"
+        || normalized === "securityerror"
+        || normalized === "permissiondeniederror") {
+        return "마이크 권한이 차단되었습니다. 브라우저 권한을 허용하세요.";
+      }
+      if (normalized === "audio-capture"
+        || normalized === "notfounderror"
+        || normalized === "devicesnotfounderror") {
+        return "사용 가능한 마이크를 찾지 못했습니다. 마이크 연결 상태를 확인하세요.";
+      }
+      if (normalized === "notreadableerror" || normalized === "trackstarterror") {
+        return "마이크를 다른 앱에서 사용 중이거나 접근할 수 없습니다.";
+      }
+      if (normalized === "network") {
+        return "음성 인식 서비스에 연결하지 못했습니다. 네트워크 상태를 확인하세요.";
+      }
+      if (normalized === "no-speech" || normalized === "aborted" || normalized === "aborterror") {
+        return "입력된 음성이 없습니다. 다시 눌러 말하세요.";
+      }
+      if (normalized === "invalid-state" || normalized === "invalidstateerror") {
+        return "이미 음성 입력이 실행 중입니다.";
+      }
+      return "음성 입력을 시작하지 못했습니다.";
+    }
+
+    function stopVoiceInput() {
+      const recognition = speechRecognitionRef.current;
+      if (!recognition) {
+        setSpeechState((prev) => ({ ...prev, active: false }));
+        return;
+      }
+
+      speechStopRequestedRef.current = true;
+      try {
+        recognition.stop();
+      } catch {
+        try {
+          recognition.abort();
+        } catch {
+        }
+        speechRecognitionRef.current = null;
+        setSpeechState((prev) => ({ ...prev, active: false }));
+      }
+    }
+
+    function readMicrophonePermission() {
+      if (typeof navigator === "undefined" || !navigator.permissions?.query) {
+        return Promise.resolve("");
+      }
+
+      return navigator.permissions.query({ name: "microphone" })
+        .then((permission) => permission?.state || "")
+        .catch(() => "");
+    }
+
+    async function startVoiceInput() {
+      const Recognition = typeof window !== "undefined"
+        ? (window.SpeechRecognition || window.webkitSpeechRecognition)
+        : null;
+      if (!Recognition) {
+        setSpeechState((prev) => ({ ...prev, active: false, supported: false, error: "이 브라우저는 음성 입력을 지원하지 않습니다." }));
+        return;
+      }
+
+      if (speechRecognitionRef.current) {
+        stopVoiceInput();
+        return;
+      }
+
+      const recognition = new Recognition();
+      recognition.lang = uiPreferences.speech?.lang || "ko-KR";
+      recognition.interimResults = true;
+      recognition.continuous = false;
+      recognition.maxAlternatives = 1;
+      const targetKey = currentKeyRef.current || currentKey;
+      speechTargetKeyRef.current = targetKey;
+      speechRecognitionRef.current = recognition;
+      speechTranscriptRef.current = "";
+      speechBaseDraftRef.current = getComposerTextByKey(targetKey);
+      speechStopRequestedRef.current = false;
+      setSpeechState((prev) => ({ ...prev, active: true, supported: true, error: "" }));
+      recognition.onresult = (event) => {
+        const transcript = extractSpeechTranscript(event);
+        const key = speechTargetKeyRef.current || targetKey;
+        speechTranscriptRef.current = transcript;
+        setComposerTextByKey(key, buildSpeechComposerText(speechBaseDraftRef.current, transcript));
+      };
+      recognition.onerror = (event) => {
+        const errorName = event.error || "";
+        const quietStop = speechStopRequestedRef.current && (errorName === "aborted" || !errorName);
+        setSpeechState((prev) => ({
+          ...prev,
+          active: false,
+          error: quietStop ? "" : getSpeechErrorMessage(errorName)
+        }));
+      };
+      recognition.onend = () => {
+        const stoppedByUser = speechStopRequestedRef.current;
+        const hadTranscript = !!`${speechTranscriptRef.current || ""}`.trim();
+        speechRecognitionRef.current = null;
+        speechStopRequestedRef.current = false;
+        setSpeechState((prev) => ({
+          ...prev,
+          active: false,
+          error: stoppedByUser || hadTranscript ? prev.error : (prev.error || "입력된 음성이 없습니다. 다시 눌러 말하세요.")
+        }));
+      };
+      try {
+        recognition.start();
+        readMicrophonePermission().then((state) => {
+          if (state === "denied" && speechRecognitionRef.current === recognition) {
+            try {
+              recognition.abort();
+            } catch {
+            }
+            speechRecognitionRef.current = null;
+            setSpeechState((prev) => ({
+              ...prev,
+              active: false,
+              supported: true,
+              error: "마이크 권한이 차단되었습니다. 브라우저 권한을 허용하세요."
+            }));
+          }
+        });
+      } catch (error) {
+        speechRecognitionRef.current = null;
+        setSpeechState((prev) => ({
+          ...prev,
+          active: false,
+          error: getSpeechErrorMessage(error?.name || "invalid-state")
+        }));
+      }
+    }
+
+    function requestBackupExport() {
+      if (!ensureAuthed()) {
+        return;
+      }
+
+      setBackupState((prev) => ({ ...prev, exportBusy: true, status: "백업 파일을 만드는 중입니다." }));
+      if (!send({ type: "backup_export_prepare" })) {
+        setBackupState((prev) => ({ ...prev, exportBusy: false, status: "백업 요청 전송에 실패했습니다." }));
+      }
+    }
+
+    function handleBackupFileSelected(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) {
+        return;
+      }
+
+      if (!ensureAuthed()) {
+        event.target.value = "";
+        return;
+      }
+
+      setBackupState((prev) => ({ ...prev, importBusy: true, preview: null, status: "백업 파일을 읽는 중입니다." }));
+      const reader = new FileReader();
+      reader.onload = () => {
+        const raw = `${reader.result || ""}`;
+        const base64 = raw.includes(",") ? raw.split(",").pop() : raw;
+        const ok = send({
+          type: "backup_import_preview",
+          fileName: file.name,
+          contentBase64: base64
+        });
+        if (!ok) {
+          setBackupState((prev) => ({ ...prev, importBusy: false, status: "가져오기 미리보기 요청에 실패했습니다." }));
+        }
+      };
+      reader.onerror = () => {
+        setBackupState((prev) => ({ ...prev, importBusy: false, status: "백업 파일을 읽을 수 없습니다." }));
+      };
+      reader.readAsDataURL(file);
+      event.target.value = "";
+    }
+
+    function applyBackupImport(overwrite = false) {
+      if (!ensureAuthed() || !backupState.preview?.previewId) {
+        return;
+      }
+
+      setBackupState((prev) => ({ ...prev, importBusy: true, status: overwrite ? "겹치는 항목을 덮어쓰는 중입니다." : "새 항목만 가져오는 중입니다." }));
+      if (!send({ type: "backup_import_apply", previewId: backupState.preview.previewId, overwrite })) {
+        setBackupState((prev) => ({ ...prev, importBusy: false, status: "가져오기 적용 요청에 실패했습니다." }));
+      }
+    }
+
+    function requestConversationSearch(queryValue = currentConversationFilter, key = currentKey) {
+      const query = `${queryValue || ""}`.trim();
+      if (!ensureAuthed() || query.length < 2) {
+        return false;
+      }
+
+      setConversationSearchByKey((prev) => ({
+        ...prev,
+        [key]: {
+          ...(prev[key] || {}),
+          query,
+          loading: true,
+          error: ""
+        }
+      }));
+      return send({ type: "conversation_search", query, maxResults: 24 }, { silent: true });
+    }
+
+    function clearCurrentConversationSearch() {
+      setConversationFilterByKey((prev) => ({ ...prev, [currentKey]: "" }));
+      setConversationSearchByKey((prev) => ({
+        ...prev,
+        [currentKey]: { query: "", loading: false, results: [], error: "" }
+      }));
     }
 
     function sendChatOrchestration() {
@@ -3937,6 +4734,55 @@ import {
     }
 
     function handleServerMessage(msg) {
+      if (msg.type === "conversation_search_result") {
+        setConversationSearchByKey((prev) => ({
+          ...prev,
+          [currentKey]: {
+            query: msg.query || "",
+            loading: false,
+            results: Array.isArray(msg.results) ? msg.results : [],
+            error: msg.error || ""
+          }
+        }));
+        return;
+      }
+
+      if (msg.type === "backup_export_result") {
+        setBackupState((prev) => ({
+          ...prev,
+          exportBusy: false,
+          status: msg.ok ? "백업 파일을 만들었습니다." : (msg.error || "백업 생성에 실패했습니다.")
+        }));
+        if (msg.ok && msg.contentBase64) {
+          downloadBase64File(msg.fileName || "omninode-backup.zip", msg.contentBase64, "application/zip");
+        }
+        return;
+      }
+
+      if (msg.type === "backup_import_preview_result") {
+        setBackupState((prev) => ({
+          ...prev,
+          importBusy: false,
+          preview: msg.ok ? msg : null,
+          status: msg.ok
+            ? `가져오기 미리보기: 대화 ${msg.conversationCount || 0}개, 파일 ${msg.fileCount || 0}개`
+            : (msg.error || "백업 미리보기에 실패했습니다.")
+        }));
+        return;
+      }
+
+      if (msg.type === "backup_import_result") {
+        setBackupState((prev) => ({
+          ...prev,
+          importBusy: false,
+          preview: msg.ok ? null : prev.preview,
+          status: msg.ok
+            ? `가져오기 완료: 대화 ${msg.importedConversations || 0}개, 파일 ${msg.importedFiles || 0}개`
+            : (msg.error || "백업 가져오기에 실패했습니다.")
+        }));
+        return;
+      }
+
       handleDashboardServerMessage(msg, {
         state: {
           rootTab,
@@ -3969,6 +4815,7 @@ import {
           setSelectedSkillKey,
           setSkillEditor,
           setSkillStatus,
+          setLoadingSkillKey,
           refreshSkillsList,
           setRoutingPolicyState,
           setPlansState,
@@ -5713,9 +6560,33 @@ import {
         return;
       }
 
-      if (event.key === "Enter" && !event.shiftKey) {
+      const sendShortcut = uiPreferences.shortcuts?.send || DEFAULT_UI_PREFERENCES.shortcuts.send;
+      if ((shortcutMatches(event, sendShortcut) || (event.key === "Enter" && !event.shiftKey)) && typeof handler === "function") {
         event.preventDefault();
         handler();
+      }
+    }
+
+    function sendCurrentComposer() {
+      if (rootTab === "chat") {
+        if (chatMode === "single") {
+          sendChatSingle();
+        } else if (chatMode === "orchestration") {
+          sendChatOrchestration();
+        } else {
+          sendChatMulti();
+        }
+        return;
+      }
+
+      if (rootTab === "coding") {
+        if (codingMode === "single") {
+          sendCodingSingle();
+        } else if (codingMode === "orchestration") {
+          sendCodingOrchestration();
+        } else {
+          sendCodingMulti();
+        }
       }
     }
 
@@ -5956,7 +6827,10 @@ import {
         toggleSelectionMode,
         clearScopeMemory,
         selectedDeleteConversationIds,
-        deleteConversation
+        deleteConversation,
+        conversationSearchState: currentConversationSearchState,
+        onConversationSearch: () => requestConversationSearch(),
+        clearConversationSearch: clearCurrentConversationSearch
       });
     }
 
@@ -6247,7 +7121,11 @@ import {
         handleAttachmentDrop,
         attachmentFileInputId,
         onAttachmentSelected,
-        onClearAttachments: () => setAttachmentsByKey((prev) => clearAttachmentDraft(prev, currentKey))
+        onClearAttachments: () => setAttachmentsByKey((prev) => clearAttachmentDraft(prev, currentKey)),
+        selectedSkill: currentKey === "chat:single" ? selectedChatSkill : null,
+        onClearSkill: () => setSelectedChatSkill(null),
+        speechState,
+        onStartVoiceInput: startVoiceInput
       });
     }
 
@@ -6675,6 +7553,414 @@ import {
       });
     }
 
+    function updateUiPreference(partial) {
+      setUiPreferences((prev) => mergeUiPreferences({
+        ...prev,
+        ...partial
+      }));
+    }
+
+    function updateShortcut(key, value) {
+      setUiPreferences((prev) => mergeUiPreferences({
+        ...prev,
+        shortcuts: {
+          ...(prev.shortcuts || {}),
+          [key]: value
+        }
+      }));
+    }
+
+    function renderUiPreferencePanel() {
+      const shortcuts = uiPreferences.shortcuts || DEFAULT_UI_PREFERENCES.shortcuts;
+      const shortcutGroups = [
+        {
+          title: "팔레트 / 입력",
+          rows: [
+            { key: "palette", label: "팔레트 열기", helper: "검색, 스킬, 모델 전환" },
+            { key: "paletteAlt", label: "팔레트 보조", helper: "VSCode 스타일 빠른 실행" },
+            { key: "send", label: "메시지 전송", helper: "입력창에서 바로 전송" },
+            { key: "close", label: "닫기", helper: "팔레트와 오버레이 닫기" },
+            { key: "focusComposer", label: "입력창 포커스", helper: "어디서든 바로 타이핑" }
+          ]
+        },
+        {
+          title: "대화 / 워크플로우",
+          rows: [
+            { key: "newChat", label: "새 대화 시작", helper: "현재 모드에서 새 thread" },
+            { key: "searchConversations", label: "대화 검색", helper: "사이드바 검색창 포커스" },
+            { key: "toggleTheme", label: "테마 전환", helper: "시스템 → 라이트 → 다크 순환" },
+            { key: "toggleVoice", label: "음성 입력 토글", helper: "마이크 버튼 클릭과 동일" }
+          ]
+        },
+        {
+          title: "탭 전환",
+          rows: [
+            { key: "tabChat", label: "대화 탭", helper: "" },
+            { key: "tabRoutine", label: "루틴 탭", helper: "" },
+            { key: "tabLogic", label: "로직 탭", helper: "" },
+            { key: "tabCoding", label: "코딩 탭", helper: "" },
+            { key: "tabNotebook", label: "노트북 탭", helper: "" },
+            { key: "tabAutomation", label: "작업 계획 탭", helper: "" },
+            { key: "tabSkills", label: "스킬 탭", helper: "" },
+            { key: "tabSettings", label: "설정 탭", helper: "" }
+          ]
+        }
+      ];
+
+      const allRows = shortcutGroups.flatMap((group) => group.rows);
+      const labelByKey = Object.fromEntries(allRows.map((row) => [row.key, row.label]));
+      const valuesByKey = Object.fromEntries(allRows.map((row) => [row.key, normalizeShortcut(shortcuts[row.key])]));
+      const occurrences = {};
+      allRows.forEach((row) => {
+        const v = valuesByKey[row.key];
+        if (!v) return;
+        if (!occurrences[v]) occurrences[v] = [];
+        occurrences[v].push(row.key);
+      });
+      const conflictGroups = Object.entries(occurrences).filter(([, keys]) => keys.length > 1);
+      const duplicateValues = new Set(conflictGroups.map(([v]) => v));
+      const hasShortcutConflict = conflictGroups.length > 0;
+      const lastSavedLabel = uiPreferencesSavedAt
+        ? formatRelativeTime(Date.now() - uiPreferencesSavedAt)
+        : "아직 저장 안 됨";
+      const sessionDirty = uiPreferencesSessionStartRef.current
+        ? JSON.stringify(uiPreferencesSessionStartRef.current) !== JSON.stringify(uiPreferences)
+        : false;
+
+      function renderShortcutRow(row) {
+        const value = shortcuts[row.key] || "";
+        const normalized = valuesByKey[row.key];
+        const conflict = normalized && duplicateValues.has(normalized);
+        const recording = recordingShortcutKey === row.key;
+        const formatted = formatShortcutLabel(value);
+        const invalid = value && !isValidShortcut(value);
+        return e("label", {
+          key: row.key,
+          className: `shortcut-row ${conflict ? "conflict" : ""} ${recording ? "recording" : ""} ${invalid ? "invalid" : ""}`
+        },
+        e("span", { className: "shortcut-row-label" }, row.label),
+        e("div", { className: "shortcut-row-controls" },
+          e("input", {
+            className: "input",
+            value,
+            placeholder: recording ? "키를 누르세요…" : "예: mod+k",
+            onChange: (event) => updateShortcut(row.key, event.target.value),
+            onKeyDown: (event) => {
+              if (recording) {
+                event.preventDefault();
+                event.stopPropagation();
+                const captured = shortcutFromEvent(event);
+                if (captured && isValidShortcut(captured)) {
+                  updateShortcut(row.key, captured);
+                  setRecordingShortcutKey(null);
+                }
+              }
+            },
+            spellCheck: false
+          }),
+          formatted
+            ? e("span", { className: "shortcut-chip" }, formatted)
+            : null,
+          e("button", {
+            type: "button",
+            className: `btn ghost shortcut-record-btn ${recording ? "active" : ""}`,
+            onClick: () => setRecordingShortcutKey(recording ? null : row.key),
+            title: recording ? "취소" : "키 입력 받기"
+          }, recording ? "취소" : "캡처"),
+          e("button", {
+            type: "button",
+            className: "btn ghost shortcut-clear-btn",
+            onClick: () => updateShortcut(row.key, ""),
+            title: "비우기"
+          }, "✕")
+        ),
+        row.helper ? e("small", null, row.helper) : null,
+        invalid ? e("small", { className: "shortcut-invalid-hint" }, "형식이 올바르지 않습니다 (예: mod+k, shift+enter)") : null
+        );
+      }
+
+      return e("section", { className: "panel settings-optimized-panel ui-preferences-panel" },
+        e("div", { className: "settings-panel-hero" },
+          e("div", null,
+            e("h2", null, "화면/단축키"),
+            e("p", null, "테마, 키보드 동작, 백업을 현재 브라우저 기준으로 관리합니다.")
+          ),
+          e("div", { className: "settings-visual-card preferences" },
+            e("span", null, "LOCAL"),
+            e("strong", null, uiPreferences.theme?.mode === "dark" ? "다크" : uiPreferences.theme?.mode === "light" ? "라이트" : "시스템"),
+            e("div", { className: "settings-chip-row" },
+              e("span", { className: `settings-status-chip ${hasShortcutConflict ? "idle" : "ok"}` }, hasShortcutConflict ? "충돌 확인" : "키맵 정상"),
+              e("span", { className: "settings-status-chip ok" }, `저장: ${lastSavedLabel}`)
+            )
+          )
+        ),
+        e("div", { className: "preference-section" },
+          e("div", { className: "preference-section-head" },
+            e("strong", null, "테마"),
+            e("span", null, "브라우저에 저장됩니다.")
+          ),
+          e("div", { className: "theme-choice-row" },
+            ["system", "light", "dark"].map((modeValue) => e("button", {
+              key: modeValue,
+              type: "button",
+              className: `theme-choice ${uiPreferences.theme?.mode === modeValue ? "active" : ""}`,
+              onClick: () => updateUiPreference({ theme: { ...(uiPreferences.theme || {}), mode: modeValue } })
+            },
+            modeValue === "system" ? "시스템" : modeValue === "dark" ? "다크" : "라이트"))
+          )
+        ),
+        e("div", { className: "preference-section" },
+          e("div", { className: "preference-section-head" },
+            e("strong", null, "단축키"),
+            e("span", null, isMacOs() ? "Mac 기준 ⌘ 표기. 다른 OS는 Ctrl로 표시됩니다." : "Win/Linux 기준 Ctrl 표기. mod = Ctrl/Cmd 호환.")
+          ),
+          hasShortcutConflict
+            ? e("div", { className: "shortcut-conflict" },
+              e("strong", null, "충돌"),
+              e("span", null, " · "),
+              ...conflictGroups.flatMap(([value, keys], idx) => {
+                const labels = keys.map((k) => labelByKey[k]).join(" ↔ ");
+                const chip = e("span", { key: `c${idx}`, className: "shortcut-chip" }, formatShortcutLabel(value));
+                const text = e("span", { key: `t${idx}` }, ` ${labels}${idx < conflictGroups.length - 1 ? " / " : ""}`);
+                return [chip, text];
+              })
+            )
+            : null,
+          shortcutGroups.map((group) => e("div", { key: group.title, className: "shortcut-group" },
+            e("div", { className: "shortcut-group-title" }, group.title),
+            e("div", { className: "shortcut-grid" },
+              group.rows.map((row) => renderShortcutRow(row))
+            )
+          )),
+          e("div", { className: "settings-action-row shortcut-action-row" },
+            e("button", {
+              type: "button",
+              className: "btn ghost",
+              onClick: () => {
+                if (window.confirm("모든 단축키를 기본값으로 복원하시겠습니까?")) {
+                  setUiPreferences(mergeUiPreferences(DEFAULT_UI_PREFERENCES));
+                }
+              }
+            }, "기본값 복원"),
+            e("button", {
+              type: "button",
+              className: "btn ghost",
+              disabled: !sessionDirty,
+              onClick: () => {
+                if (uiPreferencesSessionStartRef.current && window.confirm("이번 세션의 변경 사항을 모두 되돌립니까?")) {
+                  setUiPreferences(mergeUiPreferences(uiPreferencesSessionStartRef.current));
+                }
+              },
+              title: sessionDirty ? "이번 세션 변경 모두 취소" : "변경 사항 없음"
+            }, "세션 변경 되돌리기"),
+            e("span", { className: "shortcut-save-hint" }, sessionDirty ? "변경 후 자동 저장됨" : "현재까지 모두 저장됨")
+          )
+        ),
+        e("div", { className: "preference-section" },
+          e("div", { className: "preference-section-head" },
+            e("strong", null, "백업 / 가져오기"),
+            e("span", null, "API 키와 세션 정보는 제외합니다.")
+          ),
+          e("div", { className: "backup-action-grid" },
+            e("button", {
+              type: "button",
+              className: "btn primary",
+              onClick: requestBackupExport,
+              disabled: backupState.exportBusy
+            }, backupState.exportBusy ? "백업 만드는 중..." : "전체 백업 내보내기"),
+            e("label", { className: `btn ghost backup-import-label ${backupState.importBusy ? "disabled" : ""}` },
+              "백업 파일 선택",
+              e("input", {
+                type: "file",
+                accept: ".zip,application/zip",
+                onChange: handleBackupFileSelected,
+                disabled: backupState.importBusy
+              })
+            )
+          ),
+          backupState.status
+            ? e("div", { className: "backup-status" }, backupState.status)
+            : null,
+          preview
+            ? e("div", { className: "backup-preview-card" },
+              e("div", { className: "backup-preview-head" },
+                e("strong", null, preview.fileName || "백업 파일"),
+                e("span", null, `대화 ${preview.conversationCount || 0}개 · 파일 ${preview.fileCount || 0}개`)
+              ),
+              conflicts.length > 0
+                ? e("div", { className: "backup-conflict-list" },
+                  e("span", null, `겹치는 대화 ${preview.conversationConflictCount || conflicts.length}개`),
+                  e("code", null, conflicts.slice(0, 3).join(", ")),
+                  conflicts.length > 3 ? e("small", null, `외 ${conflicts.length - 3}개`) : null
+                )
+                : e("div", { className: "backup-conflict-list clean" }, "겹치는 대화가 없습니다."),
+              e("div", { className: "backup-preview-actions" },
+                e("button", {
+                  type: "button",
+                  className: "btn primary",
+                  onClick: () => applyBackupImport(false),
+                  disabled: backupState.importBusy
+                }, "새 항목만 가져오기"),
+                e("button", {
+                  type: "button",
+                  className: "btn danger",
+                  onClick: () => {
+                    if (window.confirm("겹치는 대화와 파일을 백업 내용으로 덮어쓸까요?")) {
+                      applyBackupImport(true);
+                    }
+                  },
+                  disabled: backupState.importBusy || !conflicts.length
+                }, "겹치는 항목 덮어쓰기")
+              )
+            )
+            : null
+        )
+      );
+    }
+
+    function buildCommandPaletteActions() {
+      const query = commandPaletteQuery.trim();
+      const actions = [];
+      TAB_SHORTCUTS.forEach((item, index) => {
+        actions.push({
+          id: `tab-${item[0]}`,
+          group: "탭 이동",
+          label: item[1],
+          helper: `Ctrl/Cmd+${index + 1}`,
+          run: () => setRootTab(item[0])
+        });
+      });
+
+      if (query.length >= 2) {
+        actions.push({
+          id: "search-conversations",
+          group: "검색",
+          label: `"${query}" 대화 본문 검색`,
+          helper: "제목, 미리보기, 저장된 대화 본문에서 찾습니다.",
+          run: () => {
+            setRootTab("chat");
+            setChatMode("single");
+            setConversationFilterByKey((prev) => ({ ...prev, "chat:single": query }));
+            requestConversationSearch(query, "chat:single");
+          }
+        });
+      }
+
+      normalizePaletteSkills(contextState.skills).forEach((skill) => {
+        actions.push({
+          id: `skill-${skill.key}`,
+          group: "스킬 적용",
+          label: skill.name,
+          helper: `${skill.scope === "global" ? "전역" : "프로젝트"} · ${skill.description || skill.path || "선택한 대화에 적용"}`,
+          run: () => {
+            setRootTab("chat");
+            setChatMode("single");
+            setSelectedChatSkill({ name: skill.name, scope: skill.scope, key: skill.key });
+          }
+        });
+      });
+
+      [
+        { provider: "groq", label: "Groq", model: selectedGroqModel || DEFAULT_GROQ_SINGLE_MODEL },
+        { provider: "gemini", label: "Gemini", model: DEFAULT_GEMINI_WORKER_MODEL },
+        { provider: "cerebras", label: "Cerebras", model: DEFAULT_CEREBRAS_MODEL },
+        { provider: "codex", label: "Codex", model: DEFAULT_CODEX_MODEL },
+        { provider: "copilot", label: "Copilot", model: selectedCopilotModel || "" }
+      ].forEach((item) => {
+        actions.push({
+          id: `model-${item.provider}`,
+          group: "모델 전환",
+          label: `${item.label}로 전환`,
+          helper: item.model || "저장된 기본 모델 사용",
+          run: () => {
+            setRootTab("chat");
+            setChatMode("single");
+            setChatSingleProvider(item.provider);
+            if (item.model) {
+              setChatSingleModel(item.model);
+            }
+          }
+        });
+      });
+
+      return actions;
+    }
+
+    function runCommandPaletteAction(action) {
+      if (!action || typeof action.run !== "function") {
+        return;
+      }
+      action.run();
+      setCommandPaletteOpen(false);
+      setCommandPaletteQuery("");
+    }
+
+    function renderCommandPalette() {
+      if (!commandPaletteOpen) {
+        return null;
+      }
+
+      const query = commandPaletteQuery.trim().toLowerCase();
+      const allActions = buildCommandPaletteActions();
+      const visibleActions = allActions
+        .filter((action) => {
+          if (!query) {
+            return true;
+          }
+          return [action.group, action.label, action.helper]
+            .some((value) => `${value || ""}`.toLowerCase().includes(query));
+        })
+        .slice(0, 18);
+      const firstAction = visibleActions[0] || null;
+
+      return e("div", {
+        className: "command-palette-backdrop",
+        onMouseDown: (event) => {
+          if (event.target === event.currentTarget) {
+            setCommandPaletteOpen(false);
+          }
+        }
+      },
+      e("section", {
+        className: "command-palette",
+        role: "dialog",
+        "aria-label": "Command Palette",
+        onMouseDown: (event) => event.stopPropagation()
+      },
+      e("div", { className: "command-palette-input-wrap" },
+        e("input", {
+          className: "command-palette-input",
+          value: commandPaletteQuery,
+          autoFocus: true,
+          placeholder: "탭 이동, 대화 검색, 스킬 적용, 모델 전환",
+          onChange: (event) => setCommandPaletteQuery(event.target.value),
+          onKeyDown: (event) => {
+            if (event.key === "Enter" && firstAction) {
+              event.preventDefault();
+              runCommandPaletteAction(firstAction);
+            }
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setCommandPaletteOpen(false);
+            }
+          }
+        })
+      ),
+      e("div", { className: "command-palette-results" },
+        visibleActions.length === 0
+          ? e("div", { className: "command-palette-empty" }, "실행할 항목이 없습니다.")
+          : visibleActions.map((action) => e("button", {
+            key: action.id,
+            type: "button",
+            className: "command-palette-item",
+            onClick: () => runCommandPaletteAction(action)
+          },
+          e("span", { className: "command-palette-group" }, action.group),
+          e("strong", null, action.label),
+          e("small", null, action.helper)))
+      )));
+    }
+
     function renderSettings() {
       return renderSettingsPanelModule({
         e,
@@ -6779,6 +8065,7 @@ import {
         filteredOpsFlowItems,
         workerRef,
         toolPanel: renderToolControlPanel(),
+        uiPreferencePanel: renderUiPreferencePanel(),
         currentSettingsPane,
         renderResponsiveSectionTabs,
         setResponsivePane,
@@ -6806,51 +8093,75 @@ import {
 
     function renderSkillsRoot() {
       const onLoadSkillDetail = (name, scope) => {
+        const normalizedScope = `${scope || "project"}`.trim() || "project";
+        const normalizedName = `${name || ""}`.trim();
+        const requestKey = `${normalizedScope}:${normalizedName}`;
+        setLoadingSkillKey(requestKey);
+        setSkillEditor(null);
         setSkillStatus({ kind: "info", message: "불러오는 중..." });
-        const ok = requestSkillGet(send, name, scope);
+        const ok = requestSkillGet(send, normalizedName, normalizedScope);
         if (!ok) {
+          setLoadingSkillKey("");
           setSkillStatus({ kind: "error", message: "스킬 요청 전송에 실패했습니다." });
+          return;
         }
+        window.setTimeout(() => {
+          setLoadingSkillKey((current) => {
+            if (current !== requestKey) {
+              return current;
+            }
+            setSkillStatus({ kind: "error", message: "스킬 응답이 지연되고 있습니다. 목록을 다시 읽거나 다시 선택하세요." });
+            return "";
+          });
+        }, 8000);
       };
       const onSaveSkill = (editor) => {
-        if (!editor || !editor.name) {
+        const name = `${editor?.name || ""}`.trim();
+        const scope = `${editor?.scope || "project"}`.trim() || "project";
+        if (!editor || !name) {
           setSkillStatus({ kind: "error", message: "이름이 비어 있습니다." });
           return;
         }
         setSkillStatus({ kind: "info", message: "저장 중..." });
         const ok = requestSkillSave(send, {
-          name: editor.name,
-          scope: editor.scope || "project",
-          description: editor.description || "",
+          name,
+          scope,
+          description: `${editor.description || ""}`.trim(),
           body: editor.body || ""
         });
         if (!ok) {
           setSkillStatus({ kind: "error", message: "저장 요청 전송에 실패했습니다." });
         } else if (editor.isNew) {
-          setSelectedSkillKey(`${editor.scope || "project"}:${editor.name}`);
+          setSelectedSkillKey(`${scope}:${name}`);
         }
       };
       const onDeleteSkill = (name, scope) => {
         setSkillStatus({ kind: "info", message: "삭제 중..." });
         const ok = requestSkillDelete(send, name, scope);
         if (!ok) {
+          setLoadingSkillKey("");
           setSkillStatus({ kind: "error", message: "삭제 요청 전송에 실패했습니다." });
         }
       };
       const onStartNewSkill = () => {
         setSelectedSkillKey("");
+        setLoadingSkillKey("");
         setSkillStatus(null);
         setSkillEditor({ name: "", scope: "project", description: "", body: "", isNew: true });
       };
       return renderSkillsRootModule({
         e,
+        authed,
         skills: contextState.skills,
         selectedSkillKey,
         setSelectedSkillKey,
         skillEditor,
         setSkillEditor,
         skillStatus,
+        loadingSkillKey,
         skillsBusy: contextState.loadingSkills,
+        skillSearch,
+        setSkillSearch,
         onRefreshSkills: () => refreshSkillsList(),
         onLoadSkillDetail,
         onSaveSkill,
@@ -6926,6 +8237,7 @@ import {
       ),
       renderCodingResultOverlay(),
       renderSafeRefactorOverlay(),
+      renderCommandPalette(),
       memoryPreview.open
         ? e("div", { className: "modal" },
           e("div", { className: "modal-card" },
