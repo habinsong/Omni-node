@@ -17834,3 +17834,24 @@ video {
   .plans-list { max-height: 280px; }
   .plan-step-list { max-height: 360px; }
 }
+
+/* v13 — Plan mode card 위아래 길이 축소 (빠른 초안 / 질문 먼저 카드) */
+.plan-mode-grid {
+  gap: 8px;
+}
+
+.plan-mode-card {
+  min-height: 0 !important;
+  padding: 8px 12px !important;
+  gap: 2px !important;
+}
+
+.plan-mode-card strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.plan-mode-card span {
+  font-size: 11px;
+  line-height: 1.35;
+}

@@ -176,14 +176,6 @@ export function renderAutomationRootPanel(props) {
     "section",
     { className: "settings settings-root-panel settings-root-panel-automation" },
     e("div", { className: "settings-shell settings-standalone-shell" },
-      e("div", { className: "settings-summary" },
-        e("div", { className: "settings-summary-head" },
-          e("div", null,
-            e("h2", null, "작업 계획"),
-            e("p", null, "큰 작업을 먼저 정리하고, 필요하면 작은 실행 단위로 나눠 진행합니다.")
-          )
-        )
-      ),
       e("div", { className: "automation-root-layout" },
         e("aside", { className: "automation-root-nav", "aria-label": "작업 계획 선택" },
           navItems.map((item) => e("button", {
@@ -308,6 +300,7 @@ export function renderSettingsPanel(props) {
     filteredOpsFlowItems,
     workerRef,
     toolPanel,
+    uiPreferencePanel,
     currentSettingsPane,
     renderResponsiveSectionTabs,
     setResponsivePane,
@@ -1083,8 +1076,12 @@ export function renderSettingsPanel(props) {
         { key: "basic-auth", label: "OTP 인증", summary: "대시보드 접근 세션", panel: otpPanel },
         { key: "basic-telegram", label: "Telegram", summary: "알림 봇과 채팅 ID", panel: telegramPanel },
         { key: "basic-keys", label: "LLM 키", summary: "Groq, Gemini, Cerebras, Codex", panel: llmPanel },
-        { key: "basic-cli", label: "CLI 인증", summary: "Copilot / Codex 로그인", panel: cliAuthPanel }
+        { key: "basic-cli", label: "CLI 인증", summary: "Copilot / Codex 로그인", panel: cliAuthPanel },
+        uiPreferencePanel
+          ? { key: "basic-preferences", label: "화면/단축키", summary: "테마, 키맵, 백업", panel: uiPreferencePanel }
+          : null
       ]
+        .filter(Boolean)
     },
     {
       key: "models",
