@@ -1798,7 +1798,7 @@ public sealed partial class CommandService
             || Regex.IsMatch(skillQueryText, @"(?i)(스킬|skill|skills|skill\.md).*(목록|리스트|뭐|보여|알려|어떤|종류|있어|있니|돼)")
             || hasStickyActiveSkillForTelegram;
 
-        if (webSearchEnabled && snapshot.Mode == "single" && !isSkillContextQuery)
+        if (webSearchEnabled && snapshot.Mode == "single" && !isSkillContextQuery && !thinkPlusActiveForTelegram)
         {
             var decisionPath = "heuristic_no_web";
             var shouldUseGeminiWeb = false;

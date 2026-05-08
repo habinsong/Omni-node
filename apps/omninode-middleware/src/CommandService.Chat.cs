@@ -265,7 +265,8 @@ public sealed partial class CommandService
             );
         }
 
-        if (request.WebSearchEnabled)
+        // Think+ 모드면 fast-web 단독 라우팅 우회. 기본 LLM이 web context를 prepend 받아 직접 답변하도록.
+        if (request.WebSearchEnabled && !request.ThinkPlusEnabled)
         {
             var webLookupInput = ResolveContextualWebLookupInput(thread.Id, rawInput);
             var decisionStopwatch = Stopwatch.StartNew();
