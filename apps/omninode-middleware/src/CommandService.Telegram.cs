@@ -525,6 +525,12 @@ public sealed partial class CommandService
             return await TryHandleTelegramLlmControlCommandAsync(command, cancellationToken);
         }
 
+        if (command.StartsWith("/skill", StringComparison.OrdinalIgnoreCase)
+            || command.StartsWith("/skills", StringComparison.OrdinalIgnoreCase))
+        {
+            return await TryHandleTelegramSkillCommandAsync(command, cancellationToken);
+        }
+
         if (command.StartsWith("/coding", StringComparison.OrdinalIgnoreCase))
         {
             return await TryHandleTelegramCodingCommandAsync(command, attachments, webUrls, webSearchEnabled, cancellationToken);
@@ -600,7 +606,7 @@ public sealed partial class CommandService
             return null;
         }
 
-        var commandLike = Regex.Match(normalized, @"(?i)^(help|start|talk|code|model|llm|coding|refactor|memory|doctor|plan|task|notebook|handoff|routine|routines|metrics|kill)\b(.*)$");
+        var commandLike = Regex.Match(normalized, @"(?i)^(help|start|talk|code|model|llm|skill|skills|coding|refactor|memory|doctor|plan|task|notebook|handoff|routine|routines|metrics|kill)\b(.*)$");
         if (commandLike.Success)
         {
             var head = commandLike.Groups[1].Value.ToLowerInvariant();
@@ -1855,7 +1861,10 @@ public sealed partial class CommandService
             return blockedResponseText;
         }
 
-        var preparedInput = await PrepareTelegramInputAsync(sharedPrepared.Text, cancellationToken);
+        // 스킬·프로젝트 컨텍스트가 들어간 입력은 압축 우회 (압축 시 [Active Skill] 본문이 사라짐).
+        var preparedInput = (isSkillContextQuery || hasStickyActiveSkillForTelegram)
+            ? sharedPrepared.Text
+            : await PrepareTelegramInputAsync(sharedPrepared.Text, cancellationToken);
         var thinkingLevel = ResolveTelegramThinkingLevel(snapshot, text);
         var profiledInput = BuildTelegramProfilePrompt(preparedInput, snapshot.Profile, thinkingLevel);
         var contextualProfiledInput = BuildContextualInput(session.SessionId, profiledInput, session.LinkedMemoryNotes);
@@ -2025,6 +2034,39 @@ public sealed partial class CommandService
                 streamCallback,
                 cancellationToken
             );
+            if (!_config.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(text, singleGroq.Text))
+            {
+                var historyBypassInput = BuildHistoryBypassInput(providerPrepared.Text);
+                var recovered = await ExecuteTelegramGroqSingleAsync(
+                    text,
+                    historyBypassInput,
+                    snapshot,
+                    thinkingLevel,
+                    streamCallback,
+                    cancellationToken
+                );
+                if (!string.IsNullOrWhiteSpace(recovered.Text)
+                    && !ShouldRetrySingleChatWithoutHistory(text, recovered.Text))
+                {
+                    singleGroq = recovered;
+                }
+                else
+                {
+                    var originalRequestInput = BuildOriginalRequestRetryInput(text);
+                    var originalRecovered = await ExecuteTelegramGroqSingleAsync(
+                        text,
+                        originalRequestInput,
+                        snapshot,
+                        thinkingLevel,
+                        streamCallback,
+                        cancellationToken
+                    );
+                    singleGroq = !string.IsNullOrWhiteSpace(originalRecovered.Text)
+                                 && !ShouldRetrySingleChatWithoutHistory(text, originalRecovered.Text)
+                        ? originalRecovered
+                        : new LlmSingleChatResult(singleGroq.Provider, singleGroq.Model, BuildOffTopicGuardMessage(text));
+                }
+            }
             var citationBundle = BuildAndLogCitationMappings(
                 "telegram",
                 "telegram-single-groq",
@@ -2096,6 +2138,23 @@ public sealed partial class CommandService
                 && !ShouldRetrySingleChatWithoutHistory(text, recovered.Text))
             {
                 single = recovered;
+            }
+            else
+            {
+                var originalRequestInput = BuildOriginalRequestRetryInput(text);
+                var originalRecovered = await ChatSingleAsync(
+                    originalRequestInput,
+                    snapshot.SingleProvider,
+                    snapshot.SingleModel,
+                    "telegram",
+                    cancellationToken,
+                    ResolveSingleChatMaxOutputTokens(text),
+                    streamCallback
+                );
+                single = !string.IsNullOrWhiteSpace(originalRecovered.Text)
+                         && !ShouldRetrySingleChatWithoutHistory(text, originalRecovered.Text)
+                    ? originalRecovered
+                    : new LlmSingleChatResult(single.Provider, single.Model, BuildOffTopicGuardMessage(text));
             }
         }
         var singleCitationBundle = BuildAndLogCitationMappings(
@@ -3895,6 +3954,28 @@ public sealed partial class CommandService
                    """;
         }
 
+        if (normalized == "skill" || normalized == "skills")
+        {
+            return """
+                   [스킬 도움말]
+                   자연어 예시:
+                   - "스킬 목록 보여줘"
+                   - "casual-empathy 스킬 사용해"
+                   - "스킬 해제"
+                   - "공감하는 일상 대화 스킬 만들어줘"
+
+                   정확히 제어할 때:
+                   - /skill list
+                   - /skill use <name> [project|global]
+                   - /skill get <name> [project|global]
+                   - /skill create <name> [project|global]
+                     한 줄 설명
+                     ---
+                     스킬 본문
+                   - /skill off
+                   """;
+        }
+
         if (normalized == "coding")
         {
             return """
@@ -4088,6 +4169,8 @@ public sealed partial class CommandService
                - /refactor read <path>
                - /model <groq|gemini|copilot|cerebras|codex>
                - /llm status
+               - /skill list
+               - /skill use <name>
                - /doctor
                - /routine list
                - /plan list
@@ -4097,6 +4180,7 @@ public sealed partial class CommandService
 
                더 보기:
                - /help llm
+               - /help skill
                - /help coding
                - /help refactor
                - /help doctor
