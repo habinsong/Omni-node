@@ -7626,6 +7626,8 @@ import {
       const sessionDirty = uiPreferencesSessionStartRef.current
         ? JSON.stringify(uiPreferencesSessionStartRef.current) !== JSON.stringify(uiPreferences)
         : false;
+      const preview = backupState.preview || null;
+      const conflicts = Array.isArray(preview?.conflicts) ? preview.conflicts : [];
 
       function renderShortcutRow(row) {
         const value = shortcuts[row.key] || "";
