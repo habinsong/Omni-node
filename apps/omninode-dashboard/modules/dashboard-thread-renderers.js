@@ -263,7 +263,10 @@ export function renderMessagesPanel(props) {
     sanitizeCodingAssistantText,
     messageListRef,
     parseChatMultiComparisonMessage,
-    parseCodingMultiComparisonMessage
+    parseCodingMultiComparisonMessage,
+    ttsSupported,
+    onSpeakMessage,
+    onStopSpeaking
   } = props;
 
   const optimisticUserEntry = optimisticUserByKey[currentKey];
@@ -332,7 +335,23 @@ export function renderMessagesPanel(props) {
                 })
               : [
                   item.meta ? e("div", { key: "meta", className: "bubble-meta" }, item.meta) : null,
-                  e(MarkdownBubbleText, { key: "body", text: bubbleText })
+                  e(MarkdownBubbleText, { key: "body", text: bubbleText }),
+                  !isUser && ttsSupported && typeof onSpeakMessage === "function"
+                    ? e("div", { key: "tts", className: "bubble-tts-actions" },
+                        e("button", {
+                          type: "button",
+                          className: "bubble-tts-btn",
+                          title: "음성으로 듣기",
+                          onClick: () => onSpeakMessage(bubbleText || item.text || "")
+                        }, "🔊"),
+                        e("button", {
+                          type: "button",
+                          className: "bubble-tts-btn ghost",
+                          title: "정지",
+                          onClick: () => typeof onStopSpeaking === "function" ? onStopSpeaking() : null
+                        }, "⏹")
+                      )
+                    : null
                 ]
           ),
           isUser

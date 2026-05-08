@@ -7093,7 +7093,10 @@ import {
         sanitizeCodingAssistantText,
         messageListRef,
         parseChatMultiComparisonMessage: chatMultiUtils.parseChatMultiComparisonMessage,
-        parseCodingMultiComparisonMessage: chatMultiUtils.parseCodingMultiComparisonMessage
+        parseCodingMultiComparisonMessage: chatMultiUtils.parseCodingMultiComparisonMessage,
+        ttsSupported: isSpeechSynthesisSupported(),
+        onSpeakMessage: (text) => speakText(text, uiPreferences.speech),
+        onStopSpeaking: () => stopSpeaking()
       });
     }
 

@@ -18126,3 +18126,68 @@ video {
 :root[data-theme="dark"] body .tts-field > span {
   color: var(--dark-muted) !important;
 }
+
+/* v18 — Per-message TTS playback buttons (assistant bubble) */
+.bubble-tts-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  justify-content: flex-end;
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+}
+
+.bubble.assistant:hover .bubble-tts-actions,
+.bubble-tts-actions:hover,
+.bubble-tts-actions:focus-within {
+  opacity: 1;
+}
+
+.bubble-tts-btn {
+  border: 1px solid var(--line, #d6e0ec);
+  border-radius: 8px;
+  background: var(--surface-soft, #f4f7fb);
+  color: var(--text, #222);
+  padding: 2px 8px;
+  height: 26px;
+  min-width: 32px;
+  font-size: 13px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.bubble-tts-btn:hover {
+  background: var(--surface-hover, #e8eef6);
+  border-color: var(--line-strong, #b8c4d4);
+}
+
+.bubble-tts-btn.ghost {
+  background: transparent;
+  color: var(--text-secondary, #5b6b7e);
+}
+
+.bubble-tts-btn:focus-visible {
+  outline: 2px solid var(--accent, #4f8cff);
+  outline-offset: 1px;
+}
+
+:root[data-theme="dark"] body .bubble-tts-btn {
+  background: var(--dark-surface-2) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body .bubble-tts-btn.ghost {
+  background: transparent !important;
+  color: var(--dark-muted) !important;
+}
+
+:root[data-theme="dark"] body .bubble-tts-btn:hover {
+  background: var(--dark-surface-1) !important;
+}
+
+@media (max-width: 640px) {
+  .bubble-tts-actions {
+    opacity: 1;
+  }
+}
