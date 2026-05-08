@@ -294,8 +294,7 @@ import {
       rate: 1.0,
       pitch: 1.0,
       volume: 1.0,
-      stripMarkdown: true,
-      maxChars: 1500
+      stripMarkdown: true
     }
   };
   const TAB_SHORTCUTS = [
@@ -590,28 +589,31 @@ import {
   }
 
   function sanitizeForSpeech(text, opts) {
-    const { stripMarkdown = true, maxChars = 1500 } = opts || {};
+    const { stripMarkdown = true } = opts || {};
     let cleaned = `${text || ""}`;
     if (!cleaned) return "";
     if (stripMarkdown) {
-      cleaned = cleaned.replace(/```[\s\S]*?```/g, " 코드 블록 생략. ");
+      // 코드 블록은 통째로 건너뛴다 (안 읽음)
+      cleaned = cleaned.replace(/```[\s\S]*?```/g, " ");
+      // 인라인 코드: 백틱만 제거하고 내용만 읽음
       cleaned = cleaned.replace(/`([^`]+)`/g, "$1");
+      // 헤더/리스트/인용 마커 제거 (내용은 그대로)
       cleaned = cleaned.replace(/^\s{0,3}#+\s+/gm, "");
+      cleaned = cleaned.replace(/^\s*[-*+]\s+/gm, "");
+      cleaned = cleaned.replace(/^\s*>\s+/gm, "");
+      // 강조/취소선 기호 제거
       cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, "$1");
       cleaned = cleaned.replace(/\*([^*]+)\*/g, "$1");
       cleaned = cleaned.replace(/__([^_]+)__/g, "$1");
       cleaned = cleaned.replace(/_([^_]+)_/g, "$1");
       cleaned = cleaned.replace(/~~([^~]+)~~/g, "$1");
+      // 링크 [text](url) → text 만 발음
       cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
-      cleaned = cleaned.replace(/!\[[^\]]*\]\([^)]+\)/g, " 이미지 생략. ");
-      cleaned = cleaned.replace(/https?:\/\/\S+/g, "링크");
-      cleaned = cleaned.replace(/^\s*[-*+]\s+/gm, "");
-      cleaned = cleaned.replace(/^\s*>\s+/gm, "");
+      // 이미지·단독 URL 은 건너뛰기
+      cleaned = cleaned.replace(/!\[[^\]]*\]\([^)]+\)/g, " ");
+      cleaned = cleaned.replace(/https?:\/\/\S+/g, " ");
     }
-    cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
-    if (cleaned.length > maxChars) {
-      cleaned = cleaned.slice(0, maxChars) + " 이하 생략.";
-    }
+    cleaned = cleaned.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
     return cleaned;
   }
 
@@ -627,8 +629,7 @@ import {
   function speakText(text, prefs) {
     if (typeof window === "undefined" || !window.speechSynthesis) return false;
     const cleaned = sanitizeForSpeech(text, {
-      stripMarkdown: prefs?.stripMarkdown !== false,
-      maxChars: prefs?.maxChars || 1500
+      stripMarkdown: prefs?.stripMarkdown !== false
     });
     if (!cleaned) return false;
     try {
