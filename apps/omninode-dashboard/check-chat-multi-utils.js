@@ -17,6 +17,7 @@ const expectedGatewayKeys = [
   "groq",
   "gemini",
   "cerebras",
+  "nvidia",
   "copilot",
   "codex",
   "summary",
@@ -26,6 +27,7 @@ const expectedGatewayKeys = [
   "groqModel",
   "geminiModel",
   "cerebrasModel",
+  "nvidiaModel",
   "copilotModel",
   "codexModel",
   "requestedSummaryProvider",
@@ -75,6 +77,7 @@ function run() {
     groq: "g",
     gemini: "ge",
     cerebras: "c",
+    nvidia: "n",
     copilot: "co",
     codex: "cx",
     summary: "sum",
@@ -84,6 +87,7 @@ function run() {
     groqModel: " openai/gpt-oss-120b ",
     geminiModel: " gemini-3-flash-preview ",
     cerebrasModel: " zai-glm-4.7 ",
+    nvidiaModel: " meta/llama-3.1-70b-instruct ",
     copilotModel: " gpt-5 ",
     codexModel: " codex-mini ",
     requestedSummaryProvider: " auto ",
@@ -97,6 +101,7 @@ function run() {
   assert.equal(normalized.groqModel, "openai/gpt-oss-120b");
   assert.equal(normalized.geminiModel, "gemini-3-flash-preview");
   assert.equal(normalized.cerebrasModel, "zai-glm-4.7");
+  assert.equal(normalized.nvidiaModel, "meta/llama-3.1-70b-instruct");
   assert.equal(normalized.copilotModel, "gpt-5");
   assert.equal(normalized.codexModel, "codex-mini");
   assert.equal(normalized.requestedSummaryProvider, "auto");
@@ -109,6 +114,7 @@ function run() {
   assert.equal(labels.groqLabel, "Groq (openai/gpt-oss-120b)");
   assert.equal(labels.geminiLabel, "Gemini (gemini-3-flash-preview)");
   assert.equal(labels.cerebrasLabel, "Cerebras (zai-glm-4.7 (preview))");
+  assert.equal(labels.nvidiaLabel, "NVIDIA NIM (meta/llama-3.1-70b-instruct)");
   assert.equal(labels.copilotLabel, "Copilot (gpt-5)");
   assert.equal(labels.codexLabel, "Codex (codex-mini)");
   assert.equal(labels.summaryLabel, "요약 (요청=auto, 실제=gemini)");
@@ -126,6 +132,7 @@ function run() {
   const comparisonPayload = `${MULTI_COMPARE_PREFIX}${JSON.stringify({
     entries: [
       { provider: "groq", model: "openai/gpt-oss-120b", text: "g" },
+      { provider: "nvidia", model: "meta/llama-3.1-70b-instruct", text: "n" },
       { provider: "codex", model: "codex-mini", text: "cx" }
     ]
   })}`;
@@ -133,13 +140,13 @@ function run() {
   assert.ok(comparison, "비교 payload 파싱 결과가 null이면 안 됩니다.");
   assert.deepEqual(
     comparison.entries.map((entry) => entry.heading),
-    ["Groq (openai/gpt-oss-120b)", "Codex (codex-mini)"]
+    ["Groq (openai/gpt-oss-120b)", "NVIDIA NIM (meta/llama-3.1-70b-instruct)", "Codex (codex-mini)"]
   );
 
   const snapshot = buildChatMultiRenderSnapshot(payload);
   assert.deepEqual(
     snapshot.entries.map((section) => section.provider),
-    ["groq", "gemini", "cerebras", "copilot", "codex"]
+    ["groq", "gemini", "cerebras", "nvidia", "copilot", "codex"]
   );
   assert.deepEqual(
     snapshot.entries.map((section) => section.heading),
@@ -147,6 +154,7 @@ function run() {
       "Groq (openai/gpt-oss-120b)",
       "Gemini (gemini-3-flash-preview)",
       "Cerebras (zai-glm-4.7 (preview))",
+      "NVIDIA NIM (meta/llama-3.1-70b-instruct)",
       "Copilot (gpt-5)",
       "Codex (codex-mini)"
     ]

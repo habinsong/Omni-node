@@ -13,7 +13,7 @@ public sealed record ProviderAvailability(
 
 public sealed class ProviderRegistry
 {
-    private static readonly string[] AutoPriority = { "gemini", "groq", "cerebras", "copilot", "codex" };
+    private static readonly string[] AutoPriority = { "gemini", "groq", "nvidia", "cerebras", "copilot", "codex" };
     private readonly LlmRouter _llmRouter;
     private readonly CopilotCliWrapper _copilotWrapper;
     private readonly CodexCliWrapper _codexWrapper;
@@ -50,7 +50,7 @@ public sealed class ProviderRegistry
 
     public async Task<IReadOnlyList<ProviderAvailability>> GetAvailabilitySnapshotAsync(CancellationToken cancellationToken)
     {
-        var items = new List<ProviderAvailability>(5)
+        var items = new List<ProviderAvailability>(6)
         {
             _llmRouter.HasGeminiApiKey()
                 ? new ProviderAvailability("gemini", true, "configured", true, true, true, false, true)
@@ -58,6 +58,9 @@ public sealed class ProviderRegistry
             _llmRouter.HasGroqApiKey()
                 ? new ProviderAvailability("groq", true, "configured", false, true, false, false, true)
                 : new ProviderAvailability("groq", false, "api_key_missing", false, true, false, false, true),
+            _llmRouter.HasNvidiaApiKey()
+                ? new ProviderAvailability("nvidia", true, "configured", false, true, false, false, true)
+                : new ProviderAvailability("nvidia", false, "api_key_missing", false, true, false, false, true),
             _llmRouter.HasCerebrasApiKey()
                 ? new ProviderAvailability("cerebras", true, "configured", false, true, false, false, true)
                 : new ProviderAvailability("cerebras", false, "api_key_missing", false, true, false, false, true)

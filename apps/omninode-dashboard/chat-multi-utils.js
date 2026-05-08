@@ -31,6 +31,7 @@
       groq: toText(msg.groq),
       gemini: toText(msg.gemini),
       cerebras: toText(msg.cerebras),
+      nvidia: toText(msg.nvidia),
       copilot: toText(msg.copilot),
       codex: toText(msg.codex),
       summary: toText(msg.summary),
@@ -40,6 +41,7 @@
       groqModel: toMetaText(msg.groqModel),
       geminiModel: toMetaText(msg.geminiModel),
       cerebrasModel: toMetaText(msg.cerebrasModel),
+      nvidiaModel: toMetaText(msg.nvidiaModel),
       copilotModel: toMetaText(msg.copilotModel),
       codexModel: toMetaText(msg.codexModel),
       requestedSummaryProvider: toMetaText(msg.requestedSummaryProvider),
@@ -57,6 +59,9 @@
     }
     if (normalized === "cerebras") {
       return "Cerebras";
+    }
+    if (normalized === "nvidia") {
+      return "NVIDIA NIM";
     }
     if (normalized === "copilot") {
       return "Copilot";
@@ -110,6 +115,9 @@
       if (normalized === "cerebras") {
         return result.cerebrasModel;
       }
+      if (normalized === "nvidia") {
+        return result.nvidiaModel;
+      }
       if (normalized === "copilot") {
         return result.copilotModel;
       }
@@ -122,6 +130,7 @@
       groqLabel: buildProviderLabel("Groq", result.groqModel),
       geminiLabel: buildProviderLabel("Gemini", result.geminiModel),
       cerebrasLabel: buildProviderLabel("Cerebras", result.cerebrasModel),
+      nvidiaLabel: buildProviderLabel("NVIDIA NIM", result.nvidiaModel),
       copilotLabel: buildProviderLabel("Copilot", result.copilotModel),
       codexLabel: buildProviderLabel("Codex", result.codexModel),
       summaryLabel: buildSummaryLabel(result.requestedSummaryProvider, result.resolvedSummaryProvider),
@@ -175,6 +184,7 @@
       { provider: "groq", heading: labels.groqLabel, body: normalized.groq, model: normalized.groqModel },
       { provider: "gemini", heading: labels.geminiLabel, body: normalized.gemini, model: normalized.geminiModel },
       { provider: "cerebras", heading: labels.cerebrasLabel, body: normalized.cerebras, model: normalized.cerebrasModel },
+      { provider: "nvidia", heading: labels.nvidiaLabel, body: normalized.nvidia, model: normalized.nvidiaModel },
       { provider: "copilot", heading: labels.copilotLabel, body: normalized.copilot, model: normalized.copilotModel },
       { provider: "codex", heading: labels.codexLabel, body: normalized.codex, model: normalized.codexModel }
     ].forEach((entry) => {

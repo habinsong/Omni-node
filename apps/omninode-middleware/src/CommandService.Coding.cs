@@ -65,7 +65,8 @@ public sealed partial class CommandService
                     request.GeminiModel,
                     request.CerebrasModel,
                     request.CopilotModel,
-                    request.CodexModel
+                    request.CodexModel,
+                    request.NvidiaModel
                 ),
                 cancellationToken,
                 "coding_single"
@@ -401,7 +402,16 @@ public sealed partial class CommandService
                 sharedPrepared.RetryStopReason
             ));
         }
-        var contextualInput = BuildContextualInput(session.SessionId, sharedPrepared.Text, session.LinkedMemoryNotes);
+        var thinkPlusPreText = sharedPrepared.Text;
+        if (request.ThinkPlusEnabled)
+        {
+            var thinkPlusContext = await BuildThinkPlusContextAsync(effectiveInput, request.Source, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrEmpty(thinkPlusContext))
+            {
+                thinkPlusPreText = thinkPlusContext + thinkPlusPreText;
+            }
+        }
+        var contextualInput = BuildContextualInput(session.SessionId, thinkPlusPreText, session.LinkedMemoryNotes);
 
         var availableProviders = await GetAvailableProvidersAsync(cancellationToken);
         if (availableProviders.Count == 0)
@@ -445,6 +455,7 @@ public sealed partial class CommandService
                     "groq" => request.GroqModel,
                     "gemini" => request.GeminiModel,
                     "cerebras" => request.CerebrasModel,
+                    "nvidia" => request.NvidiaModel,
                     "copilot" => request.CopilotModel,
                     "codex" => request.CodexModel,
                     _ => null
@@ -494,6 +505,7 @@ public sealed partial class CommandService
                     "groq" => request.GroqModel,
                     "gemini" => request.GeminiModel,
                     "cerebras" => request.CerebrasModel,
+                    "nvidia" => request.NvidiaModel,
                     "copilot" => request.CopilotModel,
                     "codex" => request.CodexModel,
                     _ => null
@@ -798,7 +810,16 @@ public sealed partial class CommandService
                 sharedPrepared.RetryStopReason
             ));
         }
-        var contextualInput = BuildContextualInput(session.SessionId, sharedPrepared.Text, session.LinkedMemoryNotes);
+        var thinkPlusPreText = sharedPrepared.Text;
+        if (request.ThinkPlusEnabled)
+        {
+            var thinkPlusContext = await BuildThinkPlusContextAsync(rawInput, request.Source, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrEmpty(thinkPlusContext))
+            {
+                thinkPlusPreText = thinkPlusContext + thinkPlusPreText;
+            }
+        }
+        var contextualInput = BuildContextualInput(session.SessionId, thinkPlusPreText, session.LinkedMemoryNotes);
         var workers = await GetAvailableProvidersAsync(cancellationToken);
         workers = workers
             .Where(provider =>
@@ -808,6 +829,7 @@ public sealed partial class CommandService
                     "groq" => request.GroqModel,
                     "gemini" => request.GeminiModel,
                     "cerebras" => request.CerebrasModel,
+                    "nvidia" => request.NvidiaModel,
                     "copilot" => request.CopilotModel,
                     "codex" => request.CodexModel,
                     _ => null
@@ -859,6 +881,7 @@ public sealed partial class CommandService
                         "groq" => request.GroqModel,
                         "gemini" => request.GeminiModel,
                         "cerebras" => request.CerebrasModel,
+                        "nvidia" => request.NvidiaModel,
                         "copilot" => request.CopilotModel,
                         "codex" => request.CodexModel,
                         _ => null
@@ -951,7 +974,8 @@ public sealed partial class CommandService
             request.GeminiModel,
             request.CerebrasModel,
             request.CopilotModel,
-            request.CodexModel
+            request.CodexModel,
+            request.NvidiaModel
         );
         var workerChatResults = workerResults
             .Select(x => new LlmSingleChatResult(x.Provider, x.Model, x.RawResponse))
@@ -972,7 +996,7 @@ public sealed partial class CommandService
         if (requestedAggregateProvider == "auto"
             && string.Equals(aggregateProvider, "copilot", StringComparison.OrdinalIgnoreCase))
         {
-            var fallbackAggregateProvider = new[] { "codex", "gemini", "cerebras", "groq" }
+                var fallbackAggregateProvider = new[] { "codex", "gemini", "nvidia", "cerebras", "groq" }
                 .FirstOrDefault(candidate => successfulWorkers.Any(worker => worker.Provider.Equals(candidate, StringComparison.OrdinalIgnoreCase)));
             if (!string.IsNullOrWhiteSpace(fallbackAggregateProvider))
             {
@@ -998,6 +1022,7 @@ public sealed partial class CommandService
                 "groq" => request.GroqModel,
                 "gemini" => request.GeminiModel,
                 "cerebras" => request.CerebrasModel,
+                "nvidia" => request.NvidiaModel,
                 "copilot" => request.CopilotModel,
                 "codex" => request.CodexModel,
                 _ => null

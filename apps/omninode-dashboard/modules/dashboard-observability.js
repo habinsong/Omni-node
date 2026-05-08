@@ -80,7 +80,7 @@ export const OPS_DOMAIN_FILTERS = [
   { key: "rag", label: "rag" }
 ];
 
-export const PROVIDER_RUNTIME_KEYS = ["groq", "gemini", "cerebras", "copilot", "codex", "auto", "unknown"];
+export const PROVIDER_RUNTIME_KEYS = ["groq", "gemini", "cerebras", "nvidia", "copilot", "codex", "auto", "unknown"];
 export const GUARD_OBS_CHANNEL_KEYS = ["chat", "coding", "telegram", "search", "other"];
 export const GUARD_RETRY_TIMELINE_SCHEMA_VERSION = "guard_retry_timeline.v1";
 export const GUARD_RETRY_TIMELINE_CHANNELS = ["chat", "coding", "telegram"];
@@ -370,6 +370,9 @@ export function normalizeProviderName(value) {
   if (lowered.includes("cerebras")) {
     return "cerebras";
   }
+  if (lowered.includes("nvidia") || lowered.includes("nim")) {
+    return "nvidia";
+  }
   if (lowered.includes("copilot")) {
     return "copilot";
   }
@@ -439,6 +442,7 @@ export function buildProviderRuntimeEventsFromMessage(msg) {
       { key: "groq", model: msg.groqModel, text: msg.groq },
       { key: "gemini", model: msg.geminiModel, text: msg.gemini },
       { key: "cerebras", model: msg.cerebrasModel, text: msg.cerebras },
+      { key: "nvidia", model: msg.nvidiaModel, text: msg.nvidia },
       { key: "copilot", model: msg.copilotModel, text: msg.copilot },
       { key: "codex", model: msg.codexModel, text: msg.codex }
     ];
@@ -523,7 +527,7 @@ export function buildProviderRuntimeEventsFromMessage(msg) {
     if (!raw) {
       return [];
     }
-    if (!/(chat|coding|provider|groq|gemini|cerebras|copilot)/i.test(raw)) {
+    if (!/(chat|coding|provider|groq|gemini|cerebras|nvidia|nim|copilot)/i.test(raw)) {
       return [];
     }
     return [{

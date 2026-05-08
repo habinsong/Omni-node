@@ -32,7 +32,10 @@ export function renderConversationPanel(props) {
     deleteConversation,
     conversationSearchState,
     onConversationSearch,
-    clearConversationSearch
+    clearConversationSearch,
+    modeItems = [],
+    activeMode = "",
+    onSelectMode
   } = props;
 
   const keyword = currentConversationFilter.trim();
@@ -157,11 +160,21 @@ export function renderConversationPanel(props) {
         })
     ),
     e("div", { className: "conversation-bottom-actions" },
-      e("button", {
-        className: "btn primary conversation-new-btn conversation-bottom-new-btn",
-        onClick: () => createConversation(scope, mode, "", metaProject, metaCategory, parseTags(metaTags))
-      }, "새 대화"),
-      e("div", { className: "conversation-actions conversation-actions-bottom-row" },
+      Array.isArray(modeItems) && modeItems.length > 0 && typeof onSelectMode === "function"
+        ? e("div", { className: "conversation-mobile-mode-strip" },
+          modeItems.map((item) => e("button", {
+            key: item.key,
+            type: "button",
+            className: `conversation-mobile-mode-btn ${activeMode === item.key ? "active" : ""}`,
+            onClick: () => onSelectMode(item.key)
+          }, item.label))
+        )
+        : null,
+      e("div", { className: "conversation-mobile-action-strip" },
+        e("button", {
+          className: "btn primary conversation-new-btn conversation-bottom-new-btn",
+          onClick: () => createConversation(scope, mode, "", metaProject, metaCategory, parseTags(metaTags))
+        }, "새 대화"),
         e("button", {
           className: `btn action-select-btn ${selectionMode ? "active" : ""}`,
           onClick: toggleSelectionMode
@@ -175,6 +188,27 @@ export function renderConversationPanel(props) {
           disabled: selectionMode ? selectedDeleteConversationIds.length === 0 : !currentConversationId,
           onClick: deleteConversation
         }, "삭제")
+      ),
+      e("div", { className: "conversation-desktop-actions" },
+        e("button", {
+          className: "btn primary conversation-new-btn conversation-bottom-new-btn",
+          onClick: () => createConversation(scope, mode, "", metaProject, metaCategory, parseTags(metaTags))
+        }, "새 대화"),
+        e("div", { className: "conversation-actions conversation-actions-bottom-row" },
+          e("button", {
+            className: `btn action-select-btn ${selectionMode ? "active" : ""}`,
+            onClick: toggleSelectionMode
+          }, selectionMode ? "선택 종료" : "선택"),
+          e("button", {
+            className: "btn action-memory-btn",
+            onClick: () => clearScopeMemory(scope)
+          }, "메모리 초기화"),
+          e("button", {
+            className: "btn action-delete-btn",
+            disabled: selectionMode ? selectedDeleteConversationIds.length === 0 : !currentConversationId,
+            onClick: deleteConversation
+          }, "삭제")
+        )
       )
     )
   );

@@ -373,6 +373,8 @@ function resolveProviderModelOptions(node, field, catalogs) {
       return readCatalogOptions(catalogs, "geminiModelOptions")
     case "cerebras":
       return readCatalogOptions(catalogs, "cerebrasModelOptions")
+    case "nvidia":
+      return readCatalogOptions(catalogs, "nvidiaModelOptions")
     case "copilot":
       return readCatalogOptions(catalogs, "copilotModelOptions")
     case "codex":
@@ -787,6 +789,7 @@ function countConfiguredWorkers(config) {
     "groqModel",
     "geminiModel",
     "cerebrasModel",
+    "nvidiaModel",
     "copilotModel",
     "codexModel"
   ].filter((key) => {
@@ -1671,6 +1674,7 @@ function buildLogicNodeProviderRows(node) {
   append("Groq", config.groqModel)
   append("Gemini", config.geminiModel)
   append("Cerebras", config.cerebrasModel)
+  append("NVIDIA NIM", config.nvidiaModel)
   append("Copilot", config.copilotModel)
   append("Codex", config.codexModel)
   return rows

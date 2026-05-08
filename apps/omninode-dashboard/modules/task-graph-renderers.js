@@ -143,7 +143,8 @@ function resolveProviderModelLabel(options) {
     selectedCopilotModel,
     defaultCodexModel,
     geminiModelChoices,
-    cerebrasModelChoices
+    cerebrasModelChoices,
+    nvidiaModelChoices
   } = options;
 
   if (provider === "groq") {
@@ -160,6 +161,10 @@ function resolveProviderModelLabel(options) {
 
   if (provider === "cerebras") {
     return cerebrasModelChoices?.[0]?.id || "-";
+  }
+
+  if (provider === "nvidia") {
+    return nvidiaModelChoices?.[0]?.id || "-";
   }
 
   if (provider === "codex") {
@@ -185,6 +190,7 @@ function renderAutomationRouteEditor(e, options) {
     defaultCodexModel,
     geminiModelChoices,
     cerebrasModelChoices,
+    nvidiaModelChoices,
     send,
     disabled
   } = options;
@@ -197,12 +203,14 @@ function renderAutomationRouteEditor(e, options) {
     selectedCopilotModel,
     defaultCodexModel,
     geminiModelChoices,
-    cerebrasModelChoices
+    cerebrasModelChoices,
+    nvidiaModelChoices
   });
   const providerOptions = [
     { value: "groq", label: "Groq" },
     { value: "gemini", label: "Gemini" },
     { value: "cerebras", label: "Cerebras" },
+    { value: "nvidia", label: "NVIDIA NIM" },
     { value: "codex", label: "Codex" },
     { value: "copilot", label: "Copilot" }
   ];
@@ -210,7 +218,9 @@ function renderAutomationRouteEditor(e, options) {
     ? `Gemini 기본 모델 ${geminiModelChoices?.[0]?.label || modelLabel}`
     : provider === "cerebras"
       ? `Cerebras 기본 모델 ${cerebrasModelChoices?.[0]?.label || modelLabel}`
-      : `Codex 기본 모델 ${defaultCodexModel || modelLabel}`;
+      : provider === "nvidia"
+        ? `NVIDIA NIM 기본 모델 ${nvidiaModelChoices?.[0]?.label || modelLabel}`
+        : `Codex 기본 모델 ${defaultCodexModel || modelLabel}`;
   const modelControl = provider === "groq"
     ? e("div", { className: "automation-model-control" },
       e("select", {
@@ -275,7 +285,7 @@ function renderAutomationRouteEditor(e, options) {
         e("input", {
           className: "input",
           value: chainValue,
-          placeholder: "groq, gemini, cerebras, codex, copilot",
+          placeholder: "groq, gemini, nvidia, cerebras, codex, copilot",
           onChange: (event) => setRoutingPolicyChain(categoryKey, event.target.value)
         })
       )
@@ -362,6 +372,7 @@ export function renderTaskGraphPanel(props) {
     defaultCodexModel,
     geminiModelChoices,
     cerebrasModelChoices,
+    nvidiaModelChoices,
     send
   } = props;
 
@@ -479,6 +490,7 @@ export function renderTaskGraphPanel(props) {
               defaultCodexModel,
               geminiModelChoices,
               cerebrasModelChoices,
+              nvidiaModelChoices,
               send,
               disabled
             }),
@@ -497,6 +509,7 @@ export function renderTaskGraphPanel(props) {
               defaultCodexModel,
               geminiModelChoices,
               cerebrasModelChoices,
+              nvidiaModelChoices,
               send,
               disabled
             }),
@@ -515,6 +528,7 @@ export function renderTaskGraphPanel(props) {
               defaultCodexModel,
               geminiModelChoices,
               cerebrasModelChoices,
+              nvidiaModelChoices,
               send,
               disabled
             })
@@ -540,6 +554,7 @@ export function renderTaskGraphPanel(props) {
                 defaultCodexModel,
                 geminiModelChoices,
                 cerebrasModelChoices,
+                nvidiaModelChoices,
                 send,
                 disabled
               }),
@@ -558,6 +573,7 @@ export function renderTaskGraphPanel(props) {
                 defaultCodexModel,
                 geminiModelChoices,
                 cerebrasModelChoices,
+                nvidiaModelChoices,
                 send,
                 disabled
               }),
@@ -576,6 +592,7 @@ export function renderTaskGraphPanel(props) {
                 defaultCodexModel,
                 geminiModelChoices,
                 cerebrasModelChoices,
+                nvidiaModelChoices,
                 send,
                 disabled
               })

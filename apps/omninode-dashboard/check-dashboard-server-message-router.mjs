@@ -334,7 +334,7 @@ function createContext(store, calls) {
         }]
         : [],
       summarizeProviderRuntimeEntry: (entry) => `${entry.provider}:${entry.statusLabel}`,
-      PROVIDER_RUNTIME_KEYS: ["groq", "gemini", "cerebras", "copilot", "codex", "auto", "unknown"],
+      PROVIDER_RUNTIME_KEYS: ["groq", "gemini", "cerebras", "nvidia", "copilot", "codex", "auto", "unknown"],
       buildGuardObsEvent: (msg) => msg.type === "guard_obs_event"
         ? { channel: "chat", blocked: false, retryRequired: false }
         : null,
@@ -598,6 +598,19 @@ function run() {
 
   assert.equal(logicStore.errors["logic:main"], "오류: graphId가 필요합니다.");
 
+  const remoteErrorCountBefore = calls.logs.length;
+  handleDashboardServerMessage({
+    type: "error",
+    message: "forbidden_remote_dashboard"
+  }, createContext(store, calls));
+  handleDashboardServerMessage({
+    type: "error",
+    message: "forbidden remote dashboard"
+  }, createContext(store, calls));
+
+  assert.equal(calls.logs.length, remoteErrorCountBefore);
+  assert.equal(store.errors["chat:single"], undefined);
+
   handleDashboardServerMessage({
     type: "error",
     message: "coding unauthorized"
@@ -612,7 +625,7 @@ function run() {
 
   console.log(JSON.stringify({
     ok: true,
-    assertions: 33,
+    assertions: 35,
     delegated: calls.delegated,
     requestTypes: calls.requests.map((entry) => entry.type),
     toolResultType: store.toolResultItems[0].type,

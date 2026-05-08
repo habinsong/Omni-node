@@ -332,6 +332,13 @@ export function buildProviderHealthRows({ settingsState, copilotStatus, codexSta
       reason: settingsState.cerebrasApiKeySet ? "configured" : "Cerebras API 키 필요"
     },
     {
+      provider: "nvidia",
+      statusLabel: settingsState.nvidiaApiKeySet ? "ready" : "api_key_missing",
+      statusTone: settingsState.nvidiaApiKeySet ? "ok" : "error",
+      ready: !!settingsState.nvidiaApiKeySet,
+      reason: settingsState.nvidiaApiKeySet ? "configured" : "NVIDIA NIM API 키 필요"
+    },
+    {
       provider: "copilot",
       statusLabel: copilotReady ? "ready" : (copilotAuthRequired ? "auth_required" : (copilotMissing ? "not_installed" : "unavailable")),
       statusTone: copilotReady ? "ok" : (copilotAuthRequired ? "warn" : "error"),

@@ -71,6 +71,19 @@ export function buildDashboardWsUrl(locationLike) {
   return `${proto}://${target.host}/ws/`;
 }
 
+export function isRemoteDashboardHost(locationLike) {
+  const target = locationLike || (typeof window !== "undefined" ? window.location : null);
+  const hostname = (target?.hostname || "").trim().toLowerCase();
+  if (!hostname) {
+    return false;
+  }
+
+  return hostname !== "localhost"
+    && hostname !== "::1"
+    && hostname !== "[::1]"
+    && !hostname.startsWith("127.");
+}
+
 export function flushQueuedPayloads(ws, outboundQueue) {
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     return false;

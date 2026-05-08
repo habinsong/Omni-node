@@ -69,6 +69,7 @@ public sealed partial class CommandService
         string? copilotModel,
         string? cerebrasModel,
         string? codexModel,
+        string? nvidiaModel,
         IReadOnlyList<InputAttachment>? attachments,
         CancellationToken cancellationToken
     )
@@ -83,6 +84,7 @@ public sealed partial class CommandService
             copilotModel,
             cerebrasModel,
             codexModel,
+            nvidiaModel,
             attachments,
             cancellationToken
         );
@@ -97,6 +99,7 @@ public sealed partial class CommandService
         string? cerebrasModel,
         string? summaryProvider,
         string? codexModel,
+        string? nvidiaModel,
         IReadOnlyList<InputAttachment>? attachments,
         CancellationToken cancellationToken
     )
@@ -110,6 +113,7 @@ public sealed partial class CommandService
             cerebrasModel,
             summaryProvider,
             codexModel,
+            nvidiaModel,
             attachments,
             cancellationToken
         );
@@ -1447,9 +1451,18 @@ public sealed partial class CommandService
                 basePrepared.RetryStopReason
             );
         }
+        var thinkPlusPreText = basePrepared.Text;
+        if (request.ThinkPlusEnabled)
+        {
+            var thinkPlusContext = await BuildThinkPlusContextAsync(rawInput, request.Source, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrEmpty(thinkPlusContext))
+            {
+                thinkPlusPreText = thinkPlusContext + thinkPlusPreText;
+            }
+        }
         var contextualInput = BuildContextualInput(
             session.SessionId,
-            basePrepared.Text,
+            thinkPlusPreText,
             session.LinkedMemoryNotes,
             includeLocalTimeHint: true
         );
@@ -1464,6 +1477,7 @@ public sealed partial class CommandService
             request.CopilotModel,
             request.CerebrasModel,
             request.CodexModel,
+            request.NvidiaModel,
             request.Attachments,
             cancellationToken
         );
@@ -1544,6 +1558,9 @@ public sealed partial class CommandService
         var localCerebrasModel = IsDisabledModelSelection(request.CerebrasModel)
             ? "none"
             : NormalizeModelSelection(request.CerebrasModel) ?? _config.CerebrasModel;
+        var localNvidiaModel = IsDisabledModelSelection(request.NvidiaModel)
+            ? "none"
+            : NormalizeModelSelection(request.NvidiaModel) ?? _config.NvidiaModel;
         var localCopilotModel = IsDisabledModelSelection(request.CopilotModel)
             ? "none"
             : NormalizeModelSelection(request.CopilotModel) ?? _copilotWrapper.GetSelectedModel();
@@ -1586,7 +1603,9 @@ public sealed partial class CommandService
                 "로컬 안내 응답으로 Codex 호출은 생략되었습니다.",
                 localCodexModel,
                 localAssistantInfoReply,
-                "로컬 안내 응답이라 모델별 차이 정리는 생략되었습니다."
+                "로컬 안내 응답이라 모델별 차이 정리는 생략되었습니다.",
+                "로컬 안내 응답으로 NVIDIA NIM 호출은 생략되었습니다.",
+                localNvidiaModel
             );
         }
 
@@ -1625,7 +1644,9 @@ public sealed partial class CommandService
                 "로컬 사용량 조회로 Codex 응답은 생략되었습니다.",
                 localCodexModel,
                 "로컬 사용량 조회라 공통 핵심 정리는 생략되었습니다.",
-                "로컬 사용량 조회라 부분 차이 정리는 생략되었습니다."
+                "로컬 사용량 조회라 부분 차이 정리는 생략되었습니다.",
+                "로컬 사용량 조회로 NVIDIA NIM 응답은 생략되었습니다.",
+                localNvidiaModel
             );
         }
 
@@ -1672,12 +1693,23 @@ public sealed partial class CommandService
                 basePrepared.UnsupportedMessage,
                 localCodexModel,
                 "공통 핵심 정리를 생략했습니다.",
-                "부분 차이 정리를 생략했습니다."
+                "부분 차이 정리를 생략했습니다.",
+                basePrepared.UnsupportedMessage,
+                localNvidiaModel
             );
+        }
+        var thinkPlusPreText = basePrepared.Text;
+        if (request.ThinkPlusEnabled)
+        {
+            var thinkPlusContext = await BuildThinkPlusContextAsync(rawInput, request.Source, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrEmpty(thinkPlusContext))
+            {
+                thinkPlusPreText = thinkPlusContext + thinkPlusPreText;
+            }
         }
         var contextualInput = BuildContextualInput(
             session.SessionId,
-            basePrepared.Text,
+            thinkPlusPreText,
             session.LinkedMemoryNotes,
             includeLocalTimeHint: true
         );
@@ -1691,6 +1723,7 @@ public sealed partial class CommandService
             request.CerebrasModel,
             request.SummaryProvider,
             request.CodexModel,
+            request.NvidiaModel,
             request.Attachments,
             cancellationToken
         );
@@ -1702,6 +1735,7 @@ public sealed partial class CommandService
             ("groq", generated.GroqText),
             ("gemini", generated.GeminiText),
             ("cerebras", generated.CerebrasText),
+            ("nvidia", generated.NvidiaText),
             ("copilot", generated.CopilotText),
             ("codex", generated.CodexText),
             ("summary", generated.Summary),
@@ -1712,6 +1746,7 @@ public sealed partial class CommandService
         var responseGroqText = generated.GroqText;
         var responseGeminiText = generated.GeminiText;
         var responseCerebrasText = generated.CerebrasText;
+        var responseNvidiaText = generated.NvidiaText;
         var responseCopilotText = generated.CopilotText;
         var responseCodexText = generated.CodexText;
         var responseSummaryText = generated.Summary;
@@ -1730,7 +1765,9 @@ public sealed partial class CommandService
             responseCodexText,
             generated.CodexModel,
             generated.CommonCore,
-            generated.Differences
+            generated.Differences,
+            responseNvidiaText,
+            generated.NvidiaModel
         ));
         var summaryMessageText = BuildMultiSummaryAssistantText(
             responseSummaryText,
@@ -1783,7 +1820,9 @@ public sealed partial class CommandService
             responseCodexText,
             generated.CodexModel,
             generated.CommonCore,
-            generated.Differences
+            generated.Differences,
+            responseNvidiaText,
+            generated.NvidiaModel
         );
     }
 
@@ -1827,6 +1866,7 @@ public sealed partial class CommandService
         string? copilotModel,
         string? cerebrasModel,
         string? codexModel,
+        string? nvidiaModel,
         IReadOnlyList<InputAttachment>? attachments,
         CancellationToken cancellationToken
     )
@@ -1856,6 +1896,12 @@ public sealed partial class CommandService
             workerSpecs.Add(("cerebras", selectedCerebras));
         }
 
+        if (_llmRouter.HasNvidiaApiKey() && !IsDisabledModelSelection(nvidiaModel))
+        {
+            var selectedNvidia = string.IsNullOrWhiteSpace(nvidiaModel) ? null : nvidiaModel.Trim();
+            workerSpecs.Add(("nvidia", selectedNvidia));
+        }
+
         var copilotStatus = await _copilotWrapper.GetStatusAsync(cancellationToken);
         if (copilotStatus.Installed && copilotStatus.Authenticated && !IsDisabledModelSelection(copilotModel))
         {
@@ -1872,7 +1918,7 @@ public sealed partial class CommandService
 
         if (workerSpecs.Count == 0)
         {
-            return new LlmOrchestrationResult("no_provider", "사용 가능한 LLM이 없습니다. Groq/Gemini/Cerebras 키 또는 Copilot/Codex 인증을 확인하세요.");
+            return new LlmOrchestrationResult("no_provider", "사용 가능한 LLM이 없습니다. Groq/Gemini/Cerebras/NVIDIA 키 또는 Copilot/Codex 인증을 확인하세요.");
         }
 
         var participatingProviders = workerSpecs
@@ -1903,7 +1949,7 @@ public sealed partial class CommandService
             })
             .ToList();
         var availabilityByProvider = await GetProviderAvailabilityMapAsync(cancellationToken);
-        var selectionByProvider = BuildProviderSelectionMap(groqModel, geminiModel, cerebrasModel, copilotModel, codexModel);
+        var selectionByProvider = BuildProviderSelectionMap(groqModel, geminiModel, cerebrasModel, copilotModel, codexModel, nvidiaModel);
         var successfulWorkers = workerResults
             .Where(x => IsUsableWorkerResult(x, availabilityByProvider, selectionByProvider))
             .ToArray();
@@ -1925,6 +1971,7 @@ public sealed partial class CommandService
         if ((resolvedProvider == "groq" && IsDisabledModelSelection(groqModel))
             || (resolvedProvider == "gemini" && IsDisabledModelSelection(geminiModel))
             || (resolvedProvider == "cerebras" && IsDisabledModelSelection(cerebrasModel))
+            || (resolvedProvider == "nvidia" && IsDisabledModelSelection(nvidiaModel))
             || (resolvedProvider == "copilot" && IsDisabledModelSelection(copilotModel))
             || (resolvedProvider == "codex" && IsDisabledModelSelection(codexModel)))
         {
@@ -1939,6 +1986,7 @@ public sealed partial class CommandService
                 "groq" => ResolveModelForCategory(TaskCategory.GeneralChat, resolvedProvider, groqModel),
                 "copilot" => ResolveModelForCategory(TaskCategory.GeneralChat, resolvedProvider, copilotModel),
                 "codex" => ResolveModelForCategory(TaskCategory.GeneralChat, resolvedProvider, codexModel),
+                "nvidia" => ResolveModelForCategory(TaskCategory.GeneralChat, resolvedProvider, nvidiaModel),
                 "cerebras" => ResolveModelForCategory(TaskCategory.GeneralChat, resolvedProvider, cerebrasModel),
                 _ => ResolveModelForCategory(TaskCategory.GeneralChat, resolvedProvider, geminiModel)
             };
@@ -1971,6 +2019,7 @@ public sealed partial class CommandService
         string? cerebrasModel,
         string? summaryProvider,
         string? codexModel,
+        string? nvidiaModel,
         IReadOnlyList<InputAttachment>? attachments,
         CancellationToken cancellationToken
     )
@@ -1980,11 +2029,13 @@ public sealed partial class CommandService
         var groqSelected = hasGroqOverride ? groqModel!.Trim() : _llmRouter.GetSelectedGroqModel();
         var geminiSelected = NormalizeModelSelection(geminiModel) ?? _config.GeminiModel;
         var cerebrasSelected = NormalizeModelSelection(cerebrasModel) ?? _config.CerebrasModel;
+        var nvidiaSelected = NormalizeModelSelection(nvidiaModel) ?? _config.NvidiaModel;
         var copilotSelected = NormalizeModelSelection(copilotModel) ?? _copilotWrapper.GetSelectedModel();
         var codexSelected = NormalizeModelSelection(codexModel) ?? _config.CodexModel;
         var groqResolvedModel = IsDisabledModelSelection(groqModel) ? "none" : groqSelected;
         var geminiResolvedModel = IsDisabledModelSelection(geminiModel) ? "none" : geminiSelected;
         var cerebrasResolvedModel = IsDisabledModelSelection(cerebrasModel) ? "none" : cerebrasSelected;
+        var nvidiaResolvedModel = IsDisabledModelSelection(nvidiaModel) ? "none" : nvidiaSelected;
         var copilotResolvedModel = IsDisabledModelSelection(copilotModel) ? "none" : copilotSelected;
         var codexResolvedModel = IsDisabledModelSelection(codexModel) ? "none" : codexSelected;
         var requestedSummaryProvider = NormalizeProvider(summaryProvider, allowAuto: true);
@@ -2005,7 +2056,9 @@ public sealed partial class CommandService
                 "empty input",
                 codexResolvedModel,
                 "empty input",
-                "empty input"
+                "empty input",
+                "empty input",
+                nvidiaResolvedModel
             );
         }
 
@@ -2027,6 +2080,12 @@ public sealed partial class CommandService
                 ? ExecuteProviderChatWithPreparedInputAsync("cerebras", cerebrasSelected, text, attachments, cancellationToken)
                 : Task.FromResult(new LlmSingleChatResult("cerebras", cerebrasSelected, "Cerebras API 키가 설정되지 않았습니다."));
 
+        Task<LlmSingleChatResult> nvidiaTask = IsDisabledModelSelection(nvidiaModel)
+            ? Task.FromResult(new LlmSingleChatResult("nvidia", "none", "선택 안함"))
+            : _llmRouter.HasNvidiaApiKey()
+                ? ExecuteProviderChatWithPreparedInputAsync("nvidia", nvidiaSelected, text, attachments, cancellationToken)
+                : Task.FromResult(new LlmSingleChatResult("nvidia", nvidiaSelected, "NVIDIA NIM API 키가 설정되지 않았습니다."));
+
         var copilotStatus = await _copilotWrapper.GetStatusAsync(cancellationToken);
         Task<LlmSingleChatResult> copilotTask = IsDisabledModelSelection(copilotModel)
             ? Task.FromResult(new LlmSingleChatResult("copilot", "none", "선택 안함"))
@@ -2040,17 +2099,18 @@ public sealed partial class CommandService
                 ? ExecuteProviderChatWithPreparedInputAsync("codex", codexSelected, text, attachments, cancellationToken)
                 : Task.FromResult(new LlmSingleChatResult("codex", codexSelected, "Codex 인증이 필요합니다.")));
 
-        await Task.WhenAll(groqTask, geminiTask, cerebrasTask, copilotTask, codexTask);
+        await Task.WhenAll(groqTask, geminiTask, cerebrasTask, nvidiaTask, copilotTask, codexTask);
         var workerResults = new[]
         {
             new LlmSingleChatResult(groqTask.Result.Provider, groqTask.Result.Model, SanitizeChatOutput(groqTask.Result.Text)),
             new LlmSingleChatResult(geminiTask.Result.Provider, geminiTask.Result.Model, SanitizeChatOutput(geminiTask.Result.Text)),
             new LlmSingleChatResult(cerebrasTask.Result.Provider, cerebrasTask.Result.Model, SanitizeChatOutput(cerebrasTask.Result.Text)),
+            new LlmSingleChatResult(nvidiaTask.Result.Provider, nvidiaTask.Result.Model, SanitizeChatOutput(nvidiaTask.Result.Text)),
             new LlmSingleChatResult(copilotTask.Result.Provider, copilotTask.Result.Model, SanitizeChatOutput(copilotTask.Result.Text)),
             new LlmSingleChatResult(codexTask.Result.Provider, codexTask.Result.Model, SanitizeChatOutput(codexTask.Result.Text))
         };
         var availabilityByProvider = await GetProviderAvailabilityMapAsync(cancellationToken);
-        var selectionByProvider = BuildProviderSelectionMap(groqModel, geminiModel, cerebrasModel, copilotModel, codexModel);
+        var selectionByProvider = BuildProviderSelectionMap(groqModel, geminiModel, cerebrasModel, copilotModel, codexModel, nvidiaModel);
         var successfulWorkers = workerResults
             .Where(x => IsUsableWorkerResult(x, availabilityByProvider, selectionByProvider))
             .ToArray();
@@ -2058,8 +2118,9 @@ public sealed partial class CommandService
         var groq = workerResults[0].Text;
         var gemini = workerResults[1].Text;
         var cerebras = workerResults[2].Text;
-        var copilot = workerResults[3].Text;
-        var codex = workerResults[4].Text;
+        var nvidia = workerResults[3].Text;
+        var copilot = workerResults[4].Text;
+        var codex = workerResults[5].Text;
 
         var summaryPrompt = $"""
                             사용자 질문:
@@ -2073,6 +2134,9 @@ public sealed partial class CommandService
 
                             [Cerebras]
                             {cerebras}
+
+                            [NVIDIA NIM]
+                            {nvidia}
 
                             [Copilot]
                             {copilot}
@@ -2116,7 +2180,7 @@ public sealed partial class CommandService
         }
         var summarySections = ParseMultiSummarySections(summary);
 
-        _auditLogger.Log(source, "chat_multi", "ok", $"groq={groqSelected} cerebras={cerebrasSelected} copilot={copilotSelected} codex={codexSelected} summary={resolvedSummaryProvider}");
+        _auditLogger.Log(source, "chat_multi", "ok", $"groq={groqSelected} nvidia={nvidiaSelected} cerebras={cerebrasSelected} copilot={copilotSelected} codex={codexSelected} summary={resolvedSummaryProvider}");
         return new LlmMultiChatResult(
             groq,
             gemini,
@@ -2132,7 +2196,9 @@ public sealed partial class CommandService
             codex,
             codexResolvedModel,
             summarySections.CommonCore,
-            summarySections.Differences
+            summarySections.Differences,
+            nvidia,
+            nvidiaResolvedModel
         );
     }
 
@@ -2177,6 +2243,9 @@ public sealed partial class CommandService
                 "cerebras" => compareHeavy || planningHeavy
                     ? "대안 비교, 장단점, 반례와 엣지케이스를 넓게 점검하세요."
                     : "반례, 예외, 장기 영향과 누락된 맥락을 점검하세요.",
+                "nvidia" => debuggingHeavy || actionHeavy
+                    ? "빠른 실행 관점에서 원인, 수정 절차, 검증 포인트를 구체화하세요."
+                    : "실행 가능한 보완 관점과 누락된 조건을 간결하게 점검하세요.",
                 "copilot" => uiHeavy
                     ? "바로 적용할 수 있는 화면/컴포넌트 예시와 실행 단계를 구체화하세요."
                     : actionHeavy

@@ -15,9 +15,10 @@ public sealed class SettingsApplicationService : ISettingsApplicationService
     public RoutingPolicyActionResult ResetRoutingPolicy() => _inner.ResetRoutingPolicy();
     public RoutingDecision? GetLastRoutingDecision() => _inner.GetLastRoutingDecision();
     public string UpdateTelegramCredentials(string? botToken, string? chatId, bool persist) => _inner.UpdateTelegramCredentials(botToken, chatId, persist);
-    public string UpdateLlmCredentials(string? groqApiKey, string? geminiApiKey, string? cerebrasApiKey, string? codexApiKey, bool persist) => _inner.UpdateLlmCredentials(groqApiKey, geminiApiKey, cerebrasApiKey, codexApiKey, persist);
+    public string UpdateLlmCredentials(string? groqApiKey, string? geminiApiKey, string? cerebrasApiKey, string? nvidiaApiKey, string? codexApiKey, bool persist) => _inner.UpdateLlmCredentials(groqApiKey, geminiApiKey, cerebrasApiKey, nvidiaApiKey, codexApiKey, persist);
     public string DeleteTelegramCredentials(bool deletePersisted) => _inner.DeleteTelegramCredentials(deletePersisted);
     public string DeleteLlmCredentials(bool deletePersisted) => _inner.DeleteLlmCredentials(deletePersisted);
+    public string SetExternalDashboardEnabled(bool enabled) => _inner.SetExternalDashboardEnabled(enabled);
     public GeminiUsage GetGeminiUsageSnapshot() => _inner.GetGeminiUsageSnapshot();
     public Task<CopilotPremiumUsageSnapshot> GetCopilotPremiumUsageSnapshotAsync(CancellationToken cancellationToken, bool forceRefresh = false) => _inner.GetCopilotPremiumUsageSnapshotAsync(cancellationToken, forceRefresh);
     public Task<string> SendTelegramTestAsync(CancellationToken cancellationToken) => _inner.SendTelegramTestAsync(cancellationToken);

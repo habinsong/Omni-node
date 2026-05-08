@@ -6,6 +6,7 @@ public sealed class RoutingPolicyResolver
     {
         "gemini",
         "groq",
+        "nvidia",
         "cerebras",
         "copilot",
         "codex"
@@ -232,18 +233,18 @@ public sealed class RoutingPolicyResolver
     {
         return new RoutingPolicy
         {
-            GeneralChat = new[] { "gemini", "groq", "cerebras", "copilot", "codex" },
-            Planner = new[] { "gemini", "groq", "cerebras", "codex", "copilot" },
-            Reviewer = new[] { "codex", "gemini", "groq", "cerebras", "copilot" },
-            SearchTimeSensitive = new[] { "gemini", "groq", "cerebras", "codex", "copilot" },
-            SearchFallback = new[] { "groq", "gemini", "cerebras", "codex", "copilot" },
-            DeepCode = new[] { "codex", "copilot", "gemini", "groq", "cerebras" },
-            SafeRefactor = new[] { "codex", "copilot", "gemini", "groq", "cerebras" },
-            QuickFix = new[] { "groq", "cerebras", "gemini", "copilot", "codex" },
-            VisualUi = new[] { "gemini", "codex", "groq", "cerebras", "copilot" },
-            RoutineBuilder = new[] { "groq", "gemini", "cerebras", "codex", "copilot" },
-            BackgroundMonitor = new[] { "groq", "cerebras", "gemini", "codex", "copilot" },
-            Documentation = new[] { "gemini", "codex", "groq", "copilot", "cerebras" }
+            GeneralChat = new[] { "gemini", "groq", "nvidia", "cerebras", "copilot", "codex" },
+            Planner = new[] { "gemini", "groq", "nvidia", "cerebras", "codex", "copilot" },
+            Reviewer = new[] { "codex", "gemini", "groq", "nvidia", "cerebras", "copilot" },
+            SearchTimeSensitive = new[] { "gemini", "groq", "nvidia", "cerebras", "codex", "copilot" },
+            SearchFallback = new[] { "groq", "nvidia", "gemini", "cerebras", "codex", "copilot" },
+            DeepCode = new[] { "codex", "copilot", "gemini", "groq", "nvidia", "cerebras" },
+            SafeRefactor = new[] { "codex", "copilot", "gemini", "groq", "nvidia", "cerebras" },
+            QuickFix = new[] { "groq", "nvidia", "cerebras", "gemini", "copilot", "codex" },
+            VisualUi = new[] { "gemini", "codex", "groq", "nvidia", "cerebras", "copilot" },
+            RoutineBuilder = new[] { "groq", "nvidia", "gemini", "cerebras", "codex", "copilot" },
+            BackgroundMonitor = new[] { "groq", "nvidia", "cerebras", "gemini", "codex", "copilot" },
+            Documentation = new[] { "gemini", "codex", "groq", "nvidia", "copilot", "cerebras" }
         };
     }
 
@@ -278,6 +279,11 @@ public sealed class RoutingPolicyResolver
     private static string NormalizeProviderKey(string? provider, bool allowAuto)
     {
         var normalized = (provider ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalized == "nvidia-nim" || normalized == "nvidia_nim" || normalized == "nim")
+        {
+            normalized = "nvidia";
+        }
+
         if (normalized.Length == 0)
         {
             return allowAuto ? "auto" : "none";

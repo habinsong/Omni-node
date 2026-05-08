@@ -42,6 +42,7 @@ public sealed partial class CommandService
         string? groqApiKey,
         string? geminiApiKey,
         string? cerebrasApiKey,
+        string? nvidiaApiKey,
         string? codexApiKey,
         bool persist
     )
@@ -50,6 +51,7 @@ public sealed partial class CommandService
             groqApiKey,
             geminiApiKey,
             cerebrasApiKey,
+            nvidiaApiKey,
             codexApiKey,
             persist
         );
@@ -68,6 +70,13 @@ public sealed partial class CommandService
     {
         var result = _runtimeSettings.DeleteLlmCredentials(deletePersisted);
         _auditLogger.Log("web", "delete_llm_credentials", "ok", result);
+        return result;
+    }
+
+    public string SetExternalDashboardEnabled(bool enabled)
+    {
+        var result = _runtimeSettings.SetExternalDashboardEnabled(enabled);
+        _auditLogger.Log("web", "set_external_dashboard_access", "ok", result);
         return result;
     }
 

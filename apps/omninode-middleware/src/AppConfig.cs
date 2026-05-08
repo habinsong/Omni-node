@@ -8,6 +8,7 @@ public sealed class AppConfig
     private const string GroqApiKeyService = "omninode_groq_api_key";
     private const string GeminiApiKeyService = "omninode_gemini_api_key";
     private const string CerebrasApiKeyService = "omninode_cerebras_api_key";
+    private const string NvidiaApiKeyService = "omninode_nvidia_api_key";
     private const string CodexApiKeyService = "omninode_codex_api_key";
     private const string SttApiKeyService = "omninode_stt_api_key";
 
@@ -38,6 +39,12 @@ public sealed class AppConfig
     public string CerebrasKeychainService { get; init; } = CerebrasApiKeyService;
     public string CerebrasKeychainAccount { get; init; } = DefaultKeychainAccount;
     public string? CerebrasApiKey { get; init; }
+    public string NvidiaBaseUrl { get; init; } = "https://integrate.api.nvidia.com/v1";
+    public string NvidiaModel { get; init; } = "meta/llama-3.1-70b-instruct";
+    public int NvidiaTimeoutSec { get; init; } = 20;
+    public string NvidiaKeychainService { get; init; } = NvidiaApiKeyService;
+    public string NvidiaKeychainAccount { get; init; } = DefaultKeychainAccount;
+    public string? NvidiaApiKey { get; init; }
     public string? CodexApiKey { get; init; }
     public string SttProvider { get; init; } = string.Empty;
     public string SttBaseUrl { get; init; } = string.Empty;
@@ -85,6 +92,8 @@ public sealed class AppConfig
     public string GuardRetryTimelineStatePath { get; init; } = ResolveDefaultStateFilePath("guard_retry_timeline.json");
     public string GatewayHealthStatePath { get; init; } = ResolveDefaultStateFilePath("gateway_health.json");
     public string GatewayStartupProbeStatePath { get; init; } = ResolveDefaultStateFilePath("gateway_startup_probe.json");
+    public string DashboardAccessStatePath { get; init; } = ResolveDefaultStateFilePath("dashboard_access.json");
+    public bool ExternalDashboardEnabled { get; init; }
     public bool EnableHealthEndpoint { get; init; } = true;
     public bool EnableGatewayStartupProbe { get; init; }
     public int GatewayStartupProbeDelayMs { get; init; } = 250;
@@ -174,6 +183,20 @@ public sealed class AppConfig
                 defaultKeychainService: CerebrasApiKeyService,
                 defaultKeychainAccount: DefaultKeychainAccount
             ),
+            NvidiaBaseUrl = GetStringEnv("OMNINODE_NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
+            NvidiaModel = GetStringEnv("OMNINODE_NVIDIA_MODEL", "meta/llama-3.1-70b-instruct"),
+            NvidiaTimeoutSec = GetIntEnv("OMNINODE_NVIDIA_TIMEOUT_SEC", 20),
+            NvidiaKeychainService = GetStringEnv("OMNINODE_NVIDIA_KEYCHAIN_SERVICE", NvidiaApiKeyService),
+            NvidiaKeychainAccount = GetStringEnv("OMNINODE_NVIDIA_KEYCHAIN_ACCOUNT", DefaultKeychainAccount),
+            NvidiaApiKey = SecretLoader.ResolveApiKey(
+                providerName: "nvidia",
+                directEnvKey: "OMNINODE_NVIDIA_API_KEY",
+                fileEnvKey: "OMNINODE_NVIDIA_API_KEY_FILE",
+                keychainServiceEnvKey: "OMNINODE_NVIDIA_KEYCHAIN_SERVICE",
+                keychainAccountEnvKey: "OMNINODE_NVIDIA_KEYCHAIN_ACCOUNT",
+                defaultKeychainService: NvidiaApiKeyService,
+                defaultKeychainAccount: DefaultKeychainAccount
+            ),
             CodexApiKey = SecretLoader.ResolveApiKey(
                 providerName: "codex",
                 directEnvKey: "OMNINODE_CODEX_API_KEY",
@@ -237,6 +260,8 @@ public sealed class AppConfig
             GuardRetryTimelineStatePath = GetStringEnv("OMNINODE_GUARD_RETRY_TIMELINE_STATE_PATH", pathResolver.ResolveStateFilePath("guard_retry_timeline.json")),
             GatewayHealthStatePath = GetStringEnv("OMNINODE_GATEWAY_HEALTH_STATE_PATH", pathResolver.ResolveStateFilePath("gateway_health.json")),
             GatewayStartupProbeStatePath = GetStringEnv("OMNINODE_GATEWAY_STARTUP_PROBE_STATE_PATH", pathResolver.ResolveStateFilePath("gateway_startup_probe.json")),
+            DashboardAccessStatePath = GetStringEnv("OMNINODE_DASHBOARD_ACCESS_STATE_PATH", pathResolver.ResolveStateFilePath("dashboard_access.json")),
+            ExternalDashboardEnabled = GetBoolEnv("OMNINODE_EXTERNAL_DASHBOARD", false),
             EnableHealthEndpoint = GetBoolEnv("OMNINODE_ENABLE_HEALTH_ENDPOINT", true),
             EnableGatewayStartupProbe = GetBoolEnv("OMNINODE_GATEWAY_STARTUP_PROBE", false),
             GatewayStartupProbeDelayMs = Math.Max(0, GetIntEnv("OMNINODE_GATEWAY_STARTUP_PROBE_DELAY_MS", 250)),

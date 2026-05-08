@@ -8,89 +8,109 @@ public sealed partial class WebSocketGateway
 {
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        var listenerPrefix = $"http://127.0.0.1:{_port}/";
-        SetGatewayHealthState(
-            status: "starting",
-            listenerPrefix: listenerPrefix,
-            listenerBound: false,
-            degradedMode: false
-        );
-
-        using var listener = new HttpListener();
-        listener.Prefixes.Add(listenerPrefix);
-        try
+        while (!cancellationToken.IsCancellationRequested)
         {
-            listener.Start();
-        }
-        catch (HttpListenerException ex)
-        {
-            Console.Error.WriteLine(
-                $"[web] listener start failed (prefix={listenerPrefix}, error={ex.ErrorCode}): {ex.Message}"
-            );
-            Console.Error.WriteLine("[web] degraded mode enabled: websocket/dashboard listener unavailable");
+            var rebindTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _requestListenerRebind = () => rebindTcs.TrySetResult();
+            var listenerPrefix = ResolveListenerPrefix();
             SetGatewayHealthState(
-                status: "degraded",
-                listenerPrefix: listenerPrefix,
-                listenerBound: false,
-                degradedMode: true,
-                listenerErrorCode: ex.ErrorCode,
-                listenerErrorMessage: ex.Message
-            );
-            await WaitForCancellationAsync(cancellationToken);
-            SetGatewayHealthState(
-                status: "stopped",
-                listenerPrefix: listenerPrefix,
-                listenerBound: false,
-                degradedMode: true,
-                listenerErrorCode: ex.ErrorCode,
-                listenerErrorMessage: ex.Message
-            );
-            return;
-        }
-
-        Console.WriteLine($"[web] dashboard=http://127.0.0.1:{_port}/ ws=ws://127.0.0.1:{_port}/ws/");
-        SetGatewayHealthState(
-            status: "ok",
-            listenerPrefix: listenerPrefix,
-            listenerBound: true,
-            degradedMode: false
-        );
-
-        try
-        {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                HttpListenerContext context;
-                try
-                {
-                    context = await listener.GetContextAsync().WaitAsync(cancellationToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-                catch (HttpListenerException)
-                {
-                    break;
-                }
-
-                _ = HandleContextAsync(context, cancellationToken);
-            }
-        }
-        finally
-        {
-            if (listener.IsListening)
-            {
-                listener.Stop();
-            }
-
-            SetGatewayHealthState(
-                status: "stopped",
+                status: "starting",
                 listenerPrefix: listenerPrefix,
                 listenerBound: false,
                 degradedMode: false
             );
+
+            using var listener = new HttpListener();
+            listener.Prefixes.Add(listenerPrefix);
+            try
+            {
+                listener.Start();
+            }
+            catch (HttpListenerException ex)
+            {
+                Console.Error.WriteLine(
+                    $"[web] listener start failed (prefix={listenerPrefix}, error={ex.ErrorCode}): {ex.Message}"
+                );
+                Console.Error.WriteLine("[web] degraded mode enabled: websocket/dashboard listener unavailable");
+                SetGatewayHealthState(
+                    status: "degraded",
+                    listenerPrefix: listenerPrefix,
+                    listenerBound: false,
+                    degradedMode: true,
+                    listenerErrorCode: ex.ErrorCode,
+                    listenerErrorMessage: ex.Message
+                );
+                await Task.WhenAny(WaitForCancellationAsync(cancellationToken), rebindTcs.Task);
+                SetGatewayHealthState(
+                    status: "stopped",
+                    listenerPrefix: listenerPrefix,
+                    listenerBound: false,
+                    degradedMode: true,
+                    listenerErrorCode: ex.ErrorCode,
+                    listenerErrorMessage: ex.Message
+                );
+                continue;
+            }
+
+            var hostForLog = _settingsService.GetSettingsSnapshot().ExternalDashboardEnabled ? "0.0.0.0" : "127.0.0.1";
+            Console.WriteLine($"[web] dashboard=http://{hostForLog}:{_port}/ ws=ws://{hostForLog}:{_port}/ws/");
+            SetGatewayHealthState(
+                status: "ok",
+                listenerPrefix: listenerPrefix,
+                listenerBound: true,
+                degradedMode: false
+            );
+
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    var contextTask = listener.GetContextAsync();
+                    var cancellableContextTask = contextTask.WaitAsync(cancellationToken);
+                    var completed = await Task.WhenAny(cancellableContextTask, rebindTcs.Task);
+                    if (completed == rebindTcs.Task)
+                    {
+                        break;
+                    }
+
+                    HttpListenerContext context;
+                    try
+                    {
+                        context = await cancellableContextTask;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                    catch (HttpListenerException)
+                    {
+                        break;
+                    }
+
+                    _ = HandleContextAsync(context, cancellationToken);
+                }
+            }
+            finally
+            {
+                if (listener.IsListening)
+                {
+                    listener.Stop();
+                }
+
+                SetGatewayHealthState(
+                    status: "stopped",
+                    listenerPrefix: listenerPrefix,
+                    listenerBound: false,
+                    degradedMode: false
+                );
+            }
         }
+    }
+
+    private string ResolveListenerPrefix()
+    {
+        var host = _settingsService.GetSettingsSnapshot().ExternalDashboardEnabled ? "+" : "127.0.0.1";
+        return $"http://{host}:{_port}/";
     }
 
     private static async Task WaitForCancellationAsync(CancellationToken cancellationToken)

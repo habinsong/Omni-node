@@ -1,106 +1,64 @@
-# Omni-node 5분 시작 가이드
+# Omni-node 5분 시작
 
-처음 받은 분이 **5분 안에** 대시보드에서 첫 대화를 나누는 것을 목표로 합니다. 이 문서는 일반 사용자용입니다 (LLM 에이전트용 운영 문서는 [AGENTS.md](../AGENTS.md), 상세 사용법은 [docs/사용법_빠른시작.md](사용법_빠른시작.md) 참고).
+[한국어](./QUICKSTART.md) · [English](./en/quickstart.md)
 
-## 1. 사전 준비 (1분)
+업데이트 기준: 2026-05-08
 
-다음이 설치되어 있어야 합니다.
+이 문서는 처음 실행할 때 필요한 것만 남긴 빠른 시작 가이드다. 자세한 기능 설명은 [사용법_빠른시작.md](./사용법_빠른시작.md)를 보면 된다.
 
-| 도구 | 버전 | 확인 명령 |
-|---|---|---|
-| .NET SDK | 9.x | `dotnet --version` |
-| C 컴파일러 | gcc/clang | `gcc --version` |
-| Python | 3.10+ | `python3 --version` |
-| Node.js | 18+ (테스트용) | `node --version` |
+![대시보드](./assets/readme/dashboard-desktop-1920x1080.png)
 
-또한 **LLM API 키 1개 이상** 이 필요합니다 (Groq · Gemini · Cerebras · Codex/Copilot 중 택1).
+## 1. 준비물
 
-## 2. 코어 + 미들웨어 띄우기 (1분)
+| 도구 | 용도 |
+|---|---|
+| `.NET SDK 9` | 미들웨어 빌드와 실행 |
+| C 컴파일러 | `apps/omninode-core` 빌드 |
+| `python3` | 샌드박스와 코딩 검증 |
+| `node`, `npm` | 대시보드 회귀 테스트 |
+| 선택: `gh`, `copilot`, `codex` | Copilot/Codex CLI 연동 |
+
+LLM 키는 하나 이상만 있어도 시작할 수 있다. 키는 설정 탭에서 저장하거나 `*_FILE` 환경변수로 지정한다.
+
+## 2. 실행
+
+전역 실행기가 등록되어 있으면 macOS/Linux에서는 아래 두 개로 충분하다.
 
 ```bash
-git clone https://github.com/habinsong/Omni-node.git
-cd Omni-node
+Omni-node
+Omni-node shutdown
+```
 
-# 1) C 코어 빌드
+수동 실행은 두 단계다.
+
+```bash
 make -C apps/omninode-core
-
-# 2) 미들웨어 실행 (대시보드 서버 + WebSocket을 8080 포트에서 호스팅)
 dotnet run --project apps/omninode-middleware/OmniNode.Middleware.csproj
 ```
 
-마지막 명령 실행 후 다음 줄이 보이면 정상:
+Windows:
 
+```powershell
+.\apps\omninode-core\build.ps1
+dotnet run --project apps\omninode-middleware\OmniNode.Middleware.csproj
 ```
-[middleware] starting (ws=8080, core=/tmp/omninode_core.501.sock)
-[web] dashboard=http://127.0.0.1:8080/ ws=ws://127.0.0.1:8080/ws/
-```
 
-## 3. 대시보드 접속 (1분)
+## 3. 접속
 
-브라우저에서 [http://127.0.0.1:8080/](http://127.0.0.1:8080/) 열기.
+- 대시보드: `http://127.0.0.1:8080/`
+- health: `http://127.0.0.1:8080/healthz`
+- ready: `http://127.0.0.1:8080/readyz`
 
-좌측 메뉴에서 다음 탭들이 보입니다:
+처음 접속하면 WebSocket 세션은 OTP 대기 상태가 된다. 텔레그램이 설정되어 있으면 OTP를 텔레그램으로 받고, 로컬 개발 환경에서는 콘솔 fallback OTP를 사용할 수 있다.
 
-- **대화** — LLM과 일반 대화
-- **루틴** — 스케줄 자동화
-- **로직** — 노드 그래프 워크플로우
-- **코딩** — 코드 작성/실행 모드
-- **노트북** — 학습·결정·검증 메모
-- **작업 계획** — 계획 생성·실행
-- **스킬** — 스킬(SKILL.md) 관리 *(NEW)*
-- **설정** — API 키, 모델, 정책
+## 4. 첫 확인 순서
 
-## 4. API 키 등록 (1분)
+1. 대시보드가 열리고 좌측 상태가 `연결됨 / OTP 대기`인지 본다.
+2. 설정 탭에서 사용할 LLM 키 또는 CLI 인증 상태를 확인한다.
+3. 대화 탭에서 짧은 질문을 보낸다.
+4. 코딩 탭에서 작은 파일 생성 요청을 실행한다.
+5. `readyz`와 `doctor --json`으로 상태를 확인한다.
 
-좌측 **설정** 탭 → "LLM 자격 증명" 섹션:
+## 5. 외부접속
 
-1. 가지고 있는 키를 입력 (예: Groq API Key)
-2. "저장" 버튼 클릭
-3. 모델 풀이 자동으로 갱신됨
-
-> ⚠️ 키는 `~/.omninode/`에 저장되며 저장소엔 절대 커밋되지 않습니다.
-
-## 5. 첫 대화 (1분)
-
-좌측 **대화** 탭 → 입력창에 메시지 작성 → Enter
-
-추천 첫 입력:
-
-| 입력 | 결과 |
-|---|---|
-| `안녕! 자기소개 해봐` | 일반 잡담 |
-| `가지고 있는 스킬 뭐야?` | 등록된 스킬 목록을 LLM이 답변 |
-| `공감하는 일상 대화 스킬 만들어줘` | `.omni/skills/casual-empathy/SKILL.md` 자동 생성 |
-| `casual-empathy 스킬 사용해서 위로해줘` | 해당 스킬을 sticky로 활성화하고 답변 — 다음 메시지부터 자동 적용 |
-| `스킬 그만` | 활성 스킬 해제, 일반 대화로 복귀 |
-
-## 다음 단계
-
-- **스킬을 직접 만들거나 수정**: 좌측 "스킬" 탭에서 새로 만들거나 기존 SKILL.md를 GUI에서 편집
-- **텔레그램 봇 연결**: 설정 → "Telegram 자격 증명"에 봇 토큰/Chat ID 등록 → 같은 채팅 기능을 모바일에서 사용
-- **루틴 스케줄링**: 매일 X시에 LLM에 작업을 시키고 결과를 텔레그램으로 받기 (좌측 "루틴" 탭)
-- **노드 그래프 자동화**: 좌측 "로직" 탭에서 입력 → 변환 → 출력 워크플로우를 시각적으로 구성
-
-## 자주 묻는 질문
-
-**Q. 미들웨어를 띄웠는데 대시보드가 안 떠요.**
-A. 8080 포트가 다른 프로세스에 점유됐을 수 있습니다. `lsof -i :8080`으로 확인 후 충돌 해결.
-
-**Q. "LLM API 키가 없습니다" 같은 오류가 나요.**
-A. 설정 탭에서 키를 입력했는지, "저장"을 눌렀는지 확인. 입력 후 키 인식까지 1~2초 걸립니다.
-
-**Q. 텔레그램에서 스킬이 안 먹혀요.**
-A. 미들웨어가 최신 버전인지 확인 (`git pull origin master` 후 재빌드·재시작).
-
-**Q. 스킬을 만들었는데 다음 대화에서 안 적용돼요.**
-A. 한 번 활성화하면 같은 thread에서는 sticky로 유지됩니다. 그래도 안 되면 "X 스킬 사용해서 ..." 식으로 명시 활성화 후 사용하세요. 미들웨어 재시작 시 sticky 상태는 휘발됩니다.
-
-**Q. 데이터는 어디에 저장되나요?**
-A. 대화/메모리/설정은 `~/.omninode/`에, 작업 산출물은 `workspace/`에 저장됩니다. 스킬은 프로젝트 루트의 `.omni/skills/`에 저장됩니다.
-
-## 더 자세한 자료
-
-- [docs/사용법_빠른시작.md](사용법_빠른시작.md) — 기능별 상세 안내
-- [docs/AGENTS_AND_SKILLS.md](AGENTS_AND_SKILLS.md) — AGENTS.md / SKILL.md 작성 규칙
-- [docs/검증_가이드.md](검증_가이드.md) — 회귀 검증 체크리스트
-- [README.md](../README.md) — 프로젝트 전체 개요
+외부접속은 기본 꺼짐이다. 로컬 대시보드의 설정 탭에서 토글을 켜면 같은 LAN의 다른 기기에서 접속할 수 있고, 설정 화면에 접속 주소가 표시된다. 외부 클라이언트에서는 OTP/Telegram/LLM 키/CLI 인증 같은 민감 설정이 보이지 않고 서버 액션도 차단된다.

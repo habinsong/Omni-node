@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace OmniNode.Middleware;
 
 public sealed class RuntimeSettings
@@ -8,6 +10,7 @@ public sealed class RuntimeSettings
     private const string GroqApiKeyService = "omninode_groq_api_key";
     private const string GeminiApiKeyService = "omninode_gemini_api_key";
     private const string CerebrasApiKeyService = "omninode_cerebras_api_key";
+    private const string NvidiaApiKeyService = "omninode_nvidia_api_key";
     private const string CodexApiKeyService = "omninode_codex_api_key";
     private const string SttApiKeyService = "omninode_stt_api_key";
 
@@ -17,10 +20,15 @@ public sealed class RuntimeSettings
     private string? _groqApiKey;
     private string? _geminiApiKey;
     private string? _cerebrasApiKey;
+    private string? _nvidiaApiKey;
     private string? _codexApiKey;
     private string? _sttApiKey;
+    private bool _externalDashboardEnabled;
     private readonly string _cerebrasKeychainService;
     private readonly string _cerebrasKeychainAccount;
+    private readonly string _nvidiaKeychainService;
+    private readonly string _nvidiaKeychainAccount;
+    private readonly string _dashboardAccessStatePath;
 
     public RuntimeSettings(AppConfig config)
     {
@@ -29,14 +37,25 @@ public sealed class RuntimeSettings
         _groqApiKey = config.GroqApiKey;
         _geminiApiKey = config.GeminiApiKey;
         _cerebrasApiKey = config.CerebrasApiKey;
+        _nvidiaApiKey = config.NvidiaApiKey;
         _codexApiKey = config.CodexApiKey;
         _sttApiKey = config.SttApiKey;
+        _dashboardAccessStatePath = string.IsNullOrWhiteSpace(config.DashboardAccessStatePath)
+            ? DefaultStatePathResolver.CreateDefault().ResolveStateFilePath("dashboard_access.json")
+            : config.DashboardAccessStatePath.Trim();
+        _externalDashboardEnabled = LoadExternalDashboardEnabled(_dashboardAccessStatePath, config.ExternalDashboardEnabled);
         _cerebrasKeychainService = string.IsNullOrWhiteSpace(config.CerebrasKeychainService)
             ? CerebrasApiKeyService
             : config.CerebrasKeychainService.Trim();
         _cerebrasKeychainAccount = string.IsNullOrWhiteSpace(config.CerebrasKeychainAccount)
             ? KeychainAccount
             : config.CerebrasKeychainAccount.Trim();
+        _nvidiaKeychainService = string.IsNullOrWhiteSpace(config.NvidiaKeychainService)
+            ? NvidiaApiKeyService
+            : config.NvidiaKeychainService.Trim();
+        _nvidiaKeychainAccount = string.IsNullOrWhiteSpace(config.NvidiaKeychainAccount)
+            ? KeychainAccount
+            : config.NvidiaKeychainAccount.Trim();
     }
 
     public string? GetTelegramBotToken()
@@ -79,6 +98,14 @@ public sealed class RuntimeSettings
         }
     }
 
+    public string? GetNvidiaApiKey()
+    {
+        lock (_lock)
+        {
+            return _nvidiaApiKey;
+        }
+    }
+
     public string? GetCodexApiKey()
     {
         lock (_lock)
@@ -113,15 +140,37 @@ public sealed class RuntimeSettings
                 Mask(_groqApiKey),
                 Mask(_geminiApiKey),
                 Mask(_cerebrasApiKey),
+                Mask(_nvidiaApiKey),
                 Mask(_codexApiKey),
                 HasValue(_telegramBotToken),
                 HasValue(_telegramChatId),
                 HasValue(_groqApiKey),
                 HasValue(_geminiApiKey),
                 HasValue(_cerebrasApiKey),
-                HasValue(_codexApiKey)
+                HasValue(_nvidiaApiKey),
+                HasValue(_codexApiKey),
+                _externalDashboardEnabled
             );
         }
+    }
+
+    public bool IsExternalDashboardEnabled()
+    {
+        lock (_lock)
+        {
+            return _externalDashboardEnabled;
+        }
+    }
+
+    public string SetExternalDashboardEnabled(bool enabled)
+    {
+        lock (_lock)
+        {
+            _externalDashboardEnabled = enabled;
+        }
+
+        SaveExternalDashboardEnabled(_dashboardAccessStatePath, enabled);
+        return enabled ? "external dashboard access enabled" : "external dashboard access disabled";
     }
 
     public string UpdateTelegram(string? botToken, string? chatId, bool persist)
@@ -180,6 +229,7 @@ public sealed class RuntimeSettings
         string? groqApiKey,
         string? geminiApiKey,
         string? cerebrasApiKey,
+        string? nvidiaApiKey,
         string? codexApiKey,
         bool persist
     )
@@ -203,6 +253,12 @@ public sealed class RuntimeSettings
             {
                 _cerebrasApiKey = cerebrasApiKey.Trim();
                 updatedFields.Add("cerebras_api_key");
+            }
+
+            if (!string.IsNullOrWhiteSpace(nvidiaApiKey))
+            {
+                _nvidiaApiKey = nvidiaApiKey.Trim();
+                updatedFields.Add("nvidia_api_key");
             }
 
             if (!string.IsNullOrWhiteSpace(codexApiKey))
@@ -235,6 +291,11 @@ public sealed class RuntimeSettings
             if (!Persist(_cerebrasKeychainService, _cerebrasKeychainAccount, cerebrasApiKey))
             {
                 failed.Add("cerebras_api_key");
+            }
+
+            if (!Persist(_nvidiaKeychainService, _nvidiaKeychainAccount, nvidiaApiKey))
+            {
+                failed.Add("nvidia_api_key");
             }
 
             if (!Persist(CodexApiKeyService, KeychainAccount, codexApiKey))
@@ -295,6 +356,7 @@ public sealed class RuntimeSettings
             _groqApiKey = null;
             _geminiApiKey = null;
             _cerebrasApiKey = null;
+            _nvidiaApiKey = null;
             _codexApiKey = null;
         }
 
@@ -317,6 +379,11 @@ public sealed class RuntimeSettings
         if (!SecretLoader.TryDeletePlatformSecret(_cerebrasKeychainService, _cerebrasKeychainAccount))
         {
             failed.Add("cerebras_api_key");
+        }
+
+        if (!SecretLoader.TryDeletePlatformSecret(_nvidiaKeychainService, _nvidiaKeychainAccount))
+        {
+            failed.Add("nvidia_api_key");
         }
 
         if (!SecretLoader.TryDeletePlatformSecret(CodexApiKeyService, KeychainAccount))
@@ -369,6 +436,37 @@ public sealed class RuntimeSettings
 
         return true;
     }
+
+    private static bool LoadExternalDashboardEnabled(string path, bool fallback)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return fallback;
+            }
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            return doc.RootElement.TryGetProperty("externalDashboardEnabled", out var enabled)
+                && enabled.ValueKind is JsonValueKind.True or JsonValueKind.False
+                ? enabled.GetBoolean()
+                : fallback;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[settings] dashboard access state read failed: {ex.Message}");
+            return fallback;
+        }
+    }
+
+    private static void SaveExternalDashboardEnabled(string path, bool enabled)
+    {
+        var json = "{\n"
+                   + $"  \"externalDashboardEnabled\": {(enabled ? "true" : "false")},\n"
+                   + $"  \"updatedAtUtc\": \"{DateTimeOffset.UtcNow:O}\"\n"
+                   + "}\n";
+        AtomicFileStore.WriteAllText(path, json, ownerOnly: true);
+    }
 }
 
 public sealed record SettingsSnapshot(
@@ -377,11 +475,14 @@ public sealed record SettingsSnapshot(
     string GroqApiKeyMasked,
     string GeminiApiKeyMasked,
     string CerebrasApiKeyMasked,
+    string NvidiaApiKeyMasked,
     string CodexApiKeyMasked,
     bool TelegramBotTokenSet,
     bool TelegramChatIdSet,
     bool GroqApiKeySet,
     bool GeminiApiKeySet,
     bool CerebrasApiKeySet,
-    bool CodexApiKeySet
+    bool NvidiaApiKeySet,
+    bool CodexApiKeySet,
+    bool ExternalDashboardEnabled
 );

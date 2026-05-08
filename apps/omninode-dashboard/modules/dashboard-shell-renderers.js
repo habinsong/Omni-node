@@ -43,6 +43,45 @@ function startWorkspaceResize(event) {
   document.addEventListener("pointerup", handlePointerUp, { once: true });
 }
 
+function renderKeyboardIcon(e) {
+  return e(
+    "svg",
+    { viewBox: "0 0 24 24", className: "icon-svg", "aria-hidden": "true" },
+    e("rect", {
+      x: "3",
+      y: "6",
+      width: "18",
+      height: "12",
+      rx: "2",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "1.8"
+    }),
+    e("path", {
+      d: "M7 10h.01M10 10h.01M13 10h.01M16 10h.01M7 14h10",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2",
+      strokeLinecap: "round"
+    })
+  );
+}
+
+function renderChevronDownIcon(e) {
+  return e(
+    "svg",
+    { viewBox: "0 0 24 24", className: "icon-svg", "aria-hidden": "true" },
+    e("path", {
+      d: "m6 9 6 6 6-6",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2",
+      strokeLinecap: "round",
+      strokeLinejoin: "round"
+    })
+  );
+}
+
 export function renderGlobalNav(props) {
   const {
     e,
@@ -56,19 +95,30 @@ export function renderGlobalNav(props) {
     copilotStatus,
     codexStatus,
     defaultCodexModel,
+    defaultNvidiaModel,
     defaultCerebrasModel
   } = props;
 
-  const navStatusText = authed ? "세션 인증됨" : status;
+  const remoteDashboardClient = !!settingsState.remoteDashboardClient;
+  const navStatusText = authed ? (remoteDashboardClient ? "외부 접속중" : "세션 인증됨") : status;
   const geminiLabel = settingsState.geminiApiKeySet
     ? "gemini-3-flash-preview / gemini-3.1-flash-lite-preview"
     : "미설정";
   const cerebrasLabel = settingsState.cerebrasApiKeySet
     ? defaultCerebrasModel
     : "미설정";
-  const codexLabel = (codexStatus || "").trim().startsWith("설치/인증 완료")
+  const nvidiaLabel = settingsState.nvidiaApiKeySet
+    ? defaultNvidiaModel
+    : "미설정";
+  const copilotLabel = remoteDashboardClient
+    ? "외부 접속 제한"
+    : (selectedCopilotModel || "-");
+  const codexLabel = remoteDashboardClient
+    ? "외부 접속 제한"
+    : (codexStatus || "").trim().startsWith("설치/인증 완료")
     ? defaultCodexModel
     : codexStatus;
+  const copilotStatusLine = remoteDashboardClient ? null : e("div", null, copilotStatus);
 
   return e(
     "aside",
@@ -97,9 +147,10 @@ export function renderGlobalNav(props) {
       e("div", null, `Groq: ${selectedGroqModel || "-"}`),
       e("div", null, `Gemini: ${geminiLabel}`),
       e("div", null, `Cerebras: ${cerebrasLabel}`),
-      e("div", null, `Copilot: ${selectedCopilotModel || "-"}`),
+      e("div", null, `NVIDIA NIM: ${nvidiaLabel}`),
+      e("div", null, `Copilot: ${copilotLabel}`),
       e("div", null, `Codex: ${codexLabel || "-"}`),
-      e("div", null, copilotStatus)
+      copilotStatusLine
     )
   );
 }
@@ -266,8 +317,10 @@ export function renderWorkspace(props) {
     isPortraitMobileLayout,
     mobileWorkspaceHeight,
     currentWorkspacePane,
+    mobileComposerOpen,
     responsiveWorkspaceKey,
     setResponsivePane,
+    setMobileComposerOpen,
     currentKey,
     errorByKey,
     renderConversationPanel,
@@ -288,10 +341,13 @@ export function renderWorkspace(props) {
   ];
 
   if (isPortraitMobileLayout) {
+    const showMobileThread = currentWorkspacePane === "thread";
+    const showMobileComposerButton = showMobileThread && !mobileComposerOpen;
+    const showSupportPane = currentWorkspacePane === "support";
     return e(
       "div",
       {
-        className: "workspace-mobile-shell",
+        className: `workspace-mobile-shell ${mobileComposerOpen ? "mobile-composer-open" : ""}`,
         style: mobileWorkspaceHeight > 0
           ? { minHeight: `${mobileWorkspaceHeight}px`, height: `${mobileWorkspaceHeight}px` }
           : undefined
@@ -307,19 +363,47 @@ export function renderWorkspace(props) {
         : e(
           "section",
           { className: "chat-panel chat-panel-mobile" },
-          currentWorkspacePane === "support"
+          showSupportPane
             ? renderThreadHeader({ showInfoPanel: false, showActionButtons: false, showModebar: false })
             : null,
           errorByKey[currentKey] ? e("div", { className: "error-banner" }, errorByKey[currentKey]) : null,
-          currentWorkspacePane === "thread"
+          showMobileThread
             ? e(
               React.Fragment,
               null,
               renderMessages(),
-              composer
+              mobileComposerOpen
+                ? e(
+                  "div",
+                  { className: "mobile-composer-layer" },
+                  e("button", {
+                    type: "button",
+                    className: "mobile-composer-minimize",
+                    title: "입력창 최소화",
+                    "aria-label": "입력창 최소화",
+                    onClick: () => setMobileComposerOpen(responsiveWorkspaceKey, false)
+                  }, renderChevronDownIcon(e)),
+                  composer
+                )
+                : null,
+              showMobileComposerButton
+                ? e("button", {
+                  type: "button",
+                  className: "mobile-keyboard-toggle",
+                  title: "입력창 열기",
+                  "aria-label": "입력창 열기",
+                  onClick: () => setMobileComposerOpen(responsiveWorkspaceKey, true)
+                }, renderKeyboardIcon(e))
+                : null
             )
             : null,
-          currentWorkspacePane === "support" ? renderResponsiveWorkspaceSupportPane() : null,
+          showSupportPane
+            ? e(
+              "div",
+              { className: "mobile-support-scroll" },
+              renderResponsiveWorkspaceSupportPane()
+            )
+            : null,
           null
         )
     );

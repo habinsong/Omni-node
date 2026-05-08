@@ -1,6 +1,6 @@
 # Gemini 검색 리트리버 + RAG 상세 설계
 
-업데이트 기준: 2026-05-07
+업데이트 기준: 2026-05-08
 
 현재 상태: 이 문서는 Gemini 검색 전환 당시의 RAG/grounding 설계다. 최신 운영 기준은 상위 `docs/아키텍처_흐름.md`, `docs/도구_통합_패널_사용_가이드.md`, `docs/검증_가이드.md`를 우선 본다.
 
@@ -75,7 +75,7 @@
 4. 반복 상한 도달 시 실패 처리
 
 ## 8. 보안/키 정책
-- 설정 탭 저장 Gemini 키만 사용
+- 전환 당시 기준으로 설정 탭 저장 Gemini 키만 사용
 - macOS: keychain
 - Windows/Linux: secure_file_600 또는 로컬 secure store
 - 키 평문 로그 금지

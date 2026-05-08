@@ -195,7 +195,7 @@ public sealed partial class CommandService
         {
             if (tokens.Length < 4)
             {
-                return "사용법: /llm set <groq|copilot|codex> <model-id>";
+                    return "사용법: /llm set <groq|copilot|codex|nvidia> <model-id>";
             }
 
             var provider = tokens[2].Trim().ToLowerInvariant();
@@ -222,14 +222,26 @@ public sealed partial class CommandService
                 return SetChannelModel("telegram", "single", modelId);
             }
 
-            return "사용법: /llm set <groq|copilot|codex> <model-id>";
+            if (provider == "nvidia" || provider == "nvidia-nim" || provider == "nvidia_nim" || provider == "nim")
+            {
+                var providerSet = SetChannelProvider("telegram", "single", "nvidia");
+                if (providerSet.StartsWith("지원", StringComparison.OrdinalIgnoreCase)
+                    || providerSet.StartsWith("invalid", StringComparison.OrdinalIgnoreCase))
+                {
+                    return providerSet;
+                }
+
+                return SetChannelModel("telegram", "single", modelId);
+            }
+
+            return "사용법: /llm set <groq|copilot|codex|nvidia> <model-id>";
         }
 
         if (tokens[1].Equals("single", StringComparison.OrdinalIgnoreCase))
         {
             if (tokens.Length < 4)
             {
-                return "사용법: /llm single provider <groq|gemini|copilot|cerebras|codex> | /llm single model <model-id>";
+                return "사용법: /llm single provider <groq|gemini|copilot|cerebras|nvidia|codex> | /llm single model <model-id>";
             }
 
             if (tokens[2].Equals("provider", StringComparison.OrdinalIgnoreCase))
@@ -248,14 +260,14 @@ public sealed partial class CommandService
                 return SetChannelModel("telegram", "single", model);
             }
 
-            return "사용법: /llm single provider <groq|gemini|copilot|cerebras|codex> | /llm single model <model-id>";
+            return "사용법: /llm single provider <groq|gemini|copilot|cerebras|nvidia|codex> | /llm single model <model-id>";
         }
 
         if (tokens[1].Equals("orchestration", StringComparison.OrdinalIgnoreCase))
         {
             if (tokens.Length < 4)
             {
-                return "사용법: /llm orchestration provider <auto|groq|gemini|copilot|cerebras|codex> | /llm orchestration model <model-id>";
+                return "사용법: /llm orchestration provider <auto|groq|gemini|copilot|cerebras|nvidia|codex> | /llm orchestration model <model-id>";
             }
 
             if (tokens[2].Equals("provider", StringComparison.OrdinalIgnoreCase))
@@ -274,21 +286,21 @@ public sealed partial class CommandService
                 return SetChannelModel("telegram", "orchestration", model);
             }
 
-            return "사용법: /llm orchestration provider <auto|groq|gemini|copilot|cerebras|codex> | /llm orchestration model <model-id>";
+            return "사용법: /llm orchestration provider <auto|groq|gemini|copilot|cerebras|nvidia|codex> | /llm orchestration model <model-id>";
         }
 
         if (tokens[1].Equals("multi", StringComparison.OrdinalIgnoreCase))
         {
             if (tokens.Length < 4)
             {
-                return "사용법: /llm multi <groq|gemini|copilot|cerebras|codex> <model-id> | /llm multi summary <auto|groq|gemini|copilot|cerebras|codex>";
+                return "사용법: /llm multi <groq|gemini|copilot|cerebras|nvidia|codex> <model-id> | /llm multi summary <auto|groq|gemini|copilot|cerebras|nvidia|codex>";
             }
 
             var key = tokens[2].ToLowerInvariant();
             var value = string.Join(' ', tokens.Skip(3)).Trim();
             if (string.IsNullOrWhiteSpace(value))
             {
-                return "사용법: /llm multi <groq|gemini|copilot|cerebras|codex> <model-id> | /llm multi summary <auto|groq|gemini|copilot|cerebras|codex>";
+                return "사용법: /llm multi <groq|gemini|copilot|cerebras|nvidia|codex> <model-id> | /llm multi summary <auto|groq|gemini|copilot|cerebras|nvidia|codex>";
             }
 
             lock (_telegramLlmLock)
@@ -313,6 +325,11 @@ public sealed partial class CommandService
                     return SetChannelModel("telegram", "multi.cerebras", value);
                 }
 
+                if (key == "nvidia" || key == "nvidia-nim" || key == "nvidia_nim" || key == "nim")
+                {
+                    return SetChannelModel("telegram", "multi.nvidia", value);
+                }
+
                 if (key == "codex")
                 {
                     return SetChannelModel("telegram", "multi.codex", value);
@@ -324,7 +341,7 @@ public sealed partial class CommandService
                 }
             }
 
-            return "사용법: /llm multi <groq|gemini|copilot|cerebras|codex> <model-id> | /llm multi summary <auto|groq|gemini|copilot|cerebras|codex>";
+            return "사용법: /llm multi <groq|gemini|copilot|cerebras|nvidia|codex> <model-id> | /llm multi summary <auto|groq|gemini|copilot|cerebras|nvidia|codex>";
         }
 
         return "알 수 없는 /llm 명령입니다. /llm help 또는 자연어 요청을 사용하세요.";
@@ -341,7 +358,7 @@ public sealed partial class CommandService
         var tokens = text.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (tokens.Length < 2)
         {
-            return Task.FromResult<string?>("사용법: /model <groq|gemini|copilot|cerebras|codex>");
+            return Task.FromResult<string?>("사용법: /model <groq|gemini|copilot|cerebras|nvidia|codex>");
         }
 
         var key = tokens[1].Trim().ToLowerInvariant();
@@ -381,6 +398,14 @@ public sealed partial class CommandService
                 return Task.FromResult<string?>($"단일 제공자를 Cerebras로 바꿨습니다. 현재 모델: {_telegramLlmPreferences.SingleModel}");
             }
 
+            if (key == "nvidia" || key == "nvidia-nim" || key == "nvidia_nim" || key == "nim")
+            {
+                _telegramLlmPreferences.SingleProvider = "nvidia";
+                _telegramLlmPreferences.SingleModel = _config.NvidiaModel;
+                _telegramLlmPreferences.AutoGroqComplexUpgrade = false;
+                return Task.FromResult<string?>($"단일 제공자를 NVIDIA NIM으로 바꿨습니다. 현재 모델: {_telegramLlmPreferences.SingleModel}");
+            }
+
             if (key == "codex")
             {
                 _telegramLlmPreferences.SingleProvider = "codex";
@@ -390,7 +415,7 @@ public sealed partial class CommandService
             }
         }
 
-        return Task.FromResult<string?>("사용법: /model <groq|gemini|copilot|cerebras|codex>");
+        return Task.FromResult<string?>("사용법: /model <groq|gemini|copilot|cerebras|nvidia|codex>");
     }
 
     private async Task<string?> TryHandleTelegramNaturalControlCommandAsync(
@@ -451,7 +476,7 @@ public sealed partial class CommandService
             return BuildTelegramHelpText(helpTopic);
         }
 
-        var setProviderModel = Regex.Match(normalized, @"(?i)(groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|codex|코덱스)\s*모델\s*([a-zA-Z0-9._/\-]+)\s*(?:로|으로)?\s*(?:바꿔|변경|설정)");
+        var setProviderModel = Regex.Match(normalized, @"(?i)(groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|nvidia|nvidia-nim|nim|엔비디아|codex|코덱스)\s*모델\s*([a-zA-Z0-9._/\-]+)\s*(?:로|으로)?\s*(?:바꿔|변경|설정)");
         if (setProviderModel.Success)
         {
             var provider = ExtractProviderAliasFromNaturalText(setProviderModel.Groups[1].Value, allowAuto: false);
@@ -744,7 +769,7 @@ public sealed partial class CommandService
 
         var codingProvider = Regex.Match(
             normalized,
-            @"(?is)(단일|single|오케스트레이션|orchestration|다중|multi)\s*코딩\s*(?:요약\s*)?(?:제공자|provider)\s*(?:를|을)?\s*(auto|자동|groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|codex|코덱스)\s*(?:로|으로)?\s*(?:바꿔|변경|설정)"
+            @"(?is)(단일|single|오케스트레이션|orchestration|다중|multi)\s*코딩\s*(?:요약\s*)?(?:제공자|provider)\s*(?:를|을)?\s*(auto|자동|groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|nvidia|nvidia-nim|nim|엔비디아|codex|코덱스)\s*(?:로|으로)?\s*(?:바꿔|변경|설정)"
         );
         if (codingProvider.Success)
         {
@@ -790,7 +815,7 @@ public sealed partial class CommandService
 
         var codingWorker = Regex.Match(
             normalized,
-            @"(?is)(오케스트레이션|orchestration|다중|multi)\s*코딩\s*(?:워커|worker)\s*(groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|codex|코덱스)\s*(?:모델|model)?\s*(?:을|를)?\s*([a-zA-Z0-9._/\-]+|none|없음|선택안함|선택 안함)\s*(?:로|으로)?\s*(?:바꿔|변경|설정)"
+            @"(?is)(오케스트레이션|orchestration|다중|multi)\s*코딩\s*(?:워커|worker)\s*(groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|nvidia|nvidia-nim|nim|엔비디아|codex|코덱스)\s*(?:모델|model)?\s*(?:을|를)?\s*([a-zA-Z0-9._/\-]+|none|없음|선택안함|선택 안함)\s*(?:로|으로)?\s*(?:바꿔|변경|설정)"
         );
         if (codingWorker.Success)
         {
@@ -901,7 +926,7 @@ public sealed partial class CommandService
             }
         }
 
-        var singleProviderSwitch = Regex.Match(lowered, @"(?:단일|single).*(groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|codex|코덱스).*(바꿔|변경|설정)");
+        var singleProviderSwitch = Regex.Match(lowered, @"(?:단일|single).*(groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|nvidia|nvidia-nim|nim|엔비디아|codex|코덱스).*(바꿔|변경|설정)");
         if (singleProviderSwitch.Success)
         {
             var provider = ExtractProviderAliasFromNaturalText(singleProviderSwitch.Groups[1].Value, allowAuto: false);
@@ -911,7 +936,7 @@ public sealed partial class CommandService
             }
         }
 
-        var orchestrationProviderSwitch = Regex.Match(lowered, @"(?:오케스트레이션|orchestration|집계).*(auto|자동|groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|codex|코덱스).*(바꿔|변경|설정)");
+        var orchestrationProviderSwitch = Regex.Match(lowered, @"(?:오케스트레이션|orchestration|집계).*(auto|자동|groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|nvidia|nvidia-nim|nim|엔비디아|codex|코덱스).*(바꿔|변경|설정)");
         if (orchestrationProviderSwitch.Success)
         {
             var provider = ExtractProviderAliasFromNaturalText(orchestrationProviderSwitch.Groups[1].Value, allowAuto: true);
@@ -921,7 +946,7 @@ public sealed partial class CommandService
             }
         }
 
-        var quickProviderSwitch = Regex.Match(lowered, @"(groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|codex|코덱스).*(바꿔|변경|설정)");
+        var quickProviderSwitch = Regex.Match(lowered, @"(groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|nvidia|nvidia-nim|nim|엔비디아|codex|코덱스).*(바꿔|변경|설정)");
         if (quickProviderSwitch.Success
             && !ContainsAny(lowered, "단일", "single", "오케스트레이션", "요약", "summary", "다중", "multi"))
         {
@@ -966,6 +991,12 @@ public sealed partial class CommandService
         if (multiCerebrasModel.Success)
         {
             return $"/llm multi cerebras {multiCerebrasModel.Groups[1].Value}";
+        }
+
+        var multiNvidiaModel = Regex.Match(normalized, @"(?i)(?:다중|multi)\s*(?:nvidia|nvidia-nim|nim|엔비디아)\s*(?:모델|model)\s*([a-zA-Z0-9._/\-]+)");
+        if (multiNvidiaModel.Success)
+        {
+            return $"/llm multi nvidia {multiNvidiaModel.Groups[1].Value}";
         }
 
         var multiCodexModel = Regex.Match(normalized, @"(?i)(?:다중|multi)\s*(?:codex|코덱스)\s*(?:모델|model)\s*([a-zA-Z0-9._/\-]+)");
@@ -1216,6 +1247,11 @@ public sealed partial class CommandService
             return "cerebras";
         }
 
+        if (ContainsAny(lowered, "nvidia", "nvidia-nim", "nim", "엔비디아"))
+        {
+            return "nvidia";
+        }
+
         if (ContainsAny(lowered, "codex", "코덱스", "openai", "오픈ai", "오픈 ai"))
         {
             return "codex";
@@ -1431,6 +1467,21 @@ public sealed partial class CommandService
             builder.AppendLine();
         }
 
+        if (selected == "all" || selected == "nvidia" || selected == "nim" || selected == "nvidia-nim")
+        {
+            hasSection = true;
+            builder.AppendLine("[NVIDIA NIM 모델]");
+            builder.AppendLine($"- 기본: {_config.NvidiaModel}");
+            builder.AppendLine("- 대표 지원: meta/llama-3.3-70b-instruct");
+            builder.AppendLine("- 대표 지원: nvidia/llama-3.3-nemotron-super-49b-v1.5");
+            builder.AppendLine("- 대표 지원: nvidia/nemotron-3-super-120b-a12b");
+            builder.AppendLine("- 대표 지원: openai/gpt-oss-120b");
+            builder.AppendLine("- 대표 지원: qwen/qwen3-coder-480b-a35b-instruct");
+            builder.AppendLine($"- 현재 단일 선택: {(snapshot.SingleProvider == "nvidia" ? snapshot.SingleModel : _config.NvidiaModel)}");
+            builder.AppendLine($"- 현재 다중 선택: {snapshot.MultiNvidiaModel}");
+            builder.AppendLine();
+        }
+
         if (selected == "all" || selected == "codex")
         {
             hasSection = true;
@@ -1443,7 +1494,7 @@ public sealed partial class CommandService
 
         if (!hasSection)
         {
-            return "사용법: /llm models [groq|gemini|copilot|cerebras|codex|all]";
+            return "사용법: /llm models [groq|gemini|copilot|cerebras|nvidia|codex|all]";
         }
 
         builder.AppendLine("바꾸는 예시:");
@@ -1691,6 +1742,7 @@ public sealed partial class CommandService
                     streamCallback(update.Delta);
                 }
             };
+        var requestText = text ?? string.Empty;
         TelegramLlmPreferences snapshot;
         lock (_telegramLlmLock)
         {
@@ -1718,7 +1770,7 @@ public sealed partial class CommandService
         var snapshotSingleModel = ResolveModel(snapshotSingleProvider, snapshot.SingleModel);
 
         // Think+ 토글 키워드 감지 (입력 시작 부분)
-        var rawIncomingText = text ?? string.Empty;
+        var rawIncomingText = requestText;
         var thinkPlusToggleNote = string.Empty;
         var hasActivationKeyword = LooksLikeThinkPlusActivation(rawIncomingText);
         var hasDeactivationKeyword = LooksLikeThinkPlusDeactivation(rawIncomingText);
@@ -1749,7 +1801,7 @@ public sealed partial class CommandService
             if (stripped.Length < 6)
             {
                 var note = thinkPlusToggleNote;
-                _conversationStore.AppendMessage(session.Thread.Id, "user", text, "telegram:user");
+                _conversationStore.AppendMessage(session.Thread.Id, "user", requestText, "telegram:user");
                 _conversationStore.AppendMessage(session.Thread.Id, "assistant", note, "telegram:think_plus_toggle");
                 await EnsureConversationTitleFromFirstTurnAsync(session.Thread.Id, "system", "-", cancellationToken);
                 SetCurrentTelegramExecutionMetadata(null, 0, 0, "-");
@@ -1762,10 +1814,10 @@ public sealed partial class CommandService
                 return note;
             }
             // 결합 메시지: text 자체를 정리된 질문으로 덮어쓰고 정상 흐름 진행. 노트는 응답에 prepend.
-            text = stripped;
+            requestText = stripped;
         }
 
-        var effectiveTopicInput = BuildTelegramFollowupAwareInput(telegramThread, text);
+        var effectiveTopicInput = BuildTelegramFollowupAwareInput(telegramThread, requestText);
         var resolvedWebUrls = ResolveWebUrls(effectiveTopicInput, webUrls, webSearchEnabled);
         if (resolvedWebUrls.Count > 0 && snapshot.Mode == "single" && _llmRouter.HasGeminiApiKey())
         {
@@ -1791,7 +1843,7 @@ public sealed partial class CommandService
             );
             var urlResponseText = $"[Single {urlSingle.Response.Provider}:{urlSingle.Response.Model}]\n{FormatTelegramResponse(urlSingle.Response.Text, TelegramMaxResponseChars)}";
             var urlAssistantMeta = $"telegram-single:{urlSingle.Response.Provider}:{urlSingle.Response.Model}:gemini-url-single";
-            _conversationStore.AppendMessage(session.Thread.Id, "user", text, "telegram:user");
+            _conversationStore.AppendMessage(session.Thread.Id, "user", requestText, "telegram:user");
             _conversationStore.AppendMessage(session.Thread.Id, "assistant", urlResponseText, urlAssistantMeta);
             await EnsureConversationTitleFromFirstTurnAsync(session.Thread.Id, urlSingle.Response.Provider, urlSingle.Response.Model, cancellationToken);
             _ = await MaybeCompressConversationAsync(session.Thread.Id, "chat-single", urlSingle.Response.Provider, urlSingle.Response.Model, cancellationToken);
@@ -1800,7 +1852,7 @@ public sealed partial class CommandService
             return urlResponseText;
         }
 
-        var skillQueryText = text ?? string.Empty;
+        var skillQueryText = requestText;
         var hasStickyActiveSkillForTelegram = !string.IsNullOrWhiteSpace(session.SessionId)
             && _activeSkillByThread.ContainsKey(session.SessionId);
         var thinkPlusActiveForTelegram = IsThinkPlusActiveForThread(session.SessionId);
@@ -1817,7 +1869,7 @@ public sealed partial class CommandService
             var shouldUseGeminiWeb = false;
             var shouldFallbackToGeminiWeb = false;
 
-            if (LooksLikeExplicitWebLookupQuestion(text))
+            if (LooksLikeExplicitWebLookupQuestion(requestText))
             {
                 decisionPath = "heuristic_explicit_web";
                 shouldUseGeminiWeb = true;
@@ -1865,7 +1917,7 @@ public sealed partial class CommandService
                 );
                 var webResponseText = $"[Single {webSingle.Response.Provider}:{webSingle.Response.Model}]\n{FormatTelegramResponse(webSingle.Response.Text, TelegramMaxResponseChars)}";
                 var webAssistantMeta = $"telegram-single:{webSingle.Response.Provider}:{webSingle.Response.Model}:{webSingle.Route}";
-                _conversationStore.AppendMessage(session.Thread.Id, "user", text, "telegram:user");
+                _conversationStore.AppendMessage(session.Thread.Id, "user", requestText, "telegram:user");
                 _conversationStore.AppendMessage(session.Thread.Id, "assistant", webResponseText, webAssistantMeta);
                 await EnsureConversationTitleFromFirstTurnAsync(session.Thread.Id, webSingle.Response.Provider, webSingle.Response.Model, cancellationToken);
                 _ = await MaybeCompressConversationAsync(session.Thread.Id, "chat-single", webSingle.Response.Provider, webSingle.Response.Model, cancellationToken);
@@ -1891,7 +1943,7 @@ public sealed partial class CommandService
         {
             var blockedAssistantMeta = "telegram-forced-context:unsupported";
             var blockedResponseText = sharedPrepared.UnsupportedMessage;
-            _conversationStore.AppendMessage(session.Thread.Id, "user", text, "telegram:user");
+            _conversationStore.AppendMessage(session.Thread.Id, "user", requestText, "telegram:user");
             _conversationStore.AppendMessage(session.Thread.Id, "assistant", blockedResponseText, blockedAssistantMeta);
             await EnsureConversationTitleFromFirstTurnAsync(session.Thread.Id, "gemini", "-", cancellationToken);
             var guardCategory = NormalizeForcedGuardCategory(sharedPrepared.GuardFailure?.Category.ToString());
@@ -1920,14 +1972,14 @@ public sealed partial class CommandService
         // Think+ 활성이면 sharedPrepared 앞에 web context prepend
         if (thinkPlusActiveForTelegram)
         {
-            var thinkPlusContext = await BuildThinkPlusContextAsync(text ?? string.Empty, "telegram", cancellationToken).ConfigureAwait(false);
+            var thinkPlusContext = await BuildThinkPlusContextAsync(requestText, "telegram", cancellationToken).ConfigureAwait(false);
             if (!string.IsNullOrEmpty(thinkPlusContext))
             {
                 preparedInput = thinkPlusContext + preparedInput;
             }
         }
 
-        var thinkingLevel = ResolveTelegramThinkingLevel(snapshot, text);
+        var thinkingLevel = ResolveTelegramThinkingLevel(snapshot, requestText);
         var profiledInput = BuildTelegramProfilePrompt(preparedInput, snapshot.Profile, thinkingLevel);
         var contextualProfiledInput = BuildContextualInput(session.SessionId, profiledInput, session.LinkedMemoryNotes);
 
@@ -1972,6 +2024,7 @@ public sealed partial class CommandService
                 null,
                 null,
                 null,
+                null,
                 normalizedAttachments,
                 cancellationToken
             );
@@ -1982,7 +2035,7 @@ public sealed partial class CommandService
                 ("text", orchestrated.Text)
             );
             effectiveGuardFailure = sharedPrepared.GuardFailure;
-            var orchestratedValidated = ApplyListCountFallback(text, orchestrated.Text, sharedPrepared.Citations);
+            var orchestratedValidated = ApplyListCountFallback(requestText, orchestrated.Text, sharedPrepared.Citations);
             orchestratedValidated = ApplySkillCreateDirective(orchestratedValidated, "telegram");
             orchestratedValidated = CleanLeakedSystemMarkers(orchestratedValidated);
             responseText = $"[{orchestrated.Route}]\n{FormatTelegramResponse(orchestratedValidated, TelegramMaxResponseChars)}";
@@ -1995,7 +2048,7 @@ public sealed partial class CommandService
             modelForMemory = string.IsNullOrWhiteSpace(snapshot.OrchestrationModel) ? "-" : snapshot.OrchestrationModel;
             assistantMeta = $"telegram-orchestration:{orchestrated.Route}";
             responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
-            _conversationStore.AppendMessage(session.Thread.Id, "user", text, "telegram:user");
+            _conversationStore.AppendMessage(session.Thread.Id, "user", requestText, "telegram:user");
             _conversationStore.AppendMessage(session.Thread.Id, "assistant", responseText, assistantMeta);
             await EnsureConversationTitleFromFirstTurnAsync(session.Thread.Id, providerForMemory, modelForMemory, cancellationToken);
             _ = await MaybeCompressConversationAsync(session.Thread.Id, "chat-single", providerForMemory, modelForMemory, cancellationToken);
@@ -2015,6 +2068,7 @@ public sealed partial class CommandService
                 snapshot.MultiCerebrasModel,
                 snapshot.MultiSummaryProvider,
                 snapshot.MultiCodexModel,
+                snapshot.MultiNvidiaModel,
                 normalizedAttachments,
                 cancellationToken
             );
@@ -2025,12 +2079,13 @@ public sealed partial class CommandService
                 ("groq", multi.GroqText),
                 ("gemini", multi.GeminiText),
                 ("cerebras", multi.CerebrasText),
+                ("nvidia", multi.NvidiaText),
                 ("copilot", multi.CopilotText),
                 ("codex", multi.CodexText),
                 ("summary", multi.Summary)
             );
             effectiveGuardFailure = sharedPrepared.GuardFailure;
-            var multiSummaryValidated = ApplyListCountFallback(text, multi.Summary, sharedPrepared.Citations);
+            var multiSummaryValidated = ApplyListCountFallback(requestText, multi.Summary, sharedPrepared.Citations);
             multiSummaryValidated = ApplySkillCreateDirective(multiSummaryValidated, "telegram");
             multiSummaryValidated = CleanLeakedSystemMarkers(multiSummaryValidated);
             responseText = $"""
@@ -2048,13 +2103,14 @@ public sealed partial class CommandService
                 "groq" => multi.GroqModel,
                 "gemini" => multi.GeminiModel,
                 "cerebras" => multi.CerebrasModel,
+                "nvidia" => multi.NvidiaModel,
                 "copilot" => multi.CopilotModel,
                 "codex" => multi.CodexModel,
                 _ => "-"
             };
             assistantMeta = $"telegram-multi:summary={multi.ResolvedSummaryProvider}";
             responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
-            _conversationStore.AppendMessage(session.Thread.Id, "user", text, "telegram:user");
+            _conversationStore.AppendMessage(session.Thread.Id, "user", requestText, "telegram:user");
             _conversationStore.AppendMessage(session.Thread.Id, "assistant", responseText, assistantMeta);
             await EnsureConversationTitleFromFirstTurnAsync(session.Thread.Id, providerForMemory, modelForMemory, cancellationToken);
             _ = await MaybeCompressConversationAsync(session.Thread.Id, "chat-single", providerForMemory, modelForMemory, cancellationToken);
@@ -2085,7 +2141,7 @@ public sealed partial class CommandService
                 providerForMemory = "groq";
                 modelForMemory = preferredModel;
                 assistantMeta = $"telegram-single:groq:{preferredModel}:unsupported";
-                _conversationStore.AppendMessage(session.Thread.Id, "user", text, "telegram:user");
+                _conversationStore.AppendMessage(session.Thread.Id, "user", requestText, "telegram:user");
                 _conversationStore.AppendMessage(session.Thread.Id, "assistant", responseText, assistantMeta);
                 await EnsureConversationTitleFromFirstTurnAsync(session.Thread.Id, providerForMemory, modelForMemory, cancellationToken);
                 LogTelegramGuardMeta(assistantMeta);
@@ -2094,18 +2150,18 @@ public sealed partial class CommandService
             }
 
             var singleGroq = await ExecuteTelegramGroqSingleAsync(
-                text,
+                requestText,
                 providerPrepared.Text,
                 snapshot,
                 thinkingLevel,
                 streamCallback,
                 cancellationToken
             );
-            if (!_config.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(text, singleGroq.Text))
+            if (!_config.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(requestText, singleGroq.Text))
             {
                 var historyBypassInput = BuildHistoryBypassInput(providerPrepared.Text);
                 var recovered = await ExecuteTelegramGroqSingleAsync(
-                    text,
+                    requestText,
                     historyBypassInput,
                     snapshot,
                     thinkingLevel,
@@ -2113,15 +2169,15 @@ public sealed partial class CommandService
                     cancellationToken
                 );
                 if (!string.IsNullOrWhiteSpace(recovered.Text)
-                    && !ShouldRetrySingleChatWithoutHistory(text, recovered.Text))
+                    && !ShouldRetrySingleChatWithoutHistory(requestText, recovered.Text))
                 {
                     singleGroq = recovered;
                 }
                 else
                 {
-                    var originalRequestInput = BuildOriginalRequestRetryInput(text);
+                    var originalRequestInput = BuildOriginalRequestRetryInput(requestText);
                     var originalRecovered = await ExecuteTelegramGroqSingleAsync(
-                        text,
+                        requestText,
                         originalRequestInput,
                         snapshot,
                         thinkingLevel,
@@ -2129,9 +2185,9 @@ public sealed partial class CommandService
                         cancellationToken
                     );
                     singleGroq = !string.IsNullOrWhiteSpace(originalRecovered.Text)
-                                 && !ShouldRetrySingleChatWithoutHistory(text, originalRecovered.Text)
+                                 && !ShouldRetrySingleChatWithoutHistory(requestText, originalRecovered.Text)
                         ? originalRecovered
-                        : new LlmSingleChatResult(singleGroq.Provider, singleGroq.Model, BuildOffTopicGuardMessage(text));
+                        : new LlmSingleChatResult(singleGroq.Provider, singleGroq.Model, BuildOffTopicGuardMessage(requestText));
                 }
             }
             var citationBundle = BuildAndLogCitationMappings(
@@ -2148,7 +2204,7 @@ public sealed partial class CommandService
             providerForMemory = singleGroq.Provider;
             modelForMemory = singleGroq.Model;
             assistantMeta = $"telegram-single:{singleGroq.Provider}:{singleGroq.Model}";
-            _conversationStore.AppendMessage(session.Thread.Id, "user", text, "telegram:user");
+            _conversationStore.AppendMessage(session.Thread.Id, "user", requestText, "telegram:user");
             _conversationStore.AppendMessage(session.Thread.Id, "assistant", responseText, assistantMeta);
             await EnsureConversationTitleFromFirstTurnAsync(session.Thread.Id, providerForMemory, modelForMemory, cancellationToken);
             _ = await MaybeCompressConversationAsync(session.Thread.Id, "chat-single", providerForMemory, modelForMemory, cancellationToken);
@@ -2175,7 +2231,7 @@ public sealed partial class CommandService
             providerForMemory = snapshot.SingleProvider;
             modelForMemory = singleModel;
             assistantMeta = $"telegram-single:{snapshot.SingleProvider}:{singleModel}:unsupported";
-            _conversationStore.AppendMessage(session.Thread.Id, "user", text, "telegram:user");
+            _conversationStore.AppendMessage(session.Thread.Id, "user", requestText, "telegram:user");
             _conversationStore.AppendMessage(session.Thread.Id, "assistant", responseText, assistantMeta);
             await EnsureConversationTitleFromFirstTurnAsync(session.Thread.Id, providerForMemory, modelForMemory, cancellationToken);
             LogTelegramGuardMeta(assistantMeta);
@@ -2189,10 +2245,10 @@ public sealed partial class CommandService
             snapshot.SingleModel,
             "telegram",
             cancellationToken,
-            ResolveSingleChatMaxOutputTokens(text),
+            ResolveSingleChatMaxOutputTokens(requestText),
             streamCallback
         );
-        if (!_config.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(text, single.Text))
+        if (!_config.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(requestText, single.Text))
         {
             var historyBypassInput = BuildHistoryBypassInput(providerInput.Text);
             var recovered = await ChatSingleAsync(
@@ -2201,30 +2257,30 @@ public sealed partial class CommandService
                 snapshot.SingleModel,
                 "telegram",
                 cancellationToken,
-                ResolveSingleChatMaxOutputTokens(text),
+                ResolveSingleChatMaxOutputTokens(requestText),
                 streamCallback
             );
             if (!string.IsNullOrWhiteSpace(recovered.Text)
-                && !ShouldRetrySingleChatWithoutHistory(text, recovered.Text))
+                && !ShouldRetrySingleChatWithoutHistory(requestText, recovered.Text))
             {
                 single = recovered;
             }
             else
             {
-                var originalRequestInput = BuildOriginalRequestRetryInput(text);
+                var originalRequestInput = BuildOriginalRequestRetryInput(requestText);
                 var originalRecovered = await ChatSingleAsync(
                     originalRequestInput,
                     snapshot.SingleProvider,
                     snapshot.SingleModel,
                     "telegram",
                     cancellationToken,
-                    ResolveSingleChatMaxOutputTokens(text),
+                    ResolveSingleChatMaxOutputTokens(requestText),
                     streamCallback
                 );
                 single = !string.IsNullOrWhiteSpace(originalRecovered.Text)
-                         && !ShouldRetrySingleChatWithoutHistory(text, originalRecovered.Text)
+                         && !ShouldRetrySingleChatWithoutHistory(requestText, originalRecovered.Text)
                     ? originalRecovered
-                    : new LlmSingleChatResult(single.Provider, single.Model, BuildOffTopicGuardMessage(text));
+                    : new LlmSingleChatResult(single.Provider, single.Model, BuildOffTopicGuardMessage(requestText));
             }
         }
         var singleCitationBundle = BuildAndLogCitationMappings(
@@ -2241,7 +2297,7 @@ public sealed partial class CommandService
         providerForMemory = single.Provider;
         modelForMemory = single.Model;
         assistantMeta = $"telegram-single:{single.Provider}:{single.Model}";
-        _conversationStore.AppendMessage(session.Thread.Id, "user", text, "telegram:user");
+        _conversationStore.AppendMessage(session.Thread.Id, "user", requestText, "telegram:user");
         _conversationStore.AppendMessage(session.Thread.Id, "assistant", responseText, assistantMeta);
         await EnsureConversationTitleFromFirstTurnAsync(session.Thread.Id, providerForMemory, modelForMemory, cancellationToken);
         _ = await MaybeCompressConversationAsync(session.Thread.Id, "chat-single", providerForMemory, modelForMemory, cancellationToken);
@@ -3986,17 +4042,17 @@ public sealed partial class CommandService
                    자주 쓰는 slash:
                    - /talk [low|high]
                    - /code [low|high]
-                   - /model <groq|gemini|copilot|cerebras|codex>
+                   - /model <groq|gemini|copilot|cerebras|nvidia|codex>
                    - /llm status
-                   - /llm models [groq|gemini|copilot|cerebras|codex|all]
+                   - /llm models [groq|gemini|copilot|cerebras|nvidia|codex|all]
                    - /llm usage
                    - /llm mode <single|orchestration|multi>
-                   - /llm single provider <groq|gemini|copilot|cerebras|codex>
+                   - /llm single provider <groq|gemini|copilot|cerebras|nvidia|codex>
                    - /llm single model <model-id>
-                   - /llm orchestration provider <auto|groq|gemini|copilot|cerebras|codex>
+                   - /llm orchestration provider <auto|groq|gemini|copilot|cerebras|nvidia|codex>
                    - /llm orchestration model <model-id>
-                   - /llm multi <groq|gemini|copilot|cerebras|codex> <model-id>
-                   - /llm multi summary <auto|groq|gemini|copilot|cerebras|codex>
+                   - /llm multi <groq|gemini|copilot|cerebras|nvidia|codex> <model-id>
+                   - /llm multi summary <auto|groq|gemini|copilot|cerebras|nvidia|codex>
                    """;
         }
 
@@ -4066,14 +4122,14 @@ public sealed partial class CommandService
                    - /coding mode <single|orchestration|multi>
                    - /coding language [single|orchestration|multi] <language|auto>
                    - /coding run <요구사항>
-                   - /coding single provider <auto|groq|gemini|copilot|cerebras|codex>
+                   - /coding single provider <auto|groq|gemini|copilot|cerebras|nvidia|codex>
                    - /coding single model <model-id>
                    - /coding single run <요구사항>
-                   - /coding orchestration provider <auto|groq|gemini|copilot|cerebras|codex>
+                   - /coding orchestration provider <auto|groq|gemini|copilot|cerebras|nvidia|codex>
                    - /coding orchestration model <model-id>
                    - /coding orchestration worker <provider> <model-id|none>
                    - /coding orchestration run [요구사항]
-                   - /coding multi provider <auto|groq|gemini|copilot|cerebras|codex>
+                   - /coding multi provider <auto|groq|gemini|copilot|cerebras|nvidia|codex>
                    - /coding multi model <model-id>
                    - /coding multi worker <provider> <model-id|none>
                    - /coding multi run <요구사항>

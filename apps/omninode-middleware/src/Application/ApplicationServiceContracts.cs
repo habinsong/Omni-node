@@ -27,11 +27,13 @@ public interface ISettingsApplicationService
         string? groqApiKey,
         string? geminiApiKey,
         string? cerebrasApiKey,
+        string? nvidiaApiKey,
         string? codexApiKey,
         bool persist
     );
     string DeleteTelegramCredentials(bool deletePersisted);
     string DeleteLlmCredentials(bool deletePersisted);
+    string SetExternalDashboardEnabled(bool enabled);
     GeminiUsage GetGeminiUsageSnapshot();
     Task<CopilotPremiumUsageSnapshot> GetCopilotPremiumUsageSnapshotAsync(
         CancellationToken cancellationToken,

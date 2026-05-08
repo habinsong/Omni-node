@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
 using System.Net.Http;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace OmniNode.Middleware;
@@ -11,6 +12,10 @@ public sealed class LegacyGeminiGroundingSearchGateway : SearchGateway
     private const int DefaultTargetCount = 5;
     private const int MaxTargetCount = 10;
     private const int MaxRetrieverResults = 50;
+    private static readonly Regex QuotedPhraseRegex = new(
+        "[\"'`“”‘’](?<value>[^\"'`“”‘’]{2,80})[\"'`“”‘’]",
+        RegexOptions.Compiled
+    );
     private static readonly Regex DomainLikeTitleRegex = new(
         @"^[a-z0-9][a-z0-9\.-]*\.[a-z]{2,}$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase
@@ -64,10 +69,10 @@ public sealed class LegacyGeminiGroundingSearchGateway : SearchGateway
         }
 
         var maxResults = ResolveRetrieverMaxResults(targetCount, sourceConstrained);
-        async Task<(GeminiGroundedRetrieverResult RetrieverResult, IReadOnlyList<SearchDocument> Docs)> RunAttemptAsync()
+        async Task<(GeminiGroundedRetrieverResult RetrieverResult, IReadOnlyList<SearchDocument> Docs)> RunAttemptAsync(SearchRequest attemptRequest)
         {
             var result = await _searchRetriever
-                .RetrieveAsync(request, maxResults, cancellationToken)
+                .RetrieveAsync(attemptRequest, maxResults, cancellationToken)
                 .ConfigureAwait(false);
             if (result.Disabled)
             {
@@ -76,7 +81,7 @@ public sealed class LegacyGeminiGroundingSearchGateway : SearchGateway
 
             var built = await BuildDocumentsAsync(
                 result.Results,
-                request,
+                attemptRequest,
                 targetCount,
                 cancellationToken
             ).ConfigureAwait(false);
@@ -91,7 +96,7 @@ public sealed class LegacyGeminiGroundingSearchGateway : SearchGateway
                 .Count();
         }
 
-        var firstAttempt = await RunAttemptAsync().ConfigureAwait(false);
+        var firstAttempt = await RunAttemptAsync(request).ConfigureAwait(false);
         var firstIndependentSourceCount = CountIndependentSources(firstAttempt.Docs);
         var firstCountLockSatisfied = firstAttempt.Docs.Count >= targetCount
                                       && firstIndependentSourceCount >= minIndependentSources;
@@ -122,8 +127,11 @@ public sealed class LegacyGeminiGroundingSearchGateway : SearchGateway
             };
         }
 
-        // 1회 자동 재시도: 초기 no_documents / count-lock 미충족 변동성을 완화한다.
-        var secondAttempt = await RunAttemptAsync().ConfigureAwait(false);
+        // 1회 자동 재시도: 같은 질의 반복 대신 검색 친화적으로 재작성한 질의를 사용하고 결과를 병합한다.
+        var retryRequest = BuildRetrySearchRequest(request);
+        var secondRawAttempt = await RunAttemptAsync(retryRequest).ConfigureAwait(false);
+        var mergedRetryDocs = MergeSearchDocuments(firstAttempt.Docs, secondRawAttempt.Docs, targetCount);
+        var secondAttempt = (secondRawAttempt.RetrieverResult, Docs: mergedRetryDocs);
         var secondIndependentSourceCount = CountIndependentSources(secondAttempt.Docs);
         var secondCountLockSatisfied = secondAttempt.Docs.Count >= targetCount
                                        && secondIndependentSourceCount >= minIndependentSources;
@@ -132,10 +140,12 @@ public sealed class LegacyGeminiGroundingSearchGateway : SearchGateway
             CacheSuccessfulDocs(query, targetCount, secondAttempt.Docs, request.RequestedAtUtc);
             var successTermination = BuildTermination(
                 SearchLoopTerminationReason.Success,
-                reasonCode: "retrieved_with_retry",
+                reasonCode: string.Equals(retryRequest.Query, request.Query, StringComparison.Ordinal)
+                    ? "retrieved_with_retry"
+                    : "retrieved_with_rewritten_retry",
                 countLockReasonCode: "count_lock_satisfied",
                 attemptCount: 2,
-                collectedCandidateCount: secondAttempt.RetrieverResult.Results.Count,
+                collectedCandidateCount: firstAttempt.RetrieverResult.Results.Count + secondRawAttempt.RetrieverResult.Results.Count,
                 validDocumentCount: secondAttempt.Docs.Count,
                 independentSourceCount: secondIndependentSourceCount
             );
@@ -191,10 +201,12 @@ public sealed class LegacyGeminiGroundingSearchGateway : SearchGateway
         {
             var countLockTermination = BuildTermination(
                 SearchLoopTerminationReason.RetrievePlanExhausted,
-                reasonCode: "count_lock_unsatisfied_after_retries",
+                reasonCode: string.Equals(retryRequest.Query, request.Query, StringComparison.Ordinal)
+                    ? "count_lock_unsatisfied_after_retries"
+                    : "count_lock_unsatisfied_after_rewritten_retry",
                 countLockReasonCode: "count_lock_unsatisfied",
                 attemptCount: 2,
-                collectedCandidateCount: selectedAttempt.RetrieverResult.Results.Count,
+                collectedCandidateCount: firstAttempt.RetrieverResult.Results.Count + secondRawAttempt.RetrieverResult.Results.Count,
                 validDocumentCount: selectedAttempt.Docs.Count,
                 independentSourceCount: selectedIndependentSourceCount
             );
@@ -214,7 +226,7 @@ public sealed class LegacyGeminiGroundingSearchGateway : SearchGateway
             reasonCode: exhaustedReasonCode,
             countLockReasonCode: "not_evaluated",
             attemptCount: 2,
-            collectedCandidateCount: selectedAttempt.RetrieverResult.Results.Count,
+            collectedCandidateCount: firstAttempt.RetrieverResult.Results.Count + secondRawAttempt.RetrieverResult.Results.Count,
             validDocumentCount: 0,
             independentSourceCount: 0
         );
@@ -270,6 +282,153 @@ public sealed class LegacyGeminiGroundingSearchGateway : SearchGateway
 
         docs = snapshot.Docs;
         return docs.Count > 0;
+    }
+
+    private static SearchRequest BuildRetrySearchRequest(SearchRequest request)
+    {
+        var rewritten = RewriteSearchQueryForRetry(request.Query, request);
+        if (string.Equals(rewritten, request.Query, StringComparison.Ordinal))
+        {
+            return request;
+        }
+
+        return request with { Query = rewritten };
+    }
+
+    private static string RewriteSearchQueryForRetry(string query, SearchRequest request)
+    {
+        var normalized = NormalizeSearchQueryText(query);
+        if (normalized.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        if (normalized.Contains("site:", StringComparison.OrdinalIgnoreCase))
+        {
+            return normalized;
+        }
+
+        var tokens = ExtractSearchQueryTokens(normalized);
+        if (tokens.Count == 0)
+        {
+            return normalized;
+        }
+
+        var builder = new StringBuilder();
+        foreach (var token in tokens)
+        {
+            if (builder.Length > 0)
+            {
+                builder.Append(' ');
+            }
+            builder.Append(token);
+        }
+
+        var rewritten = builder.ToString().Trim();
+        if (request.IntentProfile.TimeSensitivity == QueryTimeSensitivity.High && !ContainsAnyToken(rewritten, "latest", "recent", "today", "breaking", "최신", "최근", "오늘", "속보"))
+        {
+            rewritten += " latest";
+        }
+
+        if (request.IntentProfile.AnswerType == QueryAnswerType.List && !ContainsAnyToken(rewritten, "top", "list", "목록", "리스트"))
+        {
+            rewritten += " list";
+        }
+
+        return rewritten.Length == 0 ? normalized : rewritten;
+    }
+
+    private static string NormalizeSearchQueryText(string query)
+    {
+        return Regex.Replace((query ?? string.Empty).Trim(), @"\s+", " ");
+    }
+
+    private static IReadOnlyList<string> ExtractSearchQueryTokens(string query)
+    {
+        var tokens = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (Match match in QuotedPhraseRegex.Matches(query))
+        {
+            var phrase = NormalizeSearchQueryText(match.Groups["value"].Value);
+            if (phrase.Length >= 2 && seen.Add(phrase))
+            {
+                tokens.Add(phrase);
+            }
+        }
+
+        foreach (var rawToken in Regex.Split(query, @"[^\p{L}\p{N}\.\-_/]+"))
+        {
+            var token = rawToken.Trim().Trim('.', ',', ':', ';', '!', '?', '(', ')', '[', ']');
+            if (token.Length < 2 || IsSearchQueryStopword(token))
+            {
+                continue;
+            }
+
+            if (seen.Add(token))
+            {
+                tokens.Add(token);
+            }
+
+            if (tokens.Count >= 14)
+            {
+                break;
+            }
+        }
+
+        return tokens;
+    }
+
+    private static bool IsSearchQueryStopword(string token)
+    {
+        var lowered = token.ToLowerInvariant();
+        return lowered is
+            "the" or "a" or "an" or "and" or "or" or "for" or "to" or "of" or "in" or "on" or "with" or
+            "about" or "please" or "tell" or "me" or "what" or "how" or "why" or "is" or "are" or
+            "좀" or "알려줘" or "설명해줘" or "정리해줘" or "해줘" or "줘" or "뭐야" or "무엇" or "어떻게" or "왜" or "그리고" or "또는" or "관련";
+    }
+
+    private static bool ContainsAnyToken(string text, params string[] tokens)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        return tokens.Any(token => text.Contains(token, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static IReadOnlyList<SearchDocument> MergeSearchDocuments(
+        IReadOnlyList<SearchDocument> first,
+        IReadOnlyList<SearchDocument> second,
+        int take
+    )
+    {
+        var merged = new List<SearchDocument>(Math.Max(1, take));
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AddRange(IReadOnlyList<SearchDocument> docs)
+        {
+            foreach (var doc in docs)
+            {
+                if (merged.Count >= take || doc == null)
+                {
+                    break;
+                }
+
+                var key = string.IsNullOrWhiteSpace(doc.Url) ? doc.Title : doc.Url;
+                if (string.IsNullOrWhiteSpace(key) || !seen.Add(key.Trim()))
+                {
+                    continue;
+                }
+
+                merged.Add(doc with { CitationId = $"c{merged.Count + 1}" });
+            }
+        }
+
+        AddRange(first);
+        AddRange(second);
+        return merged;
     }
 
     private SearchResponse BuildBlockedResponse(

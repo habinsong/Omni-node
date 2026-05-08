@@ -277,6 +277,7 @@ public sealed partial class CommandService :
             MultiGeminiModel = _config.GeminiModel,
             MultiCopilotModel = string.IsNullOrWhiteSpace(_copilotWrapper.GetSelectedModel()) ? DefaultCopilotModel : _copilotWrapper.GetSelectedModel(),
             MultiCerebrasModel = _config.CerebrasModel,
+            MultiNvidiaModel = _config.NvidiaModel,
             MultiCodexModel = _config.CodexModel,
             MultiSummaryProvider = "auto",
             TalkThinkingLevel = "low",
@@ -294,6 +295,7 @@ public sealed partial class CommandService :
             OrchestrationGroqModel = string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel,
             OrchestrationGeminiModel = _config.GeminiModel,
             OrchestrationCerebrasModel = _config.CerebrasModel,
+            OrchestrationNvidiaModel = _config.NvidiaModel,
             OrchestrationCopilotModel = "none",
             OrchestrationCodexModel = "none",
             MultiProvider = "gemini",
@@ -302,6 +304,7 @@ public sealed partial class CommandService :
             MultiGroqModel = string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel,
             MultiGeminiModel = _config.GeminiModel,
             MultiCerebrasModel = _config.CerebrasModel,
+            MultiNvidiaModel = _config.NvidiaModel,
             MultiCopilotModel = "none",
             MultiCodexModel = "none"
         };
@@ -319,6 +322,7 @@ public sealed partial class CommandService :
             MultiGeminiModel = _config.GeminiModel,
             MultiCopilotModel = string.IsNullOrWhiteSpace(_copilotWrapper.GetSelectedModel()) ? DefaultCopilotModel : _copilotWrapper.GetSelectedModel(),
             MultiCerebrasModel = _config.CerebrasModel,
+            MultiNvidiaModel = _config.NvidiaModel,
             MultiCodexModel = _config.CodexModel,
             MultiSummaryProvider = "auto",
             TalkThinkingLevel = "low",

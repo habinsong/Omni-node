@@ -96,7 +96,7 @@ public sealed partial class CommandService
             {
                 if (tokens.Length < 4)
                 {
-                    return "사용법: /coding single provider <auto|groq|gemini|copilot|cerebras|codex>";
+                    return "사용법: /coding single provider <auto|groq|gemini|copilot|cerebras|nvidia|codex>";
                 }
 
                 return SetTelegramCodingAggregateProvider("single", tokens[3]);
@@ -140,7 +140,7 @@ public sealed partial class CommandService
             {
                 if (tokens.Length < 4)
                 {
-                    return "사용법: /coding orchestration provider <auto|groq|gemini|copilot|cerebras|codex>";
+                    return "사용법: /coding orchestration provider <auto|groq|gemini|copilot|cerebras|nvidia|codex>";
                 }
 
                 return SetTelegramCodingAggregateProvider("orchestration", tokens[3]);
@@ -161,7 +161,7 @@ public sealed partial class CommandService
             {
                 if (tokens.Length < 5)
                 {
-                    return "사용법: /coding orchestration worker <groq|gemini|copilot|cerebras|codex> <model-id|none>";
+                    return "사용법: /coding orchestration worker <groq|gemini|copilot|cerebras|nvidia|codex> <model-id|none>";
                 }
 
                 return SetTelegramCodingWorkerModel("orchestration", tokens[3], string.Join(' ', tokens.Skip(4)).Trim());
@@ -195,7 +195,7 @@ public sealed partial class CommandService
             {
                 if (tokens.Length < 4)
                 {
-                    return "사용법: /coding multi provider <auto|groq|gemini|copilot|cerebras|codex>";
+                    return "사용법: /coding multi provider <auto|groq|gemini|copilot|cerebras|nvidia|codex>";
                 }
 
                 return SetTelegramCodingAggregateProvider("multi", tokens[3]);
@@ -528,6 +528,9 @@ public sealed partial class CommandService
                     case "cerebras":
                         _telegramCodingPreferences.OrchestrationCerebrasModel = normalizedModel;
                         break;
+                    case "nvidia":
+                        _telegramCodingPreferences.OrchestrationNvidiaModel = normalizedModel;
+                        break;
                     case "codex":
                         _telegramCodingPreferences.OrchestrationCodexModel = normalizedModel;
                         break;
@@ -548,6 +551,9 @@ public sealed partial class CommandService
                         break;
                     case "cerebras":
                         _telegramCodingPreferences.MultiCerebrasModel = normalizedModel;
+                        break;
+                    case "nvidia":
+                        _telegramCodingPreferences.MultiNvidiaModel = normalizedModel;
                         break;
                     case "codex":
                         _telegramCodingPreferences.MultiCodexModel = normalizedModel;
@@ -642,7 +648,8 @@ public sealed partial class CommandService
                     normalizedAttachments,
                     resolvedWebUrls,
                     webSearchEnabled,
-                    snapshot.OrchestrationCodexModel
+                    snapshot.OrchestrationCodexModel,
+                    NvidiaModel: snapshot.OrchestrationNvidiaModel
                 ),
                 cancellationToken
             );
@@ -671,7 +678,8 @@ public sealed partial class CommandService
                 normalizedAttachments,
                 resolvedWebUrls,
                 webSearchEnabled,
-                snapshot.MultiCodexModel
+                snapshot.MultiCodexModel,
+                NvidiaModel: snapshot.MultiNvidiaModel
             ),
             cancellationToken
         );
@@ -687,9 +695,9 @@ public sealed partial class CommandService
         builder.AppendLine($"현재 모드: {FormatModeDisplayName(snapshot.Mode)} 코딩");
         builder.AppendLine($"단일: {FormatProviderWithModel(snapshot.SingleProvider, snapshot.SingleModel, allowAuto: true)} / 언어={snapshot.SingleLanguage}");
         builder.AppendLine($"오케스트레이션 주 구현: {FormatProviderWithModel(snapshot.OrchestrationProvider, snapshot.OrchestrationModel, allowAuto: true)} / 언어={snapshot.OrchestrationLanguage}");
-        builder.AppendLine($"오케스트레이션 워커: Groq={FormatCodingWorkerModel(snapshot.OrchestrationGroqModel)}, Gemini={FormatCodingWorkerModel(snapshot.OrchestrationGeminiModel)}, Cerebras={FormatCodingWorkerModel(snapshot.OrchestrationCerebrasModel)}, Copilot={FormatCodingWorkerModel(snapshot.OrchestrationCopilotModel)}, Codex={FormatCodingWorkerModel(snapshot.OrchestrationCodexModel)}");
+        builder.AppendLine($"오케스트레이션 워커: Groq={FormatCodingWorkerModel(snapshot.OrchestrationGroqModel)}, Gemini={FormatCodingWorkerModel(snapshot.OrchestrationGeminiModel)}, Cerebras={FormatCodingWorkerModel(snapshot.OrchestrationCerebrasModel)}, NVIDIA NIM={FormatCodingWorkerModel(snapshot.OrchestrationNvidiaModel)}, Copilot={FormatCodingWorkerModel(snapshot.OrchestrationCopilotModel)}, Codex={FormatCodingWorkerModel(snapshot.OrchestrationCodexModel)}");
         builder.AppendLine($"다중 요약: {FormatProviderWithModel(snapshot.MultiProvider, snapshot.MultiModel, allowAuto: true)} / 언어={snapshot.MultiLanguage}");
-        builder.AppendLine($"다중 워커: Groq={FormatCodingWorkerModel(snapshot.MultiGroqModel)}, Gemini={FormatCodingWorkerModel(snapshot.MultiGeminiModel)}, Cerebras={FormatCodingWorkerModel(snapshot.MultiCerebrasModel)}, Copilot={FormatCodingWorkerModel(snapshot.MultiCopilotModel)}, Codex={FormatCodingWorkerModel(snapshot.MultiCodexModel)}");
+        builder.AppendLine($"다중 워커: Groq={FormatCodingWorkerModel(snapshot.MultiGroqModel)}, Gemini={FormatCodingWorkerModel(snapshot.MultiGeminiModel)}, Cerebras={FormatCodingWorkerModel(snapshot.MultiCerebrasModel)}, NVIDIA NIM={FormatCodingWorkerModel(snapshot.MultiNvidiaModel)}, Copilot={FormatCodingWorkerModel(snapshot.MultiCopilotModel)}, Codex={FormatCodingWorkerModel(snapshot.MultiCodexModel)}");
         builder.AppendLine();
         if (latest?.LatestCodingResult != null)
         {
@@ -1145,7 +1153,12 @@ public sealed partial class CommandService
             return "auto";
         }
 
-        return normalized is "groq" or "gemini" or "copilot" or "cerebras" or "codex"
+        if (normalized is "nvidia-nim" or "nvidia_nim" or "nim")
+        {
+            normalized = "nvidia";
+        }
+
+        return normalized is "groq" or "gemini" or "copilot" or "cerebras" or "nvidia" or "codex"
             ? normalized
             : null;
     }

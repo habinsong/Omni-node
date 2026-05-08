@@ -24,7 +24,9 @@ public sealed record LlmMultiChatResult(
     string CodexText = "",
     string CodexModel = "",
     string CommonCore = "",
-    string Differences = ""
+    string Differences = "",
+    string NvidiaText = "",
+    string NvidiaModel = ""
 );
 public sealed record InputAttachment(
     string Name,
@@ -80,7 +82,8 @@ public sealed record ChatRequest(
     string? RequestId = null,
     string? SkillName = null,
     string? SkillScope = null,
-    bool ThinkPlusEnabled = false
+    bool ThinkPlusEnabled = false,
+    string? NvidiaModel = null
 );
 public sealed record MultiChatRequest(
     string Input,
@@ -101,7 +104,9 @@ public sealed record MultiChatRequest(
     IReadOnlyList<InputAttachment>? Attachments = null,
     IReadOnlyList<string>? WebUrls = null,
     bool WebSearchEnabled = true,
-    string? CodexModel = null
+    string? CodexModel = null,
+    string? NvidiaModel = null,
+    bool ThinkPlusEnabled = false
 );
 public sealed record ChatStreamUpdate(
     string Scope,
@@ -213,7 +218,9 @@ public sealed record ConversationMultiResult(
     string CodexText = "",
     string CodexModel = "",
     string CommonCore = "",
-    string Differences = ""
+    string Differences = "",
+    string NvidiaText = "",
+    string NvidiaModel = ""
 );
 public sealed record CodingRunRequest(
     string Input,
@@ -237,7 +244,8 @@ public sealed record CodingRunRequest(
     IReadOnlyList<string>? WebUrls = null,
     bool WebSearchEnabled = true,
     string? CodexModel = null,
-    bool ThinkPlusEnabled = false
+    bool ThinkPlusEnabled = false,
+    string? NvidiaModel = null
 );
 public sealed record CodingWorkerResult(
     string Provider,
@@ -685,6 +693,7 @@ internal sealed class TelegramLlmPreferences
     public string MultiGeminiModel { get; set; } = string.Empty;
     public string MultiCopilotModel { get; set; } = string.Empty;
     public string MultiCerebrasModel { get; set; } = string.Empty;
+    public string MultiNvidiaModel { get; set; } = string.Empty;
     public string MultiCodexModel { get; set; } = string.Empty;
     public string MultiSummaryProvider { get; set; } = "auto";
     public string TalkThinkingLevel { get; set; } = "low";
@@ -705,6 +714,7 @@ internal sealed class TelegramLlmPreferences
             MultiGeminiModel = MultiGeminiModel,
             MultiCopilotModel = MultiCopilotModel,
             MultiCerebrasModel = MultiCerebrasModel,
+            MultiNvidiaModel = MultiNvidiaModel,
             MultiCodexModel = MultiCodexModel,
             MultiSummaryProvider = MultiSummaryProvider,
             TalkThinkingLevel = TalkThinkingLevel,
@@ -725,6 +735,7 @@ internal sealed class TelegramCodingPreferences
     public string OrchestrationGroqModel { get; set; } = string.Empty;
     public string OrchestrationGeminiModel { get; set; } = string.Empty;
     public string OrchestrationCerebrasModel { get; set; } = string.Empty;
+    public string OrchestrationNvidiaModel { get; set; } = string.Empty;
     public string OrchestrationCopilotModel { get; set; } = "none";
     public string OrchestrationCodexModel { get; set; } = "none";
     public string MultiProvider { get; set; } = "gemini";
@@ -733,6 +744,7 @@ internal sealed class TelegramCodingPreferences
     public string MultiGroqModel { get; set; } = string.Empty;
     public string MultiGeminiModel { get; set; } = string.Empty;
     public string MultiCerebrasModel { get; set; } = string.Empty;
+    public string MultiNvidiaModel { get; set; } = string.Empty;
     public string MultiCopilotModel { get; set; } = "none";
     public string MultiCodexModel { get; set; } = "none";
 
@@ -750,6 +762,7 @@ internal sealed class TelegramCodingPreferences
             OrchestrationGroqModel = OrchestrationGroqModel,
             OrchestrationGeminiModel = OrchestrationGeminiModel,
             OrchestrationCerebrasModel = OrchestrationCerebrasModel,
+            OrchestrationNvidiaModel = OrchestrationNvidiaModel,
             OrchestrationCopilotModel = OrchestrationCopilotModel,
             OrchestrationCodexModel = OrchestrationCodexModel,
             MultiProvider = MultiProvider,
@@ -758,6 +771,7 @@ internal sealed class TelegramCodingPreferences
             MultiGroqModel = MultiGroqModel,
             MultiGeminiModel = MultiGeminiModel,
             MultiCerebrasModel = MultiCerebrasModel,
+            MultiNvidiaModel = MultiNvidiaModel,
             MultiCopilotModel = MultiCopilotModel,
             MultiCodexModel = MultiCodexModel
         };
@@ -796,6 +810,7 @@ internal sealed class WebLlmPreferences
     public string MultiGeminiModel { get; set; } = string.Empty;
     public string MultiCopilotModel { get; set; } = string.Empty;
     public string MultiCerebrasModel { get; set; } = string.Empty;
+    public string MultiNvidiaModel { get; set; } = string.Empty;
     public string MultiCodexModel { get; set; } = string.Empty;
     public string MultiSummaryProvider { get; set; } = "auto";
     public string TalkThinkingLevel { get; set; } = "low";
@@ -816,6 +831,7 @@ internal sealed class WebLlmPreferences
             MultiGeminiModel = MultiGeminiModel,
             MultiCopilotModel = MultiCopilotModel,
             MultiCerebrasModel = MultiCerebrasModel,
+            MultiNvidiaModel = MultiNvidiaModel,
             MultiCodexModel = MultiCodexModel,
             MultiSummaryProvider = MultiSummaryProvider,
             TalkThinkingLevel = TalkThinkingLevel,

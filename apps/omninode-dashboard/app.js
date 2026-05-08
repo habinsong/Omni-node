@@ -61,6 +61,7 @@ import {
   flushQueuedPayloads,
   getSavedAuthExpiry,
   getSavedAuthToken,
+  isRemoteDashboardHost,
   persistAuthSession,
   sendWsPayload
 } from "./modules/ws-client.js";
@@ -253,6 +254,7 @@ import {
   const DEFAULT_GROQ_SINGLE_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
   const DEFAULT_GROQ_WORKER_MODEL = "openai/gpt-oss-120b";
   const DEFAULT_GEMINI_WORKER_MODEL = "gemini-3-flash-preview";
+  const DEFAULT_NVIDIA_MODEL = "meta/llama-3.1-70b-instruct";
   const GEMINI_MODEL_CHOICES = [
     { id: "gemini-3-flash-preview", label: "Gemini 기본: gemini-3-flash-preview" },
     { id: "gemini-3.1-pro-preview", label: "Gemini: gemini-3.1-pro-preview" },
@@ -262,6 +264,14 @@ import {
   const CEREBRAS_MODEL_CHOICES = [
     { id: DEFAULT_CEREBRAS_MODEL, label: `Cerebras 기본: ${DEFAULT_CEREBRAS_MODEL}` },
     { id: "zai-glm-4.7", label: "Cerebras: zai-glm-4.7 (preview)" }
+  ];
+  const NVIDIA_MODEL_CHOICES = [
+    { id: DEFAULT_NVIDIA_MODEL, label: `NVIDIA NIM 기본: ${DEFAULT_NVIDIA_MODEL}` },
+    { id: "meta/llama-3.3-70b-instruct", label: "NVIDIA NIM: meta/llama-3.3-70b-instruct" },
+    { id: "nvidia/llama-3.3-nemotron-super-49b-v1.5", label: "NVIDIA NIM: nvidia/llama-3.3-nemotron-super-49b-v1.5" },
+    { id: "nvidia/nemotron-3-super-120b-a12b", label: "NVIDIA NIM: nvidia/nemotron-3-super-120b-a12b" },
+    { id: "openai/gpt-oss-120b", label: "NVIDIA NIM: openai/gpt-oss-120b" },
+    { id: "qwen/qwen3-coder-480b-a35b-instruct", label: "NVIDIA NIM: qwen/qwen3-coder-480b-a35b-instruct" }
   ];
   const UI_PREFERENCES_KEY = "omninode_ui_preferences_v1";
   const DEFAULT_UI_PREFERENCES = {
@@ -313,13 +323,15 @@ import {
     defaultGroqSingleModel: DEFAULT_GROQ_SINGLE_MODEL,
     defaultGroqWorkerModel: DEFAULT_GROQ_WORKER_MODEL,
     defaultGeminiWorkerModel: DEFAULT_GEMINI_WORKER_MODEL,
-    defaultCerebrasModel: DEFAULT_CEREBRAS_MODEL
+    defaultCerebrasModel: DEFAULT_CEREBRAS_MODEL,
+    defaultNvidiaModel: DEFAULT_NVIDIA_MODEL
   });
   const CODING_STATE_DEFAULTS = createCodingState({
     noneModel: NONE_MODEL,
     defaultGroqWorkerModel: DEFAULT_GROQ_WORKER_MODEL,
     defaultGeminiWorkerModel: DEFAULT_GEMINI_WORKER_MODEL,
-    defaultCerebrasModel: DEFAULT_CEREBRAS_MODEL
+    defaultCerebrasModel: DEFAULT_CEREBRAS_MODEL,
+    defaultNvidiaModel: DEFAULT_NVIDIA_MODEL
   });
   const ROUTINE_STATE_DEFAULTS = createRoutineState({
     defaultMobilePanes: DEFAULT_MOBILE_PANES
@@ -789,6 +801,7 @@ import {
     const lastSpokenMessageRef = useRef("");
     const [availableTtsVoices, setAvailableTtsVoices] = useState(() => listSpeechVoices());
     const [speakingMessageId, setSpeakingMessageId] = useState("");
+    const [shortcutGroupTab, setShortcutGroupTab] = useState("palette");
 
     const [status, setStatus] = useState("연결 대기");
     const [authed, setAuthed] = useState(false);
@@ -797,14 +810,17 @@ import {
     const [authTtlHours, setAuthTtlHours] = useState("24");
     const [otp, setOtp] = useState("");
     const [authMeta, setAuthMeta] = useState(() => createAuthMetaState());
+    const authMetaRef = useRef(null);
 
     const [settingsState, setSettingsState] = useState(() => createSettingsState());
+    const settingsStateRef = useRef(null);
 
     const [telegramBotToken, setTelegramBotToken] = useState("");
     const [telegramChatId, setTelegramChatId] = useState("");
     const [groqApiKey, setGroqApiKey] = useState("");
     const [geminiApiKey, setGeminiApiKey] = useState("");
     const [cerebrasApiKey, setCerebrasApiKey] = useState("");
+    const [nvidiaApiKey, setNvidiaApiKey] = useState("");
     const [codexApiKey, setCodexApiKey] = useState("");
     const [persist, setPersist] = useState(true);
 
@@ -880,11 +896,13 @@ import {
     const [chatOrchGroqModel, setChatOrchGroqModel] = useState(CHAT_STATE_DEFAULTS.orchGroqModel);
     const [chatOrchGeminiModel, setChatOrchGeminiModel] = useState(CHAT_STATE_DEFAULTS.orchGeminiModel);
     const [chatOrchCerebrasModel, setChatOrchCerebrasModel] = useState(CHAT_STATE_DEFAULTS.orchCerebrasModel);
+    const [chatOrchNvidiaModel, setChatOrchNvidiaModel] = useState(CHAT_STATE_DEFAULTS.orchNvidiaModel);
     const [chatOrchCopilotModel, setChatOrchCopilotModel] = useState(CHAT_STATE_DEFAULTS.orchCopilotModel);
     const [chatOrchCodexModel, setChatOrchCodexModel] = useState(CHAT_STATE_DEFAULTS.orchCodexModel);
     const [chatMultiGroqModel, setChatMultiGroqModel] = useState(CHAT_STATE_DEFAULTS.multiGroqModel);
     const [chatMultiGeminiModel, setChatMultiGeminiModel] = useState(CHAT_STATE_DEFAULTS.multiGeminiModel);
     const [chatMultiCerebrasModel, setChatMultiCerebrasModel] = useState(CHAT_STATE_DEFAULTS.multiCerebrasModel);
+    const [chatMultiNvidiaModel, setChatMultiNvidiaModel] = useState(CHAT_STATE_DEFAULTS.multiNvidiaModel);
     const [chatMultiCopilotModel, setChatMultiCopilotModel] = useState(CHAT_STATE_DEFAULTS.multiCopilotModel);
     const [chatMultiCodexModel, setChatMultiCodexModel] = useState(CHAT_STATE_DEFAULTS.multiCodexModel);
     const [chatMultiSummaryProvider, setChatMultiSummaryProvider] = useState(CHAT_STATE_DEFAULTS.multiSummaryProvider);
@@ -904,6 +922,7 @@ import {
     const [codingOrchGroqModel, setCodingOrchGroqModel] = useState(CODING_STATE_DEFAULTS.orchGroqModel);
     const [codingOrchGeminiModel, setCodingOrchGeminiModel] = useState(CODING_STATE_DEFAULTS.orchGeminiModel);
     const [codingOrchCerebrasModel, setCodingOrchCerebrasModel] = useState(CODING_STATE_DEFAULTS.orchCerebrasModel);
+    const [codingOrchNvidiaModel, setCodingOrchNvidiaModel] = useState(CODING_STATE_DEFAULTS.orchNvidiaModel);
     const [codingOrchCopilotModel, setCodingOrchCopilotModel] = useState(CODING_STATE_DEFAULTS.orchCopilotModel);
     const [codingOrchCodexModel, setCodingOrchCodexModel] = useState(CODING_STATE_DEFAULTS.orchCodexModel);
 
@@ -913,6 +932,7 @@ import {
     const [codingMultiGroqModel, setCodingMultiGroqModel] = useState(CODING_STATE_DEFAULTS.multiGroqModel);
     const [codingMultiGeminiModel, setCodingMultiGeminiModel] = useState(CODING_STATE_DEFAULTS.multiGeminiModel);
     const [codingMultiCerebrasModel, setCodingMultiCerebrasModel] = useState(CODING_STATE_DEFAULTS.multiCerebrasModel);
+    const [codingMultiNvidiaModel, setCodingMultiNvidiaModel] = useState(CODING_STATE_DEFAULTS.multiNvidiaModel);
     const [codingMultiCopilotModel, setCodingMultiCopilotModel] = useState(CODING_STATE_DEFAULTS.multiCopilotModel);
     const [codingMultiCodexModel, setCodingMultiCodexModel] = useState(CODING_STATE_DEFAULTS.multiCodexModel);
 
@@ -980,6 +1000,7 @@ import {
     const [viewportSize, setViewportSize] = useState(() => getViewportSnapshot());
     const [mainShellViewportTop, setMainShellViewportTop] = useState(0);
     const [mobilePaneByTab, setMobilePaneByTab] = useState(() => ({ ...ROUTINE_STATE_DEFAULTS.mobilePaneByTab }));
+    const [mobileComposerOpenByTab, setMobileComposerOpenByTab] = useState(() => ({ chat: false, coding: false }));
 
     const wsRef = useRef(null);
     const workerRef = useRef(null);
@@ -1056,6 +1077,7 @@ import {
       : 0;
     const currentWorkspacePane = mobilePaneByTab[responsiveWorkspaceKey]
       || (currentConversationId ? "thread" : "list");
+    const mobileComposerOpen = !!mobileComposerOpenByTab[responsiveWorkspaceKey];
     const currentRoutinePane = mobilePaneByTab.routine || (routineSelectedId ? "detail" : "overview");
     const currentLogicPane = mobilePaneByTab.logic || (isPortraitMobileLayout ? "canvas" : "selection");
     const currentSettingsPane = mobilePaneByTab.settings || "auth";
@@ -1113,6 +1135,14 @@ import {
           items: groups[project].slice().sort((a, b) => (b.updatedUtc || "").localeCompare(a.updatedUtc || ""))
         }));
     }, [conversationDetails, currentConversationFilter, currentConversationList, currentConversationSearchState.results]);
+
+    useEffect(() => {
+      authMetaRef.current = authMeta;
+    }, [authMeta]);
+
+    useEffect(() => {
+      settingsStateRef.current = settingsState;
+    }, [settingsState]);
 
     useEffect(() => {
       if (uiPreferencesSessionStartRef.current === null) {
@@ -1456,6 +1486,24 @@ import {
       routineSelectedId
     ]);
 
+    useEffect(() => {
+      if (!settingsState.remoteDashboardClient) {
+        return;
+      }
+
+      const sensitiveSettingsPanes = new Set([
+        "auth",
+        "basic-auth",
+        "basic-external",
+        "basic-telegram",
+        "basic-keys",
+        "basic-cli"
+      ]);
+      if (sensitiveSettingsPanes.has(currentSettingsPane)) {
+        setResponsivePane("settings", "basic-preferences");
+      }
+    }, [currentSettingsPane, settingsState.remoteDashboardClient]);
+
     function setResponsivePane(tabKey, paneKey) {
       if (!tabKey || !paneKey) {
         return;
@@ -1469,6 +1517,44 @@ import {
           [tabKey]: paneKey
         };
       });
+    }
+
+    function adjustMobileMessageScrollForComposer(open, measuredComposerHeight = 0) {
+      const panel = messageListRef.current;
+      if (!panel) {
+        return;
+      }
+
+      window.requestAnimationFrame(() => {
+        const composer = document.querySelector(".mobile-composer-layer .composer");
+        const composerHeight = composer ? composer.getBoundingClientRect().height : measuredComposerHeight;
+        const scrollDelta = Math.max(0, Math.ceil(composerHeight));
+        if (open) {
+          panel.scrollTop = Math.min(panel.scrollHeight, panel.scrollTop + scrollDelta);
+        } else {
+          panel.scrollTop = Math.max(0, panel.scrollTop - scrollDelta);
+        }
+      });
+    }
+
+    function setMobileComposerOpen(tabKey, open) {
+      if (!tabKey) {
+        return;
+      }
+      const wasOpen = !!mobileComposerOpenByTab[tabKey];
+      if (wasOpen === !!open) {
+        return;
+      }
+      const currentComposer = document.querySelector(".mobile-composer-layer .composer");
+      const currentComposerHeight = currentComposer ? currentComposer.getBoundingClientRect().height : 0;
+      setMobileComposerOpenByTab((prev) => ({
+        ...prev,
+        [tabKey]: !!open
+      }));
+      if (open) {
+        setResponsivePane(tabKey, "thread");
+      }
+      adjustMobileMessageScrollForComposer(!!open, currentComposerHeight);
     }
 
     const renderResponsiveSectionTabs = createResponsiveSectionTabsRenderer(e);
@@ -3030,11 +3116,23 @@ import {
       if (!chatOrchCodexModel) {
         setChatOrchCodexModel(DEFAULT_CODEX_MODEL);
       }
+      if (!chatOrchNvidiaModel) {
+        setChatOrchNvidiaModel(DEFAULT_NVIDIA_MODEL);
+      }
+      if (!chatMultiNvidiaModel) {
+        setChatMultiNvidiaModel(DEFAULT_NVIDIA_MODEL);
+      }
       if (codingSingleProvider === "copilot" && !codingSingleModel && selectedCopilotModel) {
         setCodingSingleModel(selectedCopilotModel);
       }
+      if (codingSingleProvider === "nvidia" && !codingSingleModel) {
+        setCodingSingleModel(DEFAULT_NVIDIA_MODEL);
+      }
       if (codingOrchProvider === "copilot" && !codingOrchModel && selectedCopilotModel) {
         setCodingOrchModel(selectedCopilotModel);
+      }
+      if (codingOrchProvider === "nvidia" && !codingOrchModel) {
+        setCodingOrchModel(DEFAULT_NVIDIA_MODEL);
       }
       if (!codingOrchCopilotModel && selectedCopilotModel) {
         setCodingOrchCopilotModel(selectedCopilotModel);
@@ -3042,27 +3140,40 @@ import {
       if (!codingOrchCodexModel) {
         setCodingOrchCodexModel(DEFAULT_CODEX_MODEL);
       }
+      if (!codingOrchNvidiaModel) {
+        setCodingOrchNvidiaModel(DEFAULT_NVIDIA_MODEL);
+      }
       if (codingMultiProvider === "copilot" && !codingMultiModel && selectedCopilotModel) {
         setCodingMultiModel(selectedCopilotModel);
       }
+      if (codingMultiProvider === "nvidia" && !codingMultiModel) {
+        setCodingMultiModel(DEFAULT_NVIDIA_MODEL);
+      }
       if (!codingMultiCodexModel) {
         setCodingMultiCodexModel(DEFAULT_CODEX_MODEL);
+      }
+      if (!codingMultiNvidiaModel) {
+        setCodingMultiNvidiaModel(DEFAULT_NVIDIA_MODEL);
       }
     }, [
       selectedCopilotModel,
       chatMultiCopilotModel,
       chatMultiCodexModel,
+      chatMultiNvidiaModel,
       chatOrchCopilotModel,
       chatOrchCodexModel,
+      chatOrchNvidiaModel,
       codingSingleProvider,
       codingSingleModel,
       codingOrchProvider,
       codingOrchModel,
       codingOrchCopilotModel,
       codingOrchCodexModel,
+      codingOrchNvidiaModel,
       codingMultiProvider,
       codingMultiModel,
-      codingMultiCodexModel
+      codingMultiCodexModel,
+      codingMultiNvidiaModel
     ]);
 
     useEffect(() => {
@@ -3301,8 +3412,13 @@ import {
       }
 
       send({ type: "get_settings" });
-      send({ type: "get_copilot_status" });
-      send({ type: "get_codex_status" });
+      const remoteDashboardClient = isRemoteDashboardHost()
+        || !!authMetaRef.current?.remoteDashboardClient
+        || !!settingsStateRef.current?.remoteDashboardClient;
+      if (!remoteDashboardClient) {
+        send({ type: "get_copilot_status" });
+        send({ type: "get_codex_status" });
+      }
       send({ type: "get_groq_models" });
       send({ type: "get_copilot_models" });
       send({ type: "get_usage_stats" });
@@ -3976,6 +4092,8 @@ import {
             ? (isNoneModel(chatSingleModel) ? DEFAULT_GEMINI_WORKER_MODEL : (chatSingleModel || DEFAULT_GEMINI_WORKER_MODEL))
           : chatSingleProvider === "cerebras"
             ? (chatSingleModel || DEFAULT_CEREBRAS_MODEL)
+          : chatSingleProvider === "nvidia"
+            ? (chatSingleModel || DEFAULT_NVIDIA_MODEL)
           : undefined;
       const conversationId = activeConversationByKey["chat:single"] || "";
       const requestId = buildRequestId("chat-single");
@@ -4349,12 +4467,16 @@ import {
           : chatOrchProvider === "gemini"
             ? ((!isNoneModel(chatOrchModel) ? chatOrchModel : "")
               || (!isNoneModel(chatOrchGeminiModel) ? chatOrchGeminiModel : DEFAULT_GEMINI_WORKER_MODEL))
+          : chatOrchProvider === "nvidia"
+            ? ((!isNoneModel(chatOrchModel) ? chatOrchModel : "")
+              || (!isNoneModel(chatOrchNvidiaModel) ? chatOrchNvidiaModel : DEFAULT_NVIDIA_MODEL))
             : chatOrchProvider === "cerebras"
               ? (chatOrchModel || chatOrchCerebrasModel || DEFAULT_CEREBRAS_MODEL)
             : undefined;
       const workerGroqModel = normalizeModelChoice(chatOrchGroqModel, DEFAULT_GROQ_WORKER_MODEL);
       const workerGeminiModel = normalizeModelChoice(chatOrchGeminiModel, DEFAULT_GEMINI_WORKER_MODEL);
       const workerCerebrasModel = normalizeModelChoice(chatOrchCerebrasModel, DEFAULT_CEREBRAS_MODEL);
+      const workerNvidiaModel = normalizeModelChoice(chatOrchNvidiaModel, DEFAULT_NVIDIA_MODEL);
       const workerCopilotModel = normalizeModelChoice(chatOrchCopilotModel, NONE_MODEL);
       const workerCodexModel = normalizeModelChoice(chatOrchCodexModel, DEFAULT_CODEX_MODEL);
       const conversationId = activeConversationByKey["chat:orchestration"] || "";
@@ -4375,12 +4497,14 @@ import {
         groqModel: workerGroqModel,
         geminiModel: workerGeminiModel,
         cerebrasModel: workerCerebrasModel,
+        nvidiaModel: workerNvidiaModel,
         copilotModel: workerCopilotModel,
         codexModel: workerCodexModel,
         memoryNotes: currentMemoryNotes,
         attachments: rich.attachments,
         webUrls: rich.webUrls,
-        webSearchEnabled: rich.webSearchEnabled
+        webSearchEnabled: rich.webSearchEnabled,
+        thinkPlus: !!thinkPlusModeByKey["chat:orchestration"]
       });
 
       if (!ok) {
@@ -4419,13 +4543,15 @@ import {
         groqModel: normalizeModelChoice(chatMultiGroqModel, DEFAULT_GROQ_WORKER_MODEL),
         geminiModel: normalizeModelChoice(chatMultiGeminiModel, DEFAULT_GEMINI_WORKER_MODEL),
         cerebrasModel: normalizeModelChoice(chatMultiCerebrasModel, DEFAULT_CEREBRAS_MODEL),
+        nvidiaModel: normalizeModelChoice(chatMultiNvidiaModel, DEFAULT_NVIDIA_MODEL),
         copilotModel: normalizeModelChoice(chatMultiCopilotModel, NONE_MODEL),
         codexModel: normalizeModelChoice(chatMultiCodexModel, DEFAULT_CODEX_MODEL),
         summaryProvider: chatMultiSummaryProvider,
         memoryNotes: currentMemoryNotes,
         attachments: rich.attachments,
         webUrls: rich.webUrls,
-        webSearchEnabled: rich.webSearchEnabled
+        webSearchEnabled: rich.webSearchEnabled,
+        thinkPlus: !!thinkPlusModeByKey["chat:multi"]
       });
 
       if (!ok) {
@@ -4466,6 +4592,8 @@ import {
           ? (isNoneModel(codingSingleModel) ? DEFAULT_GEMINI_WORKER_MODEL : (codingSingleModel || DEFAULT_GEMINI_WORKER_MODEL))
           : codingSingleProvider === "codex"
             ? (codingSingleModel || DEFAULT_CODEX_MODEL)
+          : codingSingleProvider === "nvidia"
+            ? (codingSingleModel || DEFAULT_NVIDIA_MODEL)
             : (codingSingleModel || undefined),
         language: codingSingleLanguage,
         memoryNotes: currentMemoryNotes,
@@ -4500,6 +4628,9 @@ import {
             ? (codingOrchModel || codingOrchCodexModel || DEFAULT_CODEX_MODEL)
           : codingOrchProvider === "cerebras"
             ? (codingOrchModel || codingOrchCerebrasModel || DEFAULT_CEREBRAS_MODEL)
+          : codingOrchProvider === "nvidia"
+            ? ((!isNoneModel(codingOrchModel) ? codingOrchModel : "")
+              || (!isNoneModel(codingOrchNvidiaModel) ? codingOrchNvidiaModel : DEFAULT_NVIDIA_MODEL))
           : codingOrchProvider === "gemini"
             ? ((!isNoneModel(codingOrchModel) ? codingOrchModel : "")
               || (!isNoneModel(codingOrchGeminiModel) ? codingOrchGeminiModel : DEFAULT_GEMINI_WORKER_MODEL))
@@ -4524,13 +4655,15 @@ import {
         groqModel: normalizeModelChoice(codingOrchGroqModel, DEFAULT_GROQ_WORKER_MODEL),
         geminiModel: normalizeModelChoice(codingOrchGeminiModel, DEFAULT_GEMINI_WORKER_MODEL),
         cerebrasModel: normalizeModelChoice(codingOrchCerebrasModel, DEFAULT_CEREBRAS_MODEL),
+        nvidiaModel: normalizeModelChoice(codingOrchNvidiaModel, DEFAULT_NVIDIA_MODEL),
         copilotModel: normalizeModelChoice(codingOrchCopilotModel, NONE_MODEL),
         codexModel: normalizeModelChoice(codingOrchCodexModel, DEFAULT_CODEX_MODEL),
         language: codingOrchLanguage,
         memoryNotes: currentMemoryNotes,
         attachments: rich.attachments,
         webUrls: rich.webUrls,
-        webSearchEnabled: rich.webSearchEnabled
+        webSearchEnabled: rich.webSearchEnabled,
+        thinkPlus: !!thinkPlusModeByKey["coding:orchestration"]
       });
 
       if (!ok) {
@@ -4571,17 +4704,21 @@ import {
           ? (isNoneModel(codingMultiModel) ? DEFAULT_GEMINI_WORKER_MODEL : (codingMultiModel || DEFAULT_GEMINI_WORKER_MODEL))
           : codingMultiProvider === "codex"
             ? (codingMultiModel || DEFAULT_CODEX_MODEL)
+          : codingMultiProvider === "nvidia"
+            ? (isNoneModel(codingMultiModel) ? undefined : (codingMultiModel || DEFAULT_NVIDIA_MODEL))
           : (isNoneModel(codingMultiModel) ? undefined : (codingMultiModel || undefined)),
         groqModel: normalizeModelChoice(codingMultiGroqModel, DEFAULT_GROQ_WORKER_MODEL),
         geminiModel: normalizeModelChoice(codingMultiGeminiModel, DEFAULT_GEMINI_WORKER_MODEL),
         cerebrasModel: normalizeModelChoice(codingMultiCerebrasModel, DEFAULT_CEREBRAS_MODEL),
+        nvidiaModel: normalizeModelChoice(codingMultiNvidiaModel, DEFAULT_NVIDIA_MODEL),
         copilotModel: normalizeModelChoice(codingMultiCopilotModel, NONE_MODEL),
         codexModel: normalizeModelChoice(codingMultiCodexModel, DEFAULT_CODEX_MODEL),
         language: codingMultiLanguage,
         memoryNotes: currentMemoryNotes,
         attachments: rich.attachments,
         webUrls: rich.webUrls,
-        webSearchEnabled: rich.webSearchEnabled
+        webSearchEnabled: rich.webSearchEnabled,
+        thinkPlus: !!thinkPlusModeByKey["coding:multi"]
       });
 
       if (!ok) {
@@ -4981,6 +5118,7 @@ import {
           logicSelectedGraphId: logicSelectedGraphIdRef.current,
           refactorState,
           notebooksState,
+          settingsState,
           filePreviewByConversation,
           codingResultByConversation,
           logicDraftGraph: logicDraftGraphRef.current,
@@ -6858,10 +6996,12 @@ import {
       copilotModelOptions,
       codexModelOptions,
       geminiModelOptions,
+      nvidiaModelOptions,
       routineAgentProviderOptions,
       routineAgentModelOptions,
       groqWorkerModelOptions,
       geminiWorkerModelOptions,
+      nvidiaWorkerModelOptions,
       copilotWorkerModelOptions,
       codexWorkerModelOptions
     } = useMemo(
@@ -6871,8 +7011,10 @@ import {
         copilotModels,
         codeXModelChoices: CODEX_MODEL_CHOICES,
         geminiModelChoices: GEMINI_MODEL_CHOICES,
+        nvidiaModelChoices: NVIDIA_MODEL_CHOICES,
         noneModel: NONE_MODEL,
         defaultGroqWorkerModel: DEFAULT_GROQ_WORKER_MODEL,
+        defaultNvidiaModel: DEFAULT_NVIDIA_MODEL,
         defaultRoutineAgentProvider: DEFAULT_ROUTINE_AGENT_PROVIDER,
         defaultRoutineAgentModel: DEFAULT_ROUTINE_AGENT_MODEL
       }),
@@ -6901,6 +7043,7 @@ import {
       const cerebrasBaseOptions = Array.isArray(cerebrasModels) && cerebrasModels.length > 0
         ? cerebrasModels.map((item) => ({ value: item.id, label: item.owned_by ? `${item.id} · ${item.owned_by}` : item.id }))
         : CEREBRAS_MODEL_CHOICES.map((item) => ({ value: item.id, label: item.label }));
+      const nvidiaBaseOptions = NVIDIA_MODEL_CHOICES.map((item) => ({ value: item.id, label: item.label }));
 
       return {
         groqModelOptions: groqBaseOptions,
@@ -6908,6 +7051,7 @@ import {
         codexModelOptions: CODEX_MODEL_CHOICES.map((item) => ({ value: item.id, label: item.label })),
         geminiModelOptions: GEMINI_MODEL_CHOICES.map((item) => ({ value: item.id, label: item.label })),
         cerebrasModelOptions: cerebrasBaseOptions,
+        nvidiaModelOptions: nvidiaBaseOptions,
         groqWorkerOptions: dedupeOptions([
           { value: NONE_MODEL, label: "Groq: 선택 안 함" },
           { value: DEFAULT_GROQ_WORKER_MODEL, label: `Groq 기본: ${DEFAULT_GROQ_WORKER_MODEL}` },
@@ -6920,6 +7064,11 @@ import {
         cerebrasWorkerOptions: dedupeOptions([
           { value: NONE_MODEL, label: "Cerebras: 선택 안 함" },
           ...cerebrasBaseOptions
+        ]),
+        nvidiaWorkerOptions: dedupeOptions([
+          { value: NONE_MODEL, label: "NVIDIA NIM: 선택 안 함" },
+          { value: DEFAULT_NVIDIA_MODEL, label: `NVIDIA NIM 기본: ${DEFAULT_NVIDIA_MODEL}` },
+          ...nvidiaBaseOptions
         ]),
         copilotWorkerOptions: dedupeOptions([
           { value: NONE_MODEL, label: "Copilot: 선택 안 함" },
@@ -6971,6 +7120,7 @@ import {
         copilotStatus,
         codexStatus,
         defaultCodexModel: DEFAULT_CODEX_MODEL,
+        defaultNvidiaModel: DEFAULT_NVIDIA_MODEL,
         defaultCerebrasModel: DEFAULT_CEREBRAS_MODEL
       });
     }
@@ -7022,7 +7172,10 @@ import {
         deleteConversation,
         conversationSearchState: currentConversationSearchState,
         onConversationSearch: () => requestConversationSearch(),
-        clearConversationSearch: clearCurrentConversationSearch
+        clearConversationSearch: clearCurrentConversationSearch,
+        modeItems: rootTab === "coding" ? CODING_MODES : CHAT_MODES,
+        activeMode: mode,
+        onSelectMode: rootTab === "coding" ? setCodingMode : setChatMode
       });
     }
 
@@ -7342,11 +7495,19 @@ import {
     }
 
     function renderChatMultiResult() {
-      return null;
+      return renderChatMultiResultPanel({
+        e,
+        MarkdownBubbleText,
+        rootTab,
+        mode,
+        currentConversationId,
+        chatMultiResultByConversation,
+        buildChatMultiRenderSnapshot
+      });
     }
 
     function renderComposerInputBar({ value, onChange, onSend, pendingKey, placeholder }) {
-      const thinkPlusVisible = pendingKey === "chat:single" || pendingKey === "coding:single";
+      const thinkPlusVisible = pendingKey?.startsWith("chat:") || pendingKey?.startsWith("coding:");
       const thinkPlusReady = !!geminiUsage?.totals || true; // Gemini API 키 가용 여부는 백엔드가 더 정확히 알지만 UI는 일단 활성화 후 백엔드에서 fallback
       return renderComposerInputBarShell({
         e,
@@ -7399,7 +7560,7 @@ import {
         buildThreadPreviewMeta,
         renderMemoryPicker,
         renderChatMultiResult,
-        renderCodingResult: () => null,
+        renderCodingResult: rootTab === "coding" ? renderCodingResult : () => null,
         renderSafeRefactorPanel: () => null
       });
     }
@@ -7415,6 +7576,7 @@ import {
           DEFAULT_CODEX_MODEL,
           DEFAULT_GEMINI_WORKER_MODEL,
           DEFAULT_CEREBRAS_MODEL,
+          DEFAULT_NVIDIA_MODEL,
           CEREBRAS_MODEL_CHOICES
         },
         optionSets: {
@@ -7422,8 +7584,10 @@ import {
           copilotModelOptions,
           codexModelOptions,
           geminiModelOptions,
+          nvidiaModelOptions,
           groqWorkerModelOptions,
           geminiWorkerModelOptions,
+          nvidiaWorkerModelOptions,
           copilotWorkerModelOptions,
           codexWorkerModelOptions
         },
@@ -7441,11 +7605,13 @@ import {
           chatOrchGroqModel,
           chatOrchGeminiModel,
           chatOrchCerebrasModel,
+          chatOrchNvidiaModel,
           chatOrchCopilotModel,
           chatOrchCodexModel,
           chatMultiGroqModel,
           chatMultiGeminiModel,
           chatMultiCerebrasModel,
+          chatMultiNvidiaModel,
           chatMultiCopilotModel,
           chatMultiCodexModel,
           chatMultiSummaryProvider,
@@ -7461,11 +7627,13 @@ import {
           setChatOrchGroqModel,
           setChatOrchGeminiModel,
           setChatOrchCerebrasModel,
+          setChatOrchNvidiaModel,
           setChatOrchCopilotModel,
           setChatOrchCodexModel,
           setChatMultiGroqModel,
           setChatMultiGeminiModel,
           setChatMultiCerebrasModel,
+          setChatMultiNvidiaModel,
           setChatMultiCopilotModel,
           setChatMultiCodexModel,
           setChatMultiSummaryProvider,
@@ -7494,6 +7662,7 @@ import {
           DEFAULT_CODEX_MODEL,
           DEFAULT_GEMINI_WORKER_MODEL,
           DEFAULT_CEREBRAS_MODEL,
+          DEFAULT_NVIDIA_MODEL,
           CEREBRAS_MODEL_CHOICES
         },
         optionSets: {
@@ -7501,8 +7670,10 @@ import {
           copilotModelOptions,
           codexModelOptions,
           geminiModelOptions,
+          nvidiaModelOptions,
           groqWorkerModelOptions,
           geminiWorkerModelOptions,
+          nvidiaWorkerModelOptions,
           copilotWorkerModelOptions,
           codexWorkerModelOptions
         },
@@ -7522,6 +7693,7 @@ import {
           codingOrchGroqModel,
           codingOrchGeminiModel,
           codingOrchCerebrasModel,
+          codingOrchNvidiaModel,
           codingOrchCopilotModel,
           codingOrchCodexModel,
           codingMultiProvider,
@@ -7531,6 +7703,7 @@ import {
           codingMultiGroqModel,
           codingMultiGeminiModel,
           codingMultiCerebrasModel,
+          codingMultiNvidiaModel,
           codingMultiCopilotModel,
           codingMultiCodexModel
         },
@@ -7546,6 +7719,7 @@ import {
           setCodingOrchGroqModel,
           setCodingOrchGeminiModel,
           setCodingOrchCerebrasModel,
+          setCodingOrchNvidiaModel,
           setCodingOrchCopilotModel,
           setCodingOrchCodexModel,
           setCodingMultiProvider,
@@ -7555,6 +7729,7 @@ import {
           setCodingMultiGroqModel,
           setCodingMultiGeminiModel,
           setCodingMultiCerebrasModel,
+          setCodingMultiNvidiaModel,
           setCodingMultiCopilotModel,
           setCodingMultiCodexModel
         },
@@ -7577,8 +7752,10 @@ import {
         isPortraitMobileLayout,
         mobileWorkspaceHeight,
         currentWorkspacePane,
+        mobileComposerOpen,
         responsiveWorkspaceKey,
         setResponsivePane,
+        setMobileComposerOpen,
         currentKey,
         errorByKey,
         renderConversationPanel,
@@ -7824,6 +8001,7 @@ import {
       const shortcuts = uiPreferences.shortcuts || DEFAULT_UI_PREFERENCES.shortcuts;
       const shortcutGroups = [
         {
+          key: "palette",
           title: "팔레트 / 입력",
           rows: [
             { key: "palette", label: "팔레트 열기", helper: "검색, 스킬, 모델 전환" },
@@ -7834,6 +8012,7 @@ import {
           ]
         },
         {
+          key: "conversation",
           title: "대화 / 워크플로우",
           rows: [
             { key: "newChat", label: "새 대화 시작", helper: "현재 모드에서 새 thread" },
@@ -7845,6 +8024,7 @@ import {
           ]
         },
         {
+          key: "tabs",
           title: "탭 전환",
           rows: [
             { key: "tabChat", label: "대화 탭", helper: "" },
@@ -7880,6 +8060,7 @@ import {
         : false;
       const preview = backupState.preview || null;
       const conflicts = Array.isArray(preview?.conflicts) ? preview.conflicts : [];
+      const activeShortcutGroup = shortcutGroups.find((group) => group.key === shortcutGroupTab) || shortcutGroups[0];
 
       function renderShortcutRow(row) {
         const value = shortcuts[row.key] || "";
@@ -7977,12 +8158,20 @@ import {
               }).join(" / "))
             )
             : null,
-          shortcutGroups.map((group) => e("div", { key: group.title, className: "shortcut-group" },
-            e("div", { className: "shortcut-group-title" }, group.title),
+          e("div", { className: "shortcut-tab-row" },
+            shortcutGroups.map((group) => e("button", {
+              key: group.key,
+              type: "button",
+              className: `shortcut-tab ${activeShortcutGroup.key === group.key ? "active" : ""}`,
+              onClick: () => setShortcutGroupTab(group.key)
+            }, group.title))
+          ),
+          e("div", { className: "shortcut-group" },
+            e("div", { className: "shortcut-group-title" }, activeShortcutGroup.title),
             e("div", { className: "shortcut-grid" },
-              group.rows.map((row) => renderShortcutRow(row))
+              activeShortcutGroup.rows.map((row) => renderShortcutRow(row))
             )
-          )),
+          ),
           e("div", { className: "settings-action-row shortcut-action-row" },
             e("button", {
               type: "button",
@@ -8228,6 +8417,7 @@ import {
         { provider: "groq", label: "Groq", model: selectedGroqModel || DEFAULT_GROQ_SINGLE_MODEL },
         { provider: "gemini", label: "Gemini", model: DEFAULT_GEMINI_WORKER_MODEL },
         { provider: "cerebras", label: "Cerebras", model: DEFAULT_CEREBRAS_MODEL },
+        { provider: "nvidia", label: "NVIDIA NIM", model: DEFAULT_NVIDIA_MODEL },
         { provider: "codex", label: "Codex", model: DEFAULT_CODEX_MODEL },
         { provider: "copilot", label: "Copilot", model: selectedCopilotModel || "" }
       ].forEach((item) => {
@@ -8350,6 +8540,8 @@ import {
         setGeminiApiKey,
         cerebrasApiKey,
         setCerebrasApiKey,
+        nvidiaApiKey,
+        setNvidiaApiKey,
         codexApiKey,
         setCodexApiKey,
         copilotStatus,
@@ -8570,6 +8762,7 @@ import {
         defaultCodexModel: DEFAULT_CODEX_MODEL,
         geminiModelChoices: GEMINI_MODEL_CHOICES,
         cerebrasModelChoices: CEREBRAS_MODEL_CHOICES,
+        nvidiaModelChoices: NVIDIA_MODEL_CHOICES,
         send,
         currentAutomationPane,
         setAutomationPane: (paneKey) => setResponsivePane("automation", paneKey)

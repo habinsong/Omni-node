@@ -123,6 +123,27 @@ public sealed class SessionManager : IAuthSessionStore
         }
     }
 
+    public bool MarkAuthenticatedForRemoteDashboard(string sessionId, TimeSpan ttl)
+    {
+        if (!_sessions.TryGetValue(sessionId, out var record))
+        {
+            return false;
+        }
+
+        lock (record)
+        {
+            if (record.ExpiresAtUtc < DateTimeOffset.UtcNow)
+            {
+                _sessions.TryRemove(sessionId, out _);
+                return false;
+            }
+
+            record.Authenticated = true;
+            record.ExpiresAtUtc = DateTimeOffset.UtcNow.Add(ttl);
+            return true;
+        }
+    }
+
     public bool TryGetOtp(string sessionId, out string otp)
     {
         otp = string.Empty;

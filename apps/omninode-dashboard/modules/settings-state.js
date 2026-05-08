@@ -9,12 +9,17 @@ export function createSettingsState() {
     groqApiKeySet: false,
     geminiApiKeySet: false,
     cerebrasApiKeySet: false,
+    nvidiaApiKeySet: false,
     codexApiKeySet: false,
+    externalDashboardEnabled: false,
+    remoteDashboardClient: false,
+    dashboardExternalUrls: [],
     telegramBotTokenMasked: "",
     telegramChatIdMasked: "",
     groqApiKeyMasked: "",
     geminiApiKeyMasked: "",
     cerebrasApiKeyMasked: "",
+    nvidiaApiKeyMasked: "",
     codexApiKeyMasked: ""
   };
 }

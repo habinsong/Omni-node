@@ -52,7 +52,7 @@ public sealed partial class CommandService
         var copilotMini = IsPinnedCopilotModel(normalizedProvider, normalizedModel);
         var defaultPlanTokens = normalizedProvider switch
         {
-            "groq" or "gemini" or "cerebras" => Math.Clamp(_config.CodingMaxOutputTokens, 1200, 3200),
+            "groq" or "gemini" or "cerebras" or "nvidia" => Math.Clamp(_config.CodingMaxOutputTokens, 1200, 3200),
             _ => Math.Clamp(_config.CodingMaxOutputTokens, 1200, 2400)
         };
 
@@ -163,6 +163,24 @@ public sealed partial class CommandService
                 PlanMaxOutputTokens: Math.Clamp(_config.CodingMaxOutputTokens, 1000, 1800),
                 WorkspaceSnapshotMaxEntries: Math.Min(defaultSnapshotEntries, 24),
                 RecentLoopHistory: 2
+            ),
+            "nvidia" => new CodingExecutionProfile(
+                normalizedProvider,
+                normalizedModel,
+                UseCompactLoopPrompt: reasoningLikeModel,
+                OptimizeCodexCli: false,
+                AllowUiOneShot: false,
+                AllowDeterministicStdoutFastPath: true,
+                PreferBundleFallback: multiFileLike,
+                PreferDirectRecovery: false,
+                EnableGameScaffoldFallback: false,
+                RequestTimeoutSeconds: Math.Max(45, _config.NvidiaTimeoutSec),
+                MaxIterations: Math.Min(baseIterations, 3),
+                LoopMaxActions: Math.Min(baseActions, 3),
+                OneShotMaxActions: Math.Max(3, Math.Min(baseActions, 4)),
+                PlanMaxOutputTokens: Math.Clamp(_config.CodingMaxOutputTokens, 1200, 2400),
+                WorkspaceSnapshotMaxEntries: Math.Min(defaultSnapshotEntries, 28),
+                RecentLoopHistory: 3
             ),
             _ => new CodingExecutionProfile(
                 normalizedProvider,
@@ -404,6 +422,7 @@ public sealed partial class CommandService
             "groq" when profile.Model.Contains("gpt-oss", StringComparison.OrdinalIgnoreCase) => Math.Min(configured, bundleMode ? 1800 : 1500),
             "groq" => Math.Min(configured, bundleMode ? 2400 : 1900),
             "cerebras" => Math.Min(configured, bundleMode ? 1800 : 1500),
+            "nvidia" => Math.Min(configured, bundleMode ? 2400 : 1900),
             "gemini" when profile.Model.Contains("flash", StringComparison.OrdinalIgnoreCase)
                 || profile.Model.Contains("lite", StringComparison.OrdinalIgnoreCase) => Math.Min(configured, bundleMode ? 2200 : 1800),
             "codex" => Math.Min(configured, bundleMode ? 3600 : 2800),
@@ -421,6 +440,7 @@ public sealed partial class CommandService
             "groq" when IsGroqCompoundLikeCodingModel(profile.Model) => Math.Min(configured, 1400),
             "groq" => Math.Min(configured, 1800),
             "cerebras" => Math.Min(configured, 1600),
+            "nvidia" => Math.Min(configured, 1800),
             "gemini" when profile.Model.Contains("flash", StringComparison.OrdinalIgnoreCase)
                 || profile.Model.Contains("lite", StringComparison.OrdinalIgnoreCase) => Math.Min(configured, 1800),
             "codex" => Math.Min(configured, 2600),
@@ -451,6 +471,9 @@ public sealed partial class CommandService
                 break;
             case "cerebras":
                 lines.Add("- Cerebras 계열이다. 긴 산출물보다 필요한 핵심 파일만 정확히 갱신하라");
+                break;
+            case "nvidia":
+                lines.Add("- NVIDIA NIM 계열이다. OpenAI 호환 텍스트 LLM으로 보고 핵심 파일 변경과 검증 절차를 간결하게 유지하라");
                 break;
             case "gemini":
                 lines.Add(normalizedModel.Contains("flash", StringComparison.OrdinalIgnoreCase) || normalizedModel.Contains("lite", StringComparison.OrdinalIgnoreCase)
@@ -673,6 +696,9 @@ public sealed partial class CommandService
         builder.AppendLine();
         builder.AppendLine("[goal]");
         builder.AppendLine(objective);
+        builder.AppendLine();
+        builder.AppendLine("[quality_brief]");
+        builder.AppendLine(BuildCodingQualityBrief(objective, resolvedLanguage));
         builder.AppendLine();
         builder.AppendLine("[last]");
         builder.AppendLine($"status={lastExecution.Status}");

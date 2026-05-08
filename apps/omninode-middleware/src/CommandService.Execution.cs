@@ -102,19 +102,22 @@ public sealed partial class CommandService
                        /code <instruction>
                        /profile <talk|code> [low|high]
                        /mode <single|orchestration|multi>
-                       /provider <single|orchestration|summary> <groq|gemini|copilot|cerebras|auto>
-                       /model <single|orchestration|multi.groq|multi.copilot|multi.cerebras> <model-id>
+                       /provider <single|orchestration|summary> <groq|gemini|copilot|cerebras|nvidia|codex|auto>
+                       /model <single|orchestration|multi.groq|multi.gemini|multi.copilot|multi.cerebras|multi.nvidia|multi.codex> <model-id>
                        /status model
                        /llm status
                        /llm mode <single|orchestration|multi>
-                       /llm single provider <groq|gemini|copilot|cerebras>
+                       /llm single provider <groq|gemini|copilot|cerebras|nvidia|codex>
                        /llm single model <model-id>
-                       /llm orchestration provider <auto|groq|gemini|copilot|cerebras>
+                       /llm orchestration provider <auto|groq|gemini|copilot|cerebras|nvidia|codex>
                        /llm orchestration model <model-id>
                        /llm multi groq <model-id>
+                       /llm multi gemini <model-id>
                        /llm multi copilot <model-id>
                        /llm multi cerebras <model-id>
-                       /llm multi summary <auto|groq|gemini|copilot|cerebras>
+                       /llm multi nvidia <model-id>
+                       /llm multi codex <model-id>
+                       /llm multi summary <auto|groq|gemini|copilot|cerebras|nvidia|codex>
                        /help
                        """;
             }

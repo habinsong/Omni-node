@@ -297,7 +297,14 @@ export function handleDashboardServerMessage(msg, context) {
   }
 
   if (msg.type === "auth_required") {
-    setters.setAuthMeta({ sessionId: msg.sessionId || "", telegramConfigured: !!msg.telegramConfigured })
+    setters.setAuthMeta({
+      sessionId: msg.sessionId || "",
+      telegramConfigured: !!msg.telegramConfigured,
+      remoteDashboardClient: !!msg.remoteDashboardClient
+    })
+    if (msg.remoteDashboardClient) {
+      setters.setStatus("외부 접속중")
+    }
     return true
   }
 
@@ -318,7 +325,7 @@ export function handleDashboardServerMessage(msg, context) {
       if (Number.isFinite(msg.ttlHours) && Number(msg.ttlHours) > 0) {
         setters.setAuthTtlHours(String(msg.ttlHours))
       }
-      setters.setStatus("세션 인증됨")
+      setters.setStatus(msg.remoteDashboardClient ? "외부 접속중" : "세션 인증됨")
       actions.send({ type: "get_routines" })
       actions.requestDoctorLast(actions.send, { silent: true, queueIfClosed: false })
       actions.requestRoutingPolicyGet(actions.send, { silent: true, queueIfClosed: false })
@@ -1004,21 +1011,31 @@ export function handleDashboardServerMessage(msg, context) {
       groqApiKeySet: !!msg.groqApiKeySet,
       geminiApiKeySet: !!msg.geminiApiKeySet,
       cerebrasApiKeySet: !!msg.cerebrasApiKeySet,
+      nvidiaApiKeySet: !!msg.nvidiaApiKeySet,
       codexApiKeySet: !!msg.codexApiKeySet,
+      externalDashboardEnabled: !!msg.externalDashboardEnabled,
+      remoteDashboardClient: !!msg.remoteDashboardClient,
+      dashboardExternalUrls: Array.isArray(msg.dashboardExternalUrls) ? msg.dashboardExternalUrls.filter(Boolean) : [],
       telegramBotTokenMasked: msg.telegramBotTokenMasked || "",
       telegramChatIdMasked: msg.telegramChatIdMasked || "",
       groqApiKeyMasked: msg.groqApiKeyMasked || "",
       geminiApiKeyMasked: msg.geminiApiKeyMasked || "",
       cerebrasApiKeyMasked: msg.cerebrasApiKeyMasked || "",
+      nvidiaApiKeyMasked: msg.nvidiaApiKeyMasked || "",
       codexApiKeyMasked: msg.codexApiKeyMasked || ""
     })
+    if (msg.remoteDashboardClient) {
+      setters.setStatus("외부 접속중")
+    }
     return true
   }
 
   if (msg.type === "settings_result") {
     actions.log(msg.message || "설정 적용 완료", msg.ok === false ? "error" : "info")
     actions.send({ type: "get_settings" })
-    actions.send({ type: "get_codex_status" })
+    if (!state.settingsState?.remoteDashboardClient) {
+      actions.send({ type: "get_codex_status" })
+    }
     actions.send({ type: "get_groq_models" })
     actions.send({ type: "get_copilot_models" })
     actions.send({ type: "get_usage_stats" })
@@ -1242,6 +1259,11 @@ export function handleDashboardServerMessage(msg, context) {
   }
 
   if (msg.type === "error") {
+    const normalizedMessage = (msg.message || "").toLowerCase().replace(/[\s-]+/g, "_")
+    if (normalizedMessage.includes("forbidden_remote_dashboard")) {
+      return true
+    }
+
     const friendlyMessage = mapErrorMessage(msg.message) || msg.message || "-"
     const errorText = `오류: ${friendlyMessage}`
     const rawMessage = typeof msg.message === "string" ? msg.message : ""

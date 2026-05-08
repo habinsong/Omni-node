@@ -127,6 +127,7 @@ const DEFAULT_GROQ_SINGLE_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
 const DEFAULT_GROQ_WORKER_MODEL = "openai/gpt-oss-120b";
 const DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview";
 const DEFAULT_CEREBRAS_MODEL = "gpt-oss-120b";
+const DEFAULT_NVIDIA_MODEL = "meta/llama-3.1-70b-instruct";
 
 const BOOLEAN_OPTIONS = [
   { value: "true", label: "예" },
@@ -157,6 +158,7 @@ const CHAT_PROVIDER_OPTIONS = [
   { value: "groq", label: "Groq" },
   { value: "gemini", label: "Gemini" },
   { value: "cerebras", label: "Cerebras" },
+  { value: "nvidia", label: "NVIDIA NIM" },
   { value: "copilot", label: "Copilot" },
   { value: "codex", label: "Codex" }
 ];
@@ -171,6 +173,7 @@ const SUMMARY_PROVIDER_OPTIONS = [
   { value: "groq", label: "Groq" },
   { value: "gemini", label: "Gemini" },
   { value: "cerebras", label: "Cerebras" },
+  { value: "nvidia", label: "NVIDIA NIM" },
   { value: "copilot", label: "Copilot" },
   { value: "codex", label: "Codex" }
 ];
@@ -471,6 +474,9 @@ const LOGIC_NODE_INSPECTOR_DEFINITIONS = {
       field("cerebrasModel", "Cerebras 보조 모델", "catalog-select", {
         catalogKey: "cerebrasWorkerOptions"
       }),
+      field("nvidiaModel", "NVIDIA NIM 보조 모델", "catalog-select", {
+        catalogKey: "nvidiaWorkerOptions"
+      }),
       field("copilotModel", "Copilot 보조 모델", "catalog-select", {
         catalogKey: "copilotWorkerOptions"
       }),
@@ -512,6 +518,9 @@ const LOGIC_NODE_INSPECTOR_DEFINITIONS = {
       }),
       field("cerebrasModel", "Cerebras 모델", "catalog-select", {
         catalogKey: "cerebrasWorkerOptions"
+      }),
+      field("nvidiaModel", "NVIDIA NIM 모델", "catalog-select", {
+        catalogKey: "nvidiaWorkerOptions"
       }),
       field("copilotModel", "Copilot 모델", "catalog-select", {
         catalogKey: "copilotWorkerOptions"
@@ -606,6 +615,9 @@ const LOGIC_NODE_INSPECTOR_DEFINITIONS = {
       field("cerebrasModel", "Cerebras 보조 모델", "catalog-select", {
         catalogKey: "cerebrasWorkerOptions"
       }),
+      field("nvidiaModel", "NVIDIA NIM 보조 모델", "catalog-select", {
+        catalogKey: "nvidiaWorkerOptions"
+      }),
       field("copilotModel", "Copilot 보조 모델", "catalog-select", {
         catalogKey: "copilotWorkerOptions"
       }),
@@ -658,6 +670,9 @@ const LOGIC_NODE_INSPECTOR_DEFINITIONS = {
       }),
       field("cerebrasModel", "Cerebras 모델", "catalog-select", {
         catalogKey: "cerebrasWorkerOptions"
+      }),
+      field("nvidiaModel", "NVIDIA NIM 모델", "catalog-select", {
+        catalogKey: "nvidiaWorkerOptions"
       }),
       field("copilotModel", "Copilot 모델", "catalog-select", {
         catalogKey: "copilotWorkerOptions"
@@ -1262,6 +1277,7 @@ function defaultNodeConfig(type) {
         groqModel: DEFAULT_GROQ_WORKER_MODEL,
         geminiModel: DEFAULT_GEMINI_MODEL,
         cerebrasModel: DEFAULT_CEREBRAS_MODEL,
+        nvidiaModel: DEFAULT_NVIDIA_MODEL,
         copilotModel: LOGIC_NONE_MODEL,
         codexModel: LOGIC_NONE_MODEL,
         webSearchEnabled: "true",
@@ -1274,6 +1290,7 @@ function defaultNodeConfig(type) {
         groqModel: DEFAULT_GROQ_WORKER_MODEL,
         geminiModel: DEFAULT_GEMINI_MODEL,
         cerebrasModel: DEFAULT_CEREBRAS_MODEL,
+        nvidiaModel: DEFAULT_NVIDIA_MODEL,
         copilotModel: LOGIC_NONE_MODEL,
         codexModel: LOGIC_NONE_MODEL,
         summaryProvider: "auto",
@@ -1300,6 +1317,7 @@ function defaultNodeConfig(type) {
         groqModel: DEFAULT_GROQ_WORKER_MODEL,
         geminiModel: DEFAULT_GEMINI_MODEL,
         cerebrasModel: DEFAULT_CEREBRAS_MODEL,
+        nvidiaModel: DEFAULT_NVIDIA_MODEL,
         copilotModel: LOGIC_NONE_MODEL,
         codexModel: LOGIC_NONE_MODEL,
         webSearchEnabled: "true",
@@ -1315,6 +1333,7 @@ function defaultNodeConfig(type) {
         groqModel: DEFAULT_GROQ_WORKER_MODEL,
         geminiModel: DEFAULT_GEMINI_MODEL,
         cerebrasModel: DEFAULT_CEREBRAS_MODEL,
+        nvidiaModel: DEFAULT_NVIDIA_MODEL,
         copilotModel: LOGIC_NONE_MODEL,
         codexModel: LOGIC_NONE_MODEL,
         webSearchEnabled: "true",

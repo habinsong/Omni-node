@@ -50,6 +50,7 @@ export function renderChatComposerPanel(props) {
     DEFAULT_CODEX_MODEL,
     DEFAULT_GEMINI_WORKER_MODEL,
     DEFAULT_CEREBRAS_MODEL,
+    DEFAULT_NVIDIA_MODEL,
     CEREBRAS_MODEL_CHOICES
   } = constants;
   const {
@@ -57,8 +58,10 @@ export function renderChatComposerPanel(props) {
     copilotModelOptions,
     codexModelOptions,
     geminiModelOptions,
+    nvidiaModelOptions,
     groqWorkerModelOptions,
     geminiWorkerModelOptions,
+    nvidiaWorkerModelOptions,
     copilotWorkerModelOptions,
     codexWorkerModelOptions
   } = optionSets;
@@ -76,11 +79,13 @@ export function renderChatComposerPanel(props) {
     chatOrchGroqModel,
     chatOrchGeminiModel,
     chatOrchCerebrasModel,
+    chatOrchNvidiaModel,
     chatOrchCopilotModel,
     chatOrchCodexModel,
     chatMultiGroqModel,
     chatMultiGeminiModel,
     chatMultiCerebrasModel,
+    chatMultiNvidiaModel,
     chatMultiCopilotModel,
     chatMultiCodexModel,
     chatMultiSummaryProvider,
@@ -96,11 +101,13 @@ export function renderChatComposerPanel(props) {
     setChatOrchGroqModel,
     setChatOrchGeminiModel,
     setChatOrchCerebrasModel,
+    setChatOrchNvidiaModel,
     setChatOrchCopilotModel,
     setChatOrchCodexModel,
     setChatMultiGroqModel,
     setChatMultiGeminiModel,
     setChatMultiCerebrasModel,
+    setChatMultiNvidiaModel,
     setChatMultiCopilotModel,
     setChatMultiCodexModel,
     setChatMultiSummaryProvider,
@@ -134,6 +141,8 @@ export function renderChatComposerPanel(props) {
               setChatSingleModel(DEFAULT_GEMINI_WORKER_MODEL);
             } else if (value === "cerebras") {
               setChatSingleModel(DEFAULT_CEREBRAS_MODEL);
+            } else if (value === "nvidia") {
+              setChatSingleModel(DEFAULT_NVIDIA_MODEL);
             } else {
               setChatSingleModel("");
             }
@@ -142,6 +151,7 @@ export function renderChatComposerPanel(props) {
           e("option", { value: "groq" }, "Groq"),
           e("option", { value: "gemini" }, "Gemini"),
           e("option", { value: "cerebras" }, "Cerebras"),
+          e("option", { value: "nvidia" }, "NVIDIA NIM"),
           e("option", { value: "copilot" }, "Copilot"),
           e("option", { value: "codex" }, "Codex")),
         chatSingleProvider === "groq"
@@ -167,12 +177,18 @@ export function renderChatComposerPanel(props) {
                   className: "input compact",
                   value: chatSingleModel || DEFAULT_CEREBRAS_MODEL,
                   onChange: (event) => setChatSingleModel(event.target.value)
-                }, renderCerebrasOptions(e, "chat-single-cerebras", CEREBRAS_MODEL_CHOICES))
-                : e("select", {
-                  className: "input compact",
-                  value: chatSingleModel || DEFAULT_GEMINI_WORKER_MODEL,
-                  onChange: (event) => setChatSingleModel(event.target.value)
-                }, geminiModelOptions)
+              }, renderCerebrasOptions(e, "chat-single-cerebras", CEREBRAS_MODEL_CHOICES))
+                : chatSingleProvider === "nvidia"
+                  ? e("select", {
+                    className: "input compact",
+                    value: chatSingleModel || DEFAULT_NVIDIA_MODEL,
+                    onChange: (event) => setChatSingleModel(event.target.value)
+                  }, nvidiaModelOptions)
+                  : e("select", {
+                    className: "input compact",
+                    value: chatSingleModel || DEFAULT_GEMINI_WORKER_MODEL,
+                    onChange: (event) => setChatSingleModel(event.target.value)
+                  }, geminiModelOptions)
       ),
       renderComposerInputBar({
         value: chatInputSingle,
@@ -208,6 +224,10 @@ export function renderChatComposerPanel(props) {
               );
             } else if (value === "cerebras") {
               setChatOrchModel(chatOrchCerebrasModel || DEFAULT_CEREBRAS_MODEL);
+            } else if (value === "nvidia") {
+              setChatOrchModel(
+                isNoneModel(chatOrchNvidiaModel) ? DEFAULT_NVIDIA_MODEL : (chatOrchNvidiaModel || DEFAULT_NVIDIA_MODEL)
+              );
             } else {
               setChatOrchModel("");
             }
@@ -217,6 +237,7 @@ export function renderChatComposerPanel(props) {
           e("option", { value: "groq" }, "Groq"),
           e("option", { value: "gemini" }, "Gemini"),
           e("option", { value: "cerebras" }, "Cerebras"),
+          e("option", { value: "nvidia" }, "NVIDIA NIM"),
           e("option", { value: "copilot" }, "Copilot"),
           e("option", { value: "codex" }, "Codex")),
         chatOrchProvider === "groq"
@@ -243,14 +264,21 @@ export function renderChatComposerPanel(props) {
                   value: chatOrchModel || chatOrchCodexModel || DEFAULT_CODEX_MODEL,
                   onChange: (event) => setChatOrchModel(event.target.value)
                 }, codexModelOptions)
-                : chatOrchProvider === "gemini"
+                : chatOrchProvider === "nvidia"
                   ? e("select", {
                     className: "input compact",
                     value: (!isNoneModel(chatOrchModel) ? chatOrchModel : "")
-                      || (!isNoneModel(chatOrchGeminiModel) ? chatOrchGeminiModel : DEFAULT_GEMINI_WORKER_MODEL),
+                      || (!isNoneModel(chatOrchNvidiaModel) ? chatOrchNvidiaModel : DEFAULT_NVIDIA_MODEL),
                     onChange: (event) => setChatOrchModel(event.target.value)
-                  }, geminiModelOptions)
-                  : e("div", { className: "fixed-chip" }, "AUTO")
+                  }, nvidiaModelOptions)
+                  : chatOrchProvider === "gemini"
+                    ? e("select", {
+                      className: "input compact",
+                      value: (!isNoneModel(chatOrchModel) ? chatOrchModel : "")
+                        || (!isNoneModel(chatOrchGeminiModel) ? chatOrchGeminiModel : DEFAULT_GEMINI_WORKER_MODEL),
+                      onChange: (event) => setChatOrchModel(event.target.value)
+                    }, geminiModelOptions)
+                    : e("div", { className: "fixed-chip" }, "AUTO")
       ),
       e("div", { className: "toolbar" },
         e("div", { className: "fixed-chip" }, "워커 모델"),
@@ -269,6 +297,11 @@ export function renderChatComposerPanel(props) {
           value: chatOrchCerebrasModel,
           onChange: (event) => setChatOrchCerebrasModel(event.target.value)
         }, renderCerebrasWorkerOptions(e, "chat-orch-cerebras-worker", NONE_MODEL, CEREBRAS_MODEL_CHOICES)),
+        e("select", {
+          className: "input compact",
+          value: chatOrchNvidiaModel,
+          onChange: (event) => setChatOrchNvidiaModel(event.target.value)
+        }, nvidiaWorkerModelOptions),
         e("select", {
           className: "input compact",
           value: chatOrchCopilotModel,
@@ -312,6 +345,11 @@ export function renderChatComposerPanel(props) {
       }, renderCerebrasWorkerOptions(e, "chat-multi-cerebras-worker", NONE_MODEL, CEREBRAS_MODEL_CHOICES)),
       e("select", {
         className: "input compact",
+        value: chatMultiNvidiaModel,
+        onChange: (event) => setChatMultiNvidiaModel(event.target.value)
+      }, nvidiaWorkerModelOptions),
+      e("select", {
+        className: "input compact",
         value: chatMultiCopilotModel,
         onChange: (event) => setChatMultiCopilotModel(event.target.value)
       }, copilotWorkerModelOptions),
@@ -329,6 +367,7 @@ export function renderChatComposerPanel(props) {
         e("option", { value: "gemini" }, "요약: Gemini"),
         e("option", { value: "groq" }, "요약: Groq"),
         e("option", { value: "cerebras" }, "요약: Cerebras"),
+        e("option", { value: "nvidia" }, "요약: NVIDIA NIM"),
         e("option", { value: "copilot" }, "요약: Copilot"),
         e("option", { value: "codex" }, "요약: Codex"))
     ),
@@ -363,6 +402,7 @@ export function renderCodingComposerPanel(props) {
     DEFAULT_CODEX_MODEL,
     DEFAULT_GEMINI_WORKER_MODEL,
     DEFAULT_CEREBRAS_MODEL,
+    DEFAULT_NVIDIA_MODEL,
     CEREBRAS_MODEL_CHOICES
   } = constants;
   const {
@@ -370,8 +410,10 @@ export function renderCodingComposerPanel(props) {
     copilotModelOptions,
     codexModelOptions,
     geminiModelOptions,
+    nvidiaModelOptions,
     groqWorkerModelOptions,
     geminiWorkerModelOptions,
+    nvidiaWorkerModelOptions,
     copilotWorkerModelOptions,
     codexWorkerModelOptions
   } = optionSets;
@@ -391,6 +433,7 @@ export function renderCodingComposerPanel(props) {
     codingOrchGroqModel,
     codingOrchGeminiModel,
     codingOrchCerebrasModel,
+    codingOrchNvidiaModel,
     codingOrchCopilotModel,
     codingOrchCodexModel,
     codingMultiProvider,
@@ -400,6 +443,7 @@ export function renderCodingComposerPanel(props) {
     codingMultiGroqModel,
     codingMultiGeminiModel,
     codingMultiCerebrasModel,
+    codingMultiNvidiaModel,
     codingMultiCopilotModel,
     codingMultiCodexModel
   } = values;
@@ -415,6 +459,7 @@ export function renderCodingComposerPanel(props) {
     setCodingOrchGroqModel,
     setCodingOrchGeminiModel,
     setCodingOrchCerebrasModel,
+    setCodingOrchNvidiaModel,
     setCodingOrchCopilotModel,
     setCodingOrchCodexModel,
     setCodingMultiProvider,
@@ -424,6 +469,7 @@ export function renderCodingComposerPanel(props) {
     setCodingMultiGroqModel,
     setCodingMultiGeminiModel,
     setCodingMultiCerebrasModel,
+    setCodingMultiNvidiaModel,
     setCodingMultiCopilotModel,
     setCodingMultiCodexModel
   } = setters;
@@ -449,6 +495,8 @@ export function renderCodingComposerPanel(props) {
               setCodingSingleModel(selectedGroqModel || "");
             } else if (value === "cerebras") {
               setCodingSingleModel(DEFAULT_CEREBRAS_MODEL);
+            } else if (value === "nvidia") {
+              setCodingSingleModel(DEFAULT_NVIDIA_MODEL);
             } else if (value === "copilot") {
               setCodingSingleModel(selectedCopilotModel || "");
             } else if (value === "codex") {
@@ -464,6 +512,7 @@ export function renderCodingComposerPanel(props) {
           e("option", { value: "groq" }, "Groq"),
           e("option", { value: "gemini" }, "Gemini"),
           e("option", { value: "cerebras" }, "Cerebras"),
+          e("option", { value: "nvidia" }, "NVIDIA NIM"),
           e("option", { value: "copilot" }, "Copilot"),
           e("option", { value: "codex" }, "Codex")),
         codingSingleProvider === "groq"
@@ -490,13 +539,19 @@ export function renderCodingComposerPanel(props) {
                   value: codingSingleModel || DEFAULT_CEREBRAS_MODEL,
                   onChange: (event) => setCodingSingleModel(event.target.value)
                 }, renderCerebrasOptions(e, "coding-single-cerebras", CEREBRAS_MODEL_CHOICES))
-                : codingSingleProvider === "gemini"
+                : codingSingleProvider === "nvidia"
                   ? e("select", {
                     className: "input compact",
-                    value: codingSingleModel || DEFAULT_GEMINI_WORKER_MODEL,
+                    value: codingSingleModel || DEFAULT_NVIDIA_MODEL,
                     onChange: (event) => setCodingSingleModel(event.target.value)
-                  }, geminiModelOptions)
-                  : e("div", { className: "fixed-chip" }, "AUTO"),
+                  }, nvidiaModelOptions)
+                  : codingSingleProvider === "gemini"
+                    ? e("select", {
+                      className: "input compact",
+                      value: codingSingleModel || DEFAULT_GEMINI_WORKER_MODEL,
+                      onChange: (event) => setCodingSingleModel(event.target.value)
+                    }, geminiModelOptions)
+                    : e("div", { className: "fixed-chip" }, "AUTO"),
         e("select", {
           className: "input compact",
           value: codingSingleLanguage,
@@ -534,6 +589,10 @@ export function renderCodingComposerPanel(props) {
               setCodingOrchModel(codingOrchCodexModel || DEFAULT_CODEX_MODEL);
             } else if (value === "cerebras") {
               setCodingOrchModel(codingOrchCerebrasModel || DEFAULT_CEREBRAS_MODEL);
+            } else if (value === "nvidia") {
+              setCodingOrchModel(
+                isNoneModel(codingOrchNvidiaModel) ? DEFAULT_NVIDIA_MODEL : (codingOrchNvidiaModel || DEFAULT_NVIDIA_MODEL)
+              );
             } else if (value === "gemini") {
               setCodingOrchModel(
                 isNoneModel(codingOrchGeminiModel) ? DEFAULT_GEMINI_WORKER_MODEL : (codingOrchGeminiModel || DEFAULT_GEMINI_WORKER_MODEL)
@@ -547,6 +606,7 @@ export function renderCodingComposerPanel(props) {
           e("option", { value: "groq" }, "주 구현: Groq"),
           e("option", { value: "gemini" }, "주 구현: Gemini"),
           e("option", { value: "cerebras" }, "주 구현: Cerebras"),
+          e("option", { value: "nvidia" }, "주 구현: NVIDIA NIM"),
           e("option", { value: "copilot" }, "주 구현: Copilot"),
           e("option", { value: "codex" }, "주 구현: Codex")),
         codingOrchProvider === "groq"
@@ -573,14 +633,21 @@ export function renderCodingComposerPanel(props) {
                   value: codingOrchModel || codingOrchCerebrasModel || DEFAULT_CEREBRAS_MODEL,
                   onChange: (event) => setCodingOrchModel(event.target.value)
                 }, renderCerebrasOptions(e, "coding-orch-cerebras", CEREBRAS_MODEL_CHOICES))
-                : codingOrchProvider === "gemini"
+                : codingOrchProvider === "nvidia"
                   ? e("select", {
                     className: "input compact",
                     value: (!isNoneModel(codingOrchModel) ? codingOrchModel : "")
-                      || (!isNoneModel(codingOrchGeminiModel) ? codingOrchGeminiModel : DEFAULT_GEMINI_WORKER_MODEL),
+                      || (!isNoneModel(codingOrchNvidiaModel) ? codingOrchNvidiaModel : DEFAULT_NVIDIA_MODEL),
                     onChange: (event) => setCodingOrchModel(event.target.value)
-                  }, geminiModelOptions)
-                  : e("div", { className: "fixed-chip" }, "AUTO"),
+                  }, nvidiaModelOptions)
+                  : codingOrchProvider === "gemini"
+                    ? e("select", {
+                      className: "input compact",
+                      value: (!isNoneModel(codingOrchModel) ? codingOrchModel : "")
+                        || (!isNoneModel(codingOrchGeminiModel) ? codingOrchGeminiModel : DEFAULT_GEMINI_WORKER_MODEL),
+                      onChange: (event) => setCodingOrchModel(event.target.value)
+                    }, geminiModelOptions)
+                    : e("div", { className: "fixed-chip" }, "AUTO"),
         e("select", {
           className: "input compact",
           value: codingOrchLanguage,
@@ -604,6 +671,11 @@ export function renderCodingComposerPanel(props) {
           value: codingOrchCerebrasModel,
           onChange: (event) => setCodingOrchCerebrasModel(event.target.value)
         }, renderCerebrasWorkerOptions(e, "coding-orch-cerebras-worker", NONE_MODEL, CEREBRAS_MODEL_CHOICES)),
+        e("select", {
+          className: "input compact",
+          value: codingOrchNvidiaModel,
+          onChange: (event) => setCodingOrchNvidiaModel(event.target.value)
+        }, nvidiaWorkerModelOptions),
         e("select", {
           className: "input compact",
           value: codingOrchCopilotModel,
@@ -641,6 +713,10 @@ export function renderCodingComposerPanel(props) {
             setCodingMultiModel(selectedGroqModel || "");
           } else if (value === "cerebras") {
             setCodingMultiModel(codingMultiCerebrasModel || DEFAULT_CEREBRAS_MODEL);
+          } else if (value === "nvidia") {
+            setCodingMultiModel(
+              isNoneModel(codingMultiNvidiaModel) ? DEFAULT_NVIDIA_MODEL : (codingMultiNvidiaModel || DEFAULT_NVIDIA_MODEL)
+            );
           } else if (value === "copilot") {
             setCodingMultiModel(selectedCopilotModel || "");
           } else if (value === "codex") {
@@ -654,9 +730,10 @@ export function renderCodingComposerPanel(props) {
       },
         e("option", { value: "auto" }, "비교 요약: AUTO"),
         e("option", { value: "groq" }, "비교 요약: Groq"),
-        e("option", { value: "gemini" }, "비교 요약: Gemini"),
-        e("option", { value: "cerebras" }, "비교 요약: Cerebras"),
-        e("option", { value: "copilot" }, "비교 요약: Copilot"),
+      e("option", { value: "gemini" }, "비교 요약: Gemini"),
+      e("option", { value: "cerebras" }, "비교 요약: Cerebras"),
+      e("option", { value: "nvidia" }, "비교 요약: NVIDIA NIM"),
+      e("option", { value: "copilot" }, "비교 요약: Copilot"),
         e("option", { value: "codex" }, "비교 요약: Codex")),
       codingMultiProvider === "groq"
         ? e("select", {
@@ -682,13 +759,19 @@ export function renderCodingComposerPanel(props) {
                 value: codingMultiModel || codingMultiCerebrasModel || DEFAULT_CEREBRAS_MODEL,
                 onChange: (event) => setCodingMultiModel(event.target.value)
               }, renderCerebrasOptions(e, "coding-multi-cerebras", CEREBRAS_MODEL_CHOICES))
-              : codingMultiProvider === "gemini"
+              : codingMultiProvider === "nvidia"
                 ? e("select", {
                   className: "input compact",
-                  value: codingMultiModel || DEFAULT_GEMINI_WORKER_MODEL,
+                  value: codingMultiModel || codingMultiNvidiaModel || DEFAULT_NVIDIA_MODEL,
                   onChange: (event) => setCodingMultiModel(event.target.value)
-                }, geminiModelOptions)
-                : e("div", { className: "fixed-chip" }, "AUTO"),
+                }, nvidiaModelOptions)
+                : codingMultiProvider === "gemini"
+                  ? e("select", {
+                    className: "input compact",
+                    value: codingMultiModel || DEFAULT_GEMINI_WORKER_MODEL,
+                    onChange: (event) => setCodingMultiModel(event.target.value)
+                  }, geminiModelOptions)
+                  : e("div", { className: "fixed-chip" }, "AUTO"),
       e("select", {
         className: "input compact",
         value: codingMultiLanguage,
@@ -712,6 +795,11 @@ export function renderCodingComposerPanel(props) {
         value: codingMultiCerebrasModel,
         onChange: (event) => setCodingMultiCerebrasModel(event.target.value)
       }, renderCerebrasWorkerOptions(e, "coding-multi-cerebras-worker", NONE_MODEL, CEREBRAS_MODEL_CHOICES)),
+      e("select", {
+        className: "input compact",
+        value: codingMultiNvidiaModel,
+        onChange: (event) => setCodingMultiNvidiaModel(event.target.value)
+      }, nvidiaWorkerModelOptions),
       e("select", {
         className: "input compact",
         value: codingMultiCopilotModel,

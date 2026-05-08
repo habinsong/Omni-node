@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -91,6 +92,7 @@ public sealed partial class WebSocketGateway
     private bool _gatewayDegradedMode;
     private int? _gatewayListenerErrorCode;
     private string? _gatewayListenerErrorMessage;
+    private Action? _requestListenerRebind;
 
     private sealed record GuardAlertDispatchTargetResult(
         string Name,
@@ -174,7 +176,8 @@ public sealed partial class WebSocketGateway
             SendCopilotModelsAsync,
             (socket, sendLock, token, forceRefresh) => SendUsageStatsAsync(socket, sendLock, token, forceRefresh),
             SendRoutingPolicyResultAsync,
-            SendRoutingDecisionAsync
+            SendRoutingDecisionAsync,
+            RequestListenerRebind
         );
         _conversationMemoryDispatcher = new WsConversationMemoryDispatcher(
             conversationService,
@@ -582,7 +585,12 @@ public sealed partial class WebSocketGateway
         );
     }
 
-    private async Task SendSettingsStateAsync(WebSocket socket, SemaphoreSlim sendLock, CancellationToken cancellationToken)
+    private async Task SendSettingsStateAsync(
+        WebSocket socket,
+        SemaphoreSlim sendLock,
+        CancellationToken cancellationToken,
+        bool remoteDashboardClient = false
+    )
     {
         var snapshot = _settingsService.GetSettingsSnapshot();
         await SendTextAsync(
@@ -595,16 +603,108 @@ public sealed partial class WebSocketGateway
             + $"\"groqApiKeySet\":{(snapshot.GroqApiKeySet ? "true" : "false")},"
             + $"\"geminiApiKeySet\":{(snapshot.GeminiApiKeySet ? "true" : "false")},"
             + $"\"cerebrasApiKeySet\":{(snapshot.CerebrasApiKeySet ? "true" : "false")},"
+            + $"\"nvidiaApiKeySet\":{(snapshot.NvidiaApiKeySet ? "true" : "false")},"
             + $"\"codexApiKeySet\":{(snapshot.CodexApiKeySet ? "true" : "false")},"
             + $"\"telegramBotTokenMasked\":\"{EscapeJson(snapshot.TelegramBotTokenMasked)}\","
             + $"\"telegramChatIdMasked\":\"{EscapeJson(snapshot.TelegramChatIdMasked)}\","
             + $"\"groqApiKeyMasked\":\"{EscapeJson(snapshot.GroqApiKeyMasked)}\","
             + $"\"geminiApiKeyMasked\":\"{EscapeJson(snapshot.GeminiApiKeyMasked)}\","
             + $"\"cerebrasApiKeyMasked\":\"{EscapeJson(snapshot.CerebrasApiKeyMasked)}\","
-            + $"\"codexApiKeyMasked\":\"{EscapeJson(snapshot.CodexApiKeyMasked)}\""
+            + $"\"nvidiaApiKeyMasked\":\"{EscapeJson(snapshot.NvidiaApiKeyMasked)}\","
+            + $"\"codexApiKeyMasked\":\"{EscapeJson(snapshot.CodexApiKeyMasked)}\","
+            + $"\"externalDashboardEnabled\":{(snapshot.ExternalDashboardEnabled ? "true" : "false")},"
+            + $"\"remoteDashboardClient\":{(remoteDashboardClient ? "true" : "false")},"
+            + $"\"dashboardExternalUrls\":{BuildDashboardExternalUrlsJson(snapshot.ExternalDashboardEnabled)}"
             + "}",
             cancellationToken
         );
+    }
+
+    private string BuildDashboardExternalUrlsJson(bool externalDashboardEnabled)
+    {
+        var urls = externalDashboardEnabled
+            ? GetPrivateNetworkAddresses()
+                .Select(address => $"http://{address}:{_port}/")
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(url => url, StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+            : Array.Empty<string>();
+        var builder = new StringBuilder();
+        builder.Append("[");
+        for (var i = 0; i < urls.Length; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append(",");
+            }
+
+            builder.Append($"\"{EscapeJson(urls[i])}\"");
+        }
+
+        builder.Append("]");
+        return builder.ToString();
+    }
+
+    private static IEnumerable<string> GetPrivateNetworkAddresses()
+    {
+        foreach (var networkInterface in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (networkInterface.OperationalStatus != OperationalStatus.Up)
+            {
+                continue;
+            }
+
+            if (networkInterface.NetworkInterfaceType == NetworkInterfaceType.Loopback)
+            {
+                continue;
+            }
+
+            IPInterfaceProperties properties;
+            try
+            {
+                properties = networkInterface.GetIPProperties();
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var unicast in properties.UnicastAddresses)
+            {
+                var address = unicast.Address;
+                if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork
+                    || IPAddress.IsLoopback(address))
+                {
+                    continue;
+                }
+
+                var text = address.ToString();
+                if (IsPrivateIPv4(text))
+                {
+                    yield return text;
+                }
+            }
+        }
+    }
+
+    private static bool IsPrivateIPv4(string address)
+    {
+        var parts = address.Split('.');
+        if (parts.Length != 4
+            || !int.TryParse(parts[0], out var a)
+            || !int.TryParse(parts[1], out var b))
+        {
+            return false;
+        }
+
+        return a == 10
+               || (a == 172 && b >= 16 && b <= 31)
+               || (a == 192 && b == 168);
+    }
+
+    private void RequestListenerRebind()
+    {
+        _requestListenerRebind?.Invoke();
     }
 
     private async Task SendCerebrasModelsAsync(WebSocket socket, SemaphoreSlim sendLock, CancellationToken cancellationToken)
@@ -3367,6 +3467,7 @@ public sealed partial class WebSocketGateway
             string? geminiModel = null;
             string? copilotModel = null;
             string? cerebrasModel = null;
+            string? nvidiaModel = null;
             string? codexModel = null;
             string? summaryProvider = null;
             string? action = null;
@@ -3429,6 +3530,7 @@ public sealed partial class WebSocketGateway
             string? groqApiKey = null;
             string? geminiApiKey = null;
             string? cerebrasApiKey = null;
+            string? nvidiaApiKey = null;
             string? codexApiKey = null;
             string? routingPolicyJson = null;
             string? refactorEditsJson = null;
@@ -3555,6 +3657,11 @@ public sealed partial class WebSocketGateway
             if (doc.RootElement.TryGetProperty("cerebrasModel", out var cerebrasModelElement))
             {
                 cerebrasModel = cerebrasModelElement.GetString();
+            }
+
+            if (doc.RootElement.TryGetProperty("nvidiaModel", out var nvidiaModelElement))
+            {
+                nvidiaModel = nvidiaModelElement.GetString();
             }
 
             if (doc.RootElement.TryGetProperty("codexModel", out var codexModelElement))
@@ -4211,6 +4318,11 @@ public sealed partial class WebSocketGateway
                 cerebrasApiKey = cerebrasKey.GetString();
             }
 
+            if (doc.RootElement.TryGetProperty("nvidiaApiKey", out var nvidiaKey))
+            {
+                nvidiaApiKey = nvidiaKey.GetString();
+            }
+
             if (doc.RootElement.TryGetProperty("codexApiKey", out var codexKey))
             {
                 codexApiKey = codexKey.GetString();
@@ -4530,6 +4642,7 @@ public sealed partial class WebSocketGateway
                 GeminiModel = geminiModel,
                 CopilotModel = copilotModel,
                 CerebrasModel = cerebrasModel,
+                NvidiaModel = nvidiaModel,
                 CodexModel = codexModel,
                 SummaryProvider = summaryProvider,
                 Action = action,
@@ -4597,6 +4710,7 @@ public sealed partial class WebSocketGateway
                 GroqApiKey = groqApiKey,
                 GeminiApiKey = geminiApiKey,
                 CerebrasApiKey = cerebrasApiKey,
+                NvidiaApiKey = nvidiaApiKey,
                 CodexApiKey = codexApiKey,
                 RoutingPolicyJson = routingPolicyJson,
                 RefactorEditsJson = refactorEditsJson,

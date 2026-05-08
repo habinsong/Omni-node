@@ -18,13 +18,15 @@ public sealed partial class WebSocketGateway
         {
             var wsContext = await context.AcceptWebSocketAsync(subProtocol: null);
             socket = wsContext.WebSocket;
+            var remoteDashboardClient = IsRemoteDashboardClient(context);
             MarkWebSocketAccepted();
             sessionId = await _authSessionGateway.CreatePendingSessionAsync(
                 socket,
                 sendLock,
+                remoteDashboardClient,
                 cancellationToken
             );
-            await SendSettingsStateAsync(socket, sendLock, cancellationToken);
+            await SendSettingsStateAsync(socket, sendLock, cancellationToken, remoteDashboardClient);
 
             while (socket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
             {
@@ -77,6 +79,7 @@ public sealed partial class WebSocketGateway
                     message.Otp,
                     message.AuthToken,
                     message.AuthTtlHours,
+                    remoteDashboardClient,
                     socket,
                     sendLock,
                     cancellationToken
@@ -97,7 +100,7 @@ public sealed partial class WebSocketGateway
                     continue;
                 }
 
-                if (await _setupCommandDispatcher.TryHandleAsync(message, socket, sendLock, cancellationToken))
+                if (await _setupCommandDispatcher.TryHandleAsync(message, remoteDashboardClient, socket, sendLock, cancellationToken))
                 {
                     continue;
                 }
@@ -369,6 +372,27 @@ public sealed partial class WebSocketGateway
         {
             _sessionRateMap.Remove(sessionId);
         }
+    }
+
+    private static bool IsRemoteDashboardClient(HttpListenerContext context)
+    {
+        var address = context.Request.RemoteEndPoint?.Address;
+        if (address == null)
+        {
+            return false;
+        }
+
+        if (IPAddress.IsLoopback(address))
+        {
+            return false;
+        }
+
+        if (address.IsIPv4MappedToIPv6 && IPAddress.IsLoopback(address.MapToIPv4()))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private async Task<string?> ReceiveTextAsync(WebSocket socket, CancellationToken cancellationToken)

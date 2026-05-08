@@ -12,6 +12,9 @@ function toProviderLabel(provider) {
   if (normalized === "cerebras") {
     return "Cerebras";
   }
+  if (normalized === "nvidia") {
+    return "NVIDIA NIM";
+  }
   if (normalized === "copilot") {
     return "Copilot";
   }
@@ -24,8 +27,10 @@ export function buildDashboardModelOptionSets({
   copilotModels,
   codeXModelChoices,
   geminiModelChoices,
+  nvidiaModelChoices,
   noneModel,
   defaultGroqWorkerModel,
+  defaultNvidiaModel,
   defaultRoutineAgentProvider,
   defaultRoutineAgentModel
 }) {
@@ -36,6 +41,9 @@ export function buildDashboardModelOptionSets({
   );
   const geminiModelOptions = geminiModelChoices.map((item) =>
     e("option", { key: `gemini-${item.id}`, value: item.id }, item.label)
+  );
+  const nvidiaModelOptions = nvidiaModelChoices.map((item) =>
+    e("option", { key: `nvidia-${item.id}`, value: item.id }, item.label)
   );
   const routineAgentProviderOptions = [
     e(
@@ -70,6 +78,19 @@ export function buildDashboardModelOptionSets({
     ...geminiModelChoices.map((item) => e("option", { key: `gm-${item.id}`, value: item.id }, item.label))
   ];
 
+  const nvidiaWorkerOptionSeen = new Set();
+  const nvidiaWorkerModelOptions = [];
+  const pushNvidiaWorkerOption = (value, label) => {
+    if (nvidiaWorkerOptionSeen.has(value)) {
+      return;
+    }
+    nvidiaWorkerOptionSeen.add(value);
+    nvidiaWorkerModelOptions.push(e("option", { key: `nw-${value}`, value }, label));
+  };
+  pushNvidiaWorkerOption(noneModel, "NVIDIA NIM: 선택 안함");
+  pushNvidiaWorkerOption(defaultNvidiaModel, `NVIDIA NIM 기본: ${defaultNvidiaModel}`);
+  nvidiaModelChoices.forEach((item) => pushNvidiaWorkerOption(item.id, item.label));
+
   const copilotWorkerOptionSeen = new Set([noneModel]);
   const copilotWorkerModelOptions = [
     e("option", { key: "cw-none", value: noneModel }, "Copilot: 선택 안함")
@@ -94,10 +115,12 @@ export function buildDashboardModelOptionSets({
     copilotModelOptions,
     codexModelOptions,
     geminiModelOptions,
+    nvidiaModelOptions,
     routineAgentProviderOptions,
     routineAgentModelOptions,
     groqWorkerModelOptions,
     geminiWorkerModelOptions,
+    nvidiaWorkerModelOptions,
     copilotWorkerModelOptions,
     codexWorkerModelOptions
   };

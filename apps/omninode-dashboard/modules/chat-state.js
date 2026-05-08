@@ -32,7 +32,8 @@ export function createChatState(options) {
     defaultGroqSingleModel,
     defaultGroqWorkerModel,
     defaultGeminiWorkerModel,
-    defaultCerebrasModel
+    defaultCerebrasModel,
+    defaultNvidiaModel
   } = options;
 
   return {
@@ -46,11 +47,13 @@ export function createChatState(options) {
     orchGroqModel: defaultGroqWorkerModel,
     orchGeminiModel: defaultGeminiWorkerModel,
     orchCerebrasModel: defaultCerebrasModel,
+    orchNvidiaModel: defaultNvidiaModel,
     orchCopilotModel: noneModel,
     orchCodexModel: noneModel,
     multiGroqModel: defaultGroqWorkerModel,
     multiGeminiModel: defaultGeminiWorkerModel,
     multiCerebrasModel: defaultCerebrasModel,
+    multiNvidiaModel: defaultNvidiaModel,
     multiCopilotModel: noneModel,
     multiCodexModel: noneModel,
     multiSummaryProvider: "gemini",

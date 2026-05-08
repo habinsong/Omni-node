@@ -147,6 +147,11 @@ public sealed class LlmRouter : IDisposable
         return !string.IsNullOrWhiteSpace(_runtimeSettings.GetCerebrasApiKey());
     }
 
+    public bool HasNvidiaApiKey()
+    {
+        return !string.IsNullOrWhiteSpace(_runtimeSettings.GetNvidiaApiKey());
+    }
+
     public bool HasSttSettings()
     {
         return !string.IsNullOrWhiteSpace(_config.SttBaseUrl)
@@ -351,6 +356,11 @@ public sealed class LlmRouter : IDisposable
                 return $"{routeRole}:groq:{GetSelectedGroqModel()}";
             }
 
+            if (provider == "nvidia" && HasNvidiaApiKey())
+            {
+                return $"{routeRole}:nvidia:{_config.NvidiaModel}";
+            }
+
             if (provider == "cerebras" && HasCerebrasApiKey())
             {
                 return $"{routeRole}:cerebras:{_config.CerebrasModel}";
@@ -382,6 +392,11 @@ public sealed class LlmRouter : IDisposable
                 return await GenerateGroqChatAsync(prompt, GetSelectedGroqModel(), 1024, cancellationToken);
             }
 
+            if (provider == "nvidia" && HasNvidiaApiKey())
+            {
+                return await GenerateNvidiaChatAsync(prompt, _config.NvidiaModel, 1024, cancellationToken);
+            }
+
             if (provider == "cerebras" && HasCerebrasApiKey())
             {
                 return await GenerateCerebrasChatAsync(prompt, _config.CerebrasModel, 1024, cancellationToken);
@@ -411,6 +426,11 @@ public sealed class LlmRouter : IDisposable
                 return await GenerateGroqChatAsync(prompt, GetSelectedGroqModel(), 768, cancellationToken);
             }
 
+            if (provider == "nvidia" && HasNvidiaApiKey())
+            {
+                return await GenerateNvidiaChatAsync(prompt, _config.NvidiaModel, 768, cancellationToken);
+            }
+
             if (provider == "cerebras" && HasCerebrasApiKey())
             {
                 return await GenerateCerebrasChatAsync(prompt, _config.CerebrasModel, 768, cancellationToken);
@@ -424,14 +444,21 @@ public sealed class LlmRouter : IDisposable
     {
         if (providerChain == null || providerChain.Count == 0)
         {
-            return new[] { "gemini", "groq", "cerebras" };
+            return new[] { "gemini", "groq", "nvidia", "cerebras" };
         }
 
         return providerChain
-            .Select(item => (item ?? string.Empty).Trim().ToLowerInvariant())
+            .Select(item =>
+            {
+                var normalized = (item ?? string.Empty).Trim().ToLowerInvariant();
+                return normalized is "nvidia-nim" or "nvidia_nim" or "nim"
+                    ? "nvidia"
+                    : normalized;
+            })
             .Where(item =>
                 item == "gemini"
                 || item == "groq"
+                || item == "nvidia"
                 || item == "cerebras")
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -1844,6 +1871,122 @@ public sealed class LlmRouter : IDisposable
         return firstResult;
     }
 
+    public async Task<string> GenerateNvidiaChatAsync(
+        string userInput,
+        string? modelOverride,
+        int maxOutputTokens,
+        CancellationToken cancellationToken
+    )
+    {
+        var nvidiaApiKey = _runtimeSettings.GetNvidiaApiKey();
+        if (string.IsNullOrWhiteSpace(nvidiaApiKey))
+        {
+            return "NVIDIA NIM API 키가 설정되지 않았습니다.";
+        }
+
+        var model = string.IsNullOrWhiteSpace(modelOverride) ? _config.NvidiaModel : modelOverride.Trim();
+        var endpoint = $"{_config.NvidiaBaseUrl.TrimEnd('/')}/chat/completions";
+        var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
+            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them.";
+        var effectiveMaxOutputTokens = NormalizeNvidiaMaxOutputTokens(maxOutputTokens);
+        var promptForTurn = userInput;
+        var mergedBuilder = new StringBuilder();
+
+        try
+        {
+            for (var turn = 0; turn < ChatContinuationRounds; turn++)
+            {
+                var body = BuildOpenAiCompatibleChatBody(
+                    model,
+                    systemPrompt,
+                    promptForTurn,
+                    "max_tokens",
+                    effectiveMaxOutputTokens,
+                    stream: false
+                );
+
+                using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", nvidiaApiKey);
+                request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+
+                using var response = await _httpClient.SendAsync(request, cancellationToken);
+                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                if (response.StatusCode == System.Net.HttpStatusCode.Accepted)
+                {
+                    responseBody = await PollNvidiaStatusAsync(nvidiaApiKey, responseBody, cancellationToken);
+                }
+                else if (!response.IsSuccessStatusCode)
+                {
+                    Console.Error.WriteLine($"[nvidia] chat failed ({(int)response.StatusCode}): {responseBody}");
+                    return $"NVIDIA NIM 요청 실패: {(int)response.StatusCode}";
+                }
+
+                var chunk = ExtractGroqChatChunk(responseBody);
+                var chunkText = chunk.Content.Trim();
+                if (!string.IsNullOrWhiteSpace(chunkText))
+                {
+                    if (mergedBuilder.Length > 0)
+                    {
+                        mergedBuilder.AppendLine();
+                    }
+
+                    mergedBuilder.Append(chunkText);
+                }
+
+                if (!IsGroqTruncated(chunk.FinishReason) || string.IsNullOrWhiteSpace(chunkText))
+                {
+                    break;
+                }
+
+                promptForTurn = BuildContinuationPrompt(userInput, mergedBuilder.ToString());
+            }
+
+            var content = mergedBuilder.ToString().Trim();
+            return string.IsNullOrWhiteSpace(content) ? "NVIDIA NIM 응답이 비어 있습니다." : content;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return "NVIDIA NIM 응답 시간이 초과되었습니다.";
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[nvidia] chat error: {ex.Message}");
+            return $"NVIDIA NIM 호출 오류: {ex.Message}";
+        }
+    }
+
+    public async Task<string> GenerateNvidiaChatStreamingAsync(
+        string userInput,
+        string? modelOverride,
+        int maxOutputTokens,
+        Action<string>? deltaCallback,
+        CancellationToken cancellationToken
+    )
+    {
+        var nvidiaApiKey = _runtimeSettings.GetNvidiaApiKey();
+        if (string.IsNullOrWhiteSpace(nvidiaApiKey))
+        {
+            return "NVIDIA NIM API 키가 설정되지 않았습니다.";
+        }
+
+        var model = string.IsNullOrWhiteSpace(modelOverride) ? _config.NvidiaModel : modelOverride.Trim();
+        var endpoint = $"{_config.NvidiaBaseUrl.TrimEnd('/')}/chat/completions";
+        var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
+            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them.";
+        return await GenerateOpenAiCompatibleChatStreamingAsync(
+            "nvidia",
+            endpoint,
+            nvidiaApiKey,
+            model,
+            systemPrompt,
+            userInput,
+            "max_tokens",
+            NormalizeNvidiaMaxOutputTokens(maxOutputTokens),
+            deltaCallback,
+            cancellationToken
+        );
+    }
+
     private async Task<string?> ResolveAvailableCerebrasModelAsync(string apiKey, CancellationToken cancellationToken)
     {
         // 60초 캐시
@@ -1983,6 +2126,11 @@ public sealed class LlmRouter : IDisposable
         }
 
         return clamped;
+    }
+
+    private int NormalizeNvidiaMaxOutputTokens(int requested)
+    {
+        return Math.Clamp(NormalizeMaxOutputTokens(requested, Math.Min(_config.ChatMaxOutputTokens, 4096)), 256, 4096);
     }
 
     private static bool IsGroqCompoundModel(string model)
@@ -2515,16 +2663,14 @@ public sealed class LlmRouter : IDisposable
         CancellationToken cancellationToken
     )
     {
-        var body = "{"
-            + $"\"model\":\"{EscapeJson(model)}\","
-            + "\"temperature\":0.3,"
-            + "\"stream\":true,"
-            + $"\"{EscapeJson(maxTokensProperty)}\":{maxOutputTokens},"
-            + "\"messages\":["
-            + $"{{\"role\":\"system\",\"content\":\"{EscapeJson(systemPrompt)}\"}},"
-            + $"{{\"role\":\"user\",\"content\":\"{EscapeJson(userInput)}\"}}"
-            + "]"
-            + "}";
+        var body = BuildOpenAiCompatibleChatBody(
+            model,
+            systemPrompt,
+            userInput,
+            maxTokensProperty,
+            maxOutputTokens,
+            stream: true
+        );
         var mergedBuilder = new StringBuilder();
         var eventBuilder = new StringBuilder();
 
@@ -2539,6 +2685,18 @@ public sealed class LlmRouter : IDisposable
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken
             );
+            if (provider.Equals("nvidia", StringComparison.OrdinalIgnoreCase)
+                && response.StatusCode == System.Net.HttpStatusCode.Accepted)
+            {
+                var acceptedBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                var polled = await PollNvidiaStatusAsync(apiKey, acceptedBody, cancellationToken);
+                var finalContent = ExtractGroqContent(polled).Trim();
+                SafeEmitDelta(deltaCallback, finalContent);
+                return string.IsNullOrWhiteSpace(finalContent)
+                    ? "NVIDIA NIM 응답이 비어 있습니다."
+                    : finalContent;
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 var failureBody = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -2645,6 +2803,94 @@ public sealed class LlmRouter : IDisposable
         }
     }
 
+    private static string BuildOpenAiCompatibleChatBody(
+        string model,
+        string systemPrompt,
+        string userInput,
+        string maxTokensProperty,
+        int maxOutputTokens,
+        bool stream
+    )
+    {
+        return "{"
+            + $"\"model\":\"{EscapeJson(model)}\","
+            + "\"temperature\":0.3,"
+            + $"\"stream\":{(stream ? "true" : "false")},"
+            + $"\"{EscapeJson(maxTokensProperty)}\":{maxOutputTokens},"
+            + "\"messages\":["
+            + $"{{\"role\":\"system\",\"content\":\"{EscapeJson(systemPrompt)}\"}},"
+            + $"{{\"role\":\"user\",\"content\":\"{EscapeJson(userInput)}\"}}"
+            + "]"
+            + "}";
+    }
+
+    private async Task<string> PollNvidiaStatusAsync(
+        string apiKey,
+        string acceptedBody,
+        CancellationToken cancellationToken
+    )
+    {
+        var requestId = ExtractNvidiaRequestId(acceptedBody);
+        if (string.IsNullOrWhiteSpace(requestId))
+        {
+            throw new InvalidOperationException("NVIDIA NIM 202 응답에 requestId가 없습니다.");
+        }
+
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(Math.Max(3, _config.NvidiaTimeoutSec));
+        var endpoint = $"{_config.NvidiaBaseUrl.TrimEnd('/')}/status/{Uri.EscapeDataString(requestId)}";
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            await Task.Delay(750, cancellationToken);
+            using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (response.IsSuccessStatusCode)
+            {
+                return body;
+            }
+
+            if (response.StatusCode == System.Net.HttpStatusCode.Accepted)
+            {
+                continue;
+            }
+
+            Console.Error.WriteLine($"[nvidia] status poll failed ({(int)response.StatusCode}): {body}");
+            throw new InvalidOperationException($"NVIDIA NIM status polling failed: {(int)response.StatusCode}");
+        }
+
+        throw new TimeoutException("NVIDIA NIM status polling timed out.");
+    }
+
+    private static string ExtractNvidiaRequestId(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (TryGetPropertyCaseInsensitive(doc.RootElement, "requestId", out var requestId)
+                && requestId.ValueKind == JsonValueKind.String)
+            {
+                return requestId.GetString() ?? string.Empty;
+            }
+
+            if (TryGetPropertyCaseInsensitive(doc.RootElement, "id", out var id)
+                && id.ValueKind == JsonValueKind.String)
+            {
+                return id.GetString() ?? string.Empty;
+            }
+        }
+        catch
+        {
+        }
+
+        return string.Empty;
+    }
+
     private static string ProviderDisplayName(string provider)
     {
         return provider.ToLowerInvariant() switch
@@ -2652,6 +2898,7 @@ public sealed class LlmRouter : IDisposable
             "groq" => "Groq",
             "gemini" => "Gemini",
             "cerebras" => "Cerebras",
+            "nvidia" => "NVIDIA NIM",
             _ => provider
         };
     }

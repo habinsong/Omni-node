@@ -38,6 +38,15 @@ public sealed partial class CommandService
             return new LlmSingleChatResult("cerebras", selected, response);
         }
 
+        if (normalized == "nvidia")
+        {
+            var selected = NormalizeModelSelection(model) ?? _config.NvidiaModel;
+            var response = streamCallback == null
+                ? await _llmRouter.GenerateNvidiaChatAsync(input, selected, requestedMaxOutputTokens, cancellationToken)
+                : await _llmRouter.GenerateNvidiaChatStreamingAsync(input, selected, requestedMaxOutputTokens, streamCallback, cancellationToken);
+            return new LlmSingleChatResult("nvidia", selected, response);
+        }
+
         if (normalized == "copilot")
         {
             var selected = NormalizeModelSelection(model) ?? _copilotWrapper.GetSelectedModel();
@@ -167,6 +176,7 @@ public sealed partial class CommandService
             "copilot" => Math.Max(120, _config.LlmTimeoutSec * 3),
             "codex" => Math.Max(120, _config.LlmTimeoutSec * 3),
             "cerebras" => Math.Max(8, _config.CerebrasTimeoutSec),
+            "nvidia" => Math.Max(8, _config.NvidiaTimeoutSec),
             _ => Math.Max(8, _config.LlmTimeoutSec)
         });
         var maxAttempts = normalized == "gemini" ? 2 : 1;
@@ -390,6 +400,7 @@ public sealed partial class CommandService
         {
             "groq" => _llmRouter.GetSelectedGroqModel(),
             "cerebras" => _config.CerebrasModel,
+            "nvidia" => _config.NvidiaModel,
             "copilot" => DefaultCopilotModel,
             "codex" => _config.CodexModel,
             _ => _config.GeminiModel
@@ -556,7 +567,12 @@ public sealed partial class CommandService
     private static string NormalizeProvider(string? provider, bool allowAuto)
     {
         var value = (provider ?? string.Empty).Trim().ToLowerInvariant();
-        if (value == "gemini" || value == "groq" || value == "cerebras" || value == "copilot" || value == "codex")
+        if (value == "nvidia-nim" || value == "nvidia_nim" || value == "nim")
+        {
+            value = "nvidia";
+        }
+
+        if (value == "gemini" || value == "groq" || value == "cerebras" || value == "nvidia" || value == "copilot" || value == "codex")
         {
             return value;
         }
@@ -653,7 +669,8 @@ public sealed partial class CommandService
         string? geminiModel,
         string? cerebrasModel,
         string? copilotModel,
-        string? codexModel
+        string? codexModel,
+        string? nvidiaModel = null
     )
     {
         return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
@@ -661,6 +678,7 @@ public sealed partial class CommandService
             ["gemini"] = geminiModel,
             ["groq"] = groqModel,
             ["cerebras"] = cerebrasModel,
+            ["nvidia"] = nvidiaModel,
             ["copilot"] = copilotModel,
             ["codex"] = codexModel
         };

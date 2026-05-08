@@ -276,7 +276,7 @@ public sealed partial class CommandService
         if (includePriorContext)
         {
             var historyRaw = _conversationStore.BuildHistoryText(conversationId, _config.ConversationHistoryMessages);
-            history = TrimContextHistory(historyRaw, 5200);
+            history = BuildBudgetedContextHistory(historyRaw, 5200);
         }
 
         var builder = new StringBuilder();
@@ -740,6 +740,7 @@ public sealed partial class CommandService
         {
             "gemini" => _config.GeminiModel,
             "cerebras" => _config.CerebrasModel,
+            "nvidia" => _config.NvidiaModel,
             "copilot" => DefaultCopilotModel,
             "codex" => _config.CodexModel,
             _ => _llmRouter.GetSelectedGroqModel()
@@ -946,10 +947,14 @@ public sealed partial class CommandService
         return lowered.StartsWith("groq 호출 오류:", StringComparison.Ordinal)
             || lowered.StartsWith("gemini 호출 오류:", StringComparison.Ordinal)
             || lowered.StartsWith("cerebras 호출 오류:", StringComparison.Ordinal)
+            || lowered.StartsWith("nvidia 호출 오류:", StringComparison.Ordinal)
+            || lowered.StartsWith("nvidia nim 호출 오류:", StringComparison.Ordinal)
             || lowered.StartsWith("copilot 호출 오류:", StringComparison.Ordinal)
             || lowered.StartsWith("groq 요청 실패:", StringComparison.Ordinal)
             || lowered.StartsWith("gemini 요청 실패:", StringComparison.Ordinal)
             || lowered.StartsWith("cerebras 요청 실패:", StringComparison.Ordinal)
+            || lowered.StartsWith("nvidia 요청 실패:", StringComparison.Ordinal)
+            || lowered.StartsWith("nvidia nim 요청 실패:", StringComparison.Ordinal)
             || lowered.StartsWith("copilot 요청 실패:", StringComparison.Ordinal)
             || lowered.StartsWith("gemini 웹검색 호출 오류:", StringComparison.Ordinal)
             || lowered.StartsWith("gemini 웹검색 요청 실패:", StringComparison.Ordinal)
@@ -1031,6 +1036,137 @@ public sealed partial class CommandService
         }
 
         return combined[^maxChars..];
+    }
+
+    private static string BuildCodingQualityBrief(string objective, string languageHint)
+    {
+        var normalizedObjective = (objective ?? string.Empty).Trim();
+        var language = ResolveInitialCodingLanguage(languageHint, normalizedObjective);
+        var requestedPaths = ExtractRequestedCodingPaths(normalizedObjective, language);
+        var expectedOutput = ExtractExpectedConsoleOutput(normalizedObjective);
+        var builder = new StringBuilder();
+        builder.AppendLine($"- language={language}");
+        if (requestedPaths.Count > 0)
+        {
+            builder.AppendLine($"- required_files={string.Join(", ", requestedPaths.Take(8))}");
+        }
+        else
+        {
+            builder.AppendLine("- required_files=요청에서 명시한 파일이 없으면 표준 엔트리 파일을 만들 것");
+        }
+
+        if (!string.IsNullOrWhiteSpace(expectedOutput))
+        {
+            builder.AppendLine($"- expected_stdout={expectedOutput}");
+        }
+
+        if (IsFrontendLikeCodingTask(normalizedObjective, language))
+        {
+            builder.AppendLine("- ui_acceptance=첫 화면에 실제 DOM 콘텐츠가 보이고 주요 조작이 동작해야 함");
+            builder.AppendLine("- file_boundary=index.html/styles.css/app.js 같은 실행 가능한 브라우저 파일 구조 우선");
+        }
+        else if (IsGameLikeCodingTask(normalizedObjective, language))
+        {
+            builder.AppendLine("- game_acceptance=입력 처리, 상태 갱신, 실패/승리 조건이 있는 실제 루프 필요");
+        }
+        else
+        {
+            builder.AppendLine("- acceptance=실행 가능, 요청 출력/동작 충족, 불필요한 더미/TODO 없음");
+        }
+
+        builder.AppendLine("- verification=마지막 액션은 가능한 실제 실행/검증이어야 하며 실패하면 원인을 수정할 것");
+        return builder.ToString().Trim();
+    }
+
+    private static string BuildBudgetedContextHistory(string history, int maxChars)
+    {
+        if (string.IsNullOrWhiteSpace(history))
+        {
+            return string.Empty;
+        }
+
+        var lines = history
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line =>
+            {
+                var normalized = line.Replace("\r", " ", StringComparison.Ordinal).Trim();
+                return normalized.Length <= 360 ? normalized : normalized[..360] + "...";
+            })
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .ToArray();
+        if (lines.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var recentCount = Math.Min(lines.Length, 8);
+        var olderCount = Math.Max(0, lines.Length - recentCount);
+        var recent = string.Join('\n', lines.Skip(olderCount));
+        if (olderCount == 0)
+        {
+            return TrimContextHistory(recent, maxChars);
+        }
+
+        var olderSummary = BuildExtractiveHistorySummary(lines.Take(olderCount).ToArray(), 1200);
+        var combined = string.IsNullOrWhiteSpace(olderSummary)
+            ? recent
+            : $"[이전 대화 압축]\n{olderSummary}\n\n[최근 턴]\n{recent}";
+        return combined.Length <= maxChars ? combined : TrimContextHistory(combined, maxChars);
+    }
+
+    private static string BuildExtractiveHistorySummary(IReadOnlyList<string> olderLines, int maxChars)
+    {
+        if (olderLines.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var selected = new List<string>();
+        foreach (var line in olderLines)
+        {
+            if (!IsHighSignalHistoryLine(line))
+            {
+                continue;
+            }
+
+            selected.Add(line.Length <= 220 ? line : line[..220] + "...");
+            if (selected.Count >= 6)
+            {
+                break;
+            }
+        }
+
+        if (selected.Count == 0)
+        {
+            selected.AddRange(olderLines.TakeLast(Math.Min(4, olderLines.Count)).Select(line => line.Length <= 220 ? line : line[..220] + "..."));
+        }
+
+        var summary = string.Join('\n', selected);
+        return summary.Length <= maxChars ? summary : summary[..maxChars].TrimEnd() + "...";
+    }
+
+    private static bool IsHighSignalHistoryLine(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return false;
+        }
+
+        var lowered = line.ToLowerInvariant();
+        return lowered.Contains("요구", StringComparison.Ordinal)
+               || lowered.Contains("수정", StringComparison.Ordinal)
+               || lowered.Contains("오류", StringComparison.Ordinal)
+               || lowered.Contains("결정", StringComparison.Ordinal)
+               || lowered.Contains("파일", StringComparison.Ordinal)
+               || lowered.Contains("설정", StringComparison.Ordinal)
+               || lowered.Contains("스킬", StringComparison.Ordinal)
+               || lowered.Contains("think+", StringComparison.Ordinal)
+               || lowered.Contains("nvidia", StringComparison.Ordinal)
+               || lowered.Contains("error", StringComparison.Ordinal)
+               || lowered.Contains("fix", StringComparison.Ordinal)
+               || lowered.Contains("bug", StringComparison.Ordinal)
+               || lowered.Contains("todo", StringComparison.Ordinal)
+               || lowered.Contains("requirement", StringComparison.Ordinal);
     }
 
     private static string SanitizeChatOutput(string text, bool keepMarkdownTables = false)
@@ -2191,6 +2327,7 @@ public sealed partial class CommandService
         AddEntry("groq", result.GroqModel, result.GroqText);
         AddEntry("gemini", result.GeminiModel, result.GeminiText);
         AddEntry("cerebras", result.CerebrasModel, result.CerebrasText);
+        AddEntry("nvidia", result.NvidiaModel, result.NvidiaText);
         AddEntry("copilot", result.CopilotModel, result.CopilotText);
         AddEntry("codex", result.CodexModel, result.CodexText);
 
@@ -5539,7 +5676,8 @@ public sealed partial class CommandService
     {
         if (string.Equals(provider, "groq", StringComparison.OrdinalIgnoreCase)
             || string.Equals(provider, "gemini", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(provider, "cerebras", StringComparison.OrdinalIgnoreCase))
+            || string.Equals(provider, "cerebras", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(provider, "nvidia", StringComparison.OrdinalIgnoreCase))
         {
             return Math.Clamp(_config.CodingMaxOutputTokens, 1200, 3200);
         }
@@ -5806,6 +5944,9 @@ public sealed partial class CommandService
         builder.AppendLine();
         builder.AppendLine("[목표]");
         builder.AppendLine(objective);
+        builder.AppendLine();
+        builder.AppendLine("[품질 브리프]");
+        builder.AppendLine(BuildCodingQualityBrief(objective, resolvedLanguage));
         builder.AppendLine();
         builder.AppendLine("[최근 실행 결과]");
         builder.AppendLine($"status={lastExecution.Status}");

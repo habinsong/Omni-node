@@ -19,7 +19,8 @@ public sealed class ProviderSecretsDoctorCheck : IDoctorCheck
         {
             EvaluateProvider("gemini", _runtimeSettings.GetGeminiApiKey(), "OMNINODE_GEMINI_API_KEY_FILE"),
             EvaluateProvider("groq", _runtimeSettings.GetGroqApiKey(), "OMNINODE_GROQ_API_KEY_FILE"),
-            EvaluateProvider("cerebras", _runtimeSettings.GetCerebrasApiKey(), "OMNINODE_CEREBRAS_API_KEY_FILE")
+            EvaluateProvider("cerebras", _runtimeSettings.GetCerebrasApiKey(), "OMNINODE_CEREBRAS_API_KEY_FILE"),
+            EvaluateProvider("nvidia", _runtimeSettings.GetNvidiaApiKey(), "OMNINODE_NVIDIA_API_KEY_FILE")
         };
 
         var hasSecurityFailure = evaluations.Any(item => item.SecurityFailure);

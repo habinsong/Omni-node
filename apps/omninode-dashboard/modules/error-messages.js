@@ -18,6 +18,7 @@ const FRIENDLY_MAP = {
   gemini_api_key_missing: "Gemini API 키가 설정되어 있지 않습니다. 설정 탭에서 등록해주세요.",
   groq_api_key_missing: "Groq API 키가 설정되어 있지 않습니다. 설정 탭에서 등록해주세요.",
   cerebras_api_key_missing: "Cerebras API 키가 설정되어 있지 않습니다. 설정 탭에서 등록해주세요.",
+  nvidia_api_key_missing: "NVIDIA NIM API 키가 설정되어 있지 않습니다. 설정 탭에서 등록해주세요.",
   copilot_login_required: "Copilot 로그인이 필요합니다. 설정 탭에서 로그인해주세요.",
   codex_login_required: "Codex 로그인이 필요합니다. 설정 탭에서 로그인해주세요.",
   ws_disconnected: "WebSocket 연결이 끊어졌습니다. 잠시 후 자동으로 재연결됩니다.",

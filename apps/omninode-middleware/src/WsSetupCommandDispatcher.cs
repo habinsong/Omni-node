@@ -7,26 +7,28 @@ internal sealed class WsSetupCommandDispatcher
     private readonly GroqModelCatalog _groqModelCatalog;
     private readonly CerebrasModelCatalog _cerebrasModelCatalog;
     private readonly LlmRouter _llmRouter;
-    private readonly Func<WebSocket, SemaphoreSlim, CancellationToken, Task> _sendSettingsStateAsync;
+    private readonly Func<WebSocket, SemaphoreSlim, CancellationToken, bool, Task> _sendSettingsStateAsync;
     private readonly Func<WebSocket, SemaphoreSlim, CancellationToken, Task> _sendGroqModelsAsync;
     private readonly Func<WebSocket, SemaphoreSlim, CancellationToken, Task> _sendCerebrasModelsAsync;
     private readonly Func<WebSocket, SemaphoreSlim, CancellationToken, Task> _sendCopilotModelsAsync;
     private readonly Func<WebSocket, SemaphoreSlim, CancellationToken, bool, Task> _sendUsageStatsAsync;
     private readonly Func<WebSocket, SemaphoreSlim, string, RoutingPolicyActionResult, CancellationToken, Task> _sendRoutingPolicyResultAsync;
     private readonly Func<WebSocket, SemaphoreSlim, RoutingDecision?, CancellationToken, Task> _sendRoutingDecisionAsync;
+    private readonly Action _requestListenerRebind;
 
     public WsSetupCommandDispatcher(
         ISettingsApplicationService settingsService,
         GroqModelCatalog groqModelCatalog,
         CerebrasModelCatalog cerebrasModelCatalog,
         LlmRouter llmRouter,
-        Func<WebSocket, SemaphoreSlim, CancellationToken, Task> sendSettingsStateAsync,
+        Func<WebSocket, SemaphoreSlim, CancellationToken, bool, Task> sendSettingsStateAsync,
         Func<WebSocket, SemaphoreSlim, CancellationToken, Task> sendGroqModelsAsync,
         Func<WebSocket, SemaphoreSlim, CancellationToken, Task> sendCerebrasModelsAsync,
         Func<WebSocket, SemaphoreSlim, CancellationToken, Task> sendCopilotModelsAsync,
         Func<WebSocket, SemaphoreSlim, CancellationToken, bool, Task> sendUsageStatsAsync,
         Func<WebSocket, SemaphoreSlim, string, RoutingPolicyActionResult, CancellationToken, Task> sendRoutingPolicyResultAsync,
-        Func<WebSocket, SemaphoreSlim, RoutingDecision?, CancellationToken, Task> sendRoutingDecisionAsync
+        Func<WebSocket, SemaphoreSlim, RoutingDecision?, CancellationToken, Task> sendRoutingDecisionAsync,
+        Action requestListenerRebind
     )
     {
         _settingsService = settingsService;
@@ -40,18 +42,45 @@ internal sealed class WsSetupCommandDispatcher
         _sendUsageStatsAsync = sendUsageStatsAsync;
         _sendRoutingPolicyResultAsync = sendRoutingPolicyResultAsync;
         _sendRoutingDecisionAsync = sendRoutingDecisionAsync;
+        _requestListenerRebind = requestListenerRebind;
     }
 
     public async Task<bool> TryHandleAsync(
         WebSocketGateway.ClientMessage message,
+        bool remoteDashboardClient,
         WebSocket socket,
         SemaphoreSlim sendLock,
         CancellationToken cancellationToken
     )
     {
+        if (remoteDashboardClient && IsRemoteRestrictedMessage(message.Type))
+        {
+            await WebSocketGateway.SendTextAsync(
+                socket,
+                sendLock,
+                "{\"type\":\"error\",\"message\":\"forbidden_remote_dashboard\"}",
+                cancellationToken
+            );
+            return true;
+        }
+
         if (message.Type == "get_settings" || message.Type == "get_setup_state")
         {
-            await _sendSettingsStateAsync(socket, sendLock, cancellationToken);
+            await _sendSettingsStateAsync(socket, sendLock, cancellationToken, remoteDashboardClient);
+            return true;
+        }
+
+        if (message.Type == "set_external_dashboard_access")
+        {
+            var result = _settingsService.SetExternalDashboardEnabled(message.Enabled == true);
+            await WebSocketGateway.SendTextAsync(
+                socket,
+                sendLock,
+                $"{{\"type\":\"settings_result\",\"ok\":{(IsSettingsOperationSuccess(result) ? "true" : "false")},\"message\":\"{WebSocketGateway.EscapeJson(result)}\"}}",
+                cancellationToken
+            );
+            await _sendSettingsStateAsync(socket, sendLock, cancellationToken, remoteDashboardClient);
+            _requestListenerRebind();
             return true;
         }
 
@@ -117,7 +146,7 @@ internal sealed class WsSetupCommandDispatcher
                 $"{{\"type\":\"settings_result\",\"ok\":{(IsSettingsOperationSuccess(result) ? "true" : "false")},\"message\":\"{WebSocketGateway.EscapeJson(result)}\"}}",
                 cancellationToken
             );
-            await _sendSettingsStateAsync(socket, sendLock, cancellationToken);
+            await _sendSettingsStateAsync(socket, sendLock, cancellationToken, remoteDashboardClient);
             return true;
         }
 
@@ -130,7 +159,7 @@ internal sealed class WsSetupCommandDispatcher
                 $"{{\"type\":\"settings_result\",\"ok\":{(IsSettingsOperationSuccess(result) ? "true" : "false")},\"message\":\"{WebSocketGateway.EscapeJson(result)}\"}}",
                 cancellationToken
             );
-            await _sendSettingsStateAsync(socket, sendLock, cancellationToken);
+            await _sendSettingsStateAsync(socket, sendLock, cancellationToken, remoteDashboardClient);
             return true;
         }
 
@@ -140,6 +169,7 @@ internal sealed class WsSetupCommandDispatcher
                 message.GroqApiKey,
                 message.GeminiApiKey,
                 message.CerebrasApiKey,
+                message.NvidiaApiKey,
                 message.CodexApiKey,
                 message.Persist
             );
@@ -149,7 +179,7 @@ internal sealed class WsSetupCommandDispatcher
                 $"{{\"type\":\"settings_result\",\"ok\":{(IsSettingsOperationSuccess(result) ? "true" : "false")},\"message\":\"{WebSocketGateway.EscapeJson(result)}\"}}",
                 cancellationToken
             );
-            await _sendSettingsStateAsync(socket, sendLock, cancellationToken);
+            await _sendSettingsStateAsync(socket, sendLock, cancellationToken, remoteDashboardClient);
             await _sendGroqModelsAsync(socket, sendLock, cancellationToken);
             await _sendCopilotModelsAsync(socket, sendLock, cancellationToken);
             await _sendUsageStatsAsync(socket, sendLock, cancellationToken, false);
@@ -165,7 +195,7 @@ internal sealed class WsSetupCommandDispatcher
                 $"{{\"type\":\"settings_result\",\"ok\":{(IsSettingsOperationSuccess(result) ? "true" : "false")},\"message\":\"{WebSocketGateway.EscapeJson(result)}\"}}",
                 cancellationToken
             );
-            await _sendSettingsStateAsync(socket, sendLock, cancellationToken);
+            await _sendSettingsStateAsync(socket, sendLock, cancellationToken, remoteDashboardClient);
             await _sendGroqModelsAsync(socket, sendLock, cancellationToken);
             await _sendCopilotModelsAsync(socket, sendLock, cancellationToken);
             await _sendUsageStatsAsync(socket, sendLock, cancellationToken, false);
@@ -357,5 +387,22 @@ internal sealed class WsSetupCommandDispatcher
 
         return !normalized.Contains("failed", StringComparison.OrdinalIgnoreCase)
             && !normalized.Contains("not set", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsRemoteRestrictedMessage(string? messageType)
+    {
+        return messageType is
+            "request_otp" or
+            "set_external_dashboard_access" or
+            "set_telegram_credentials" or
+            "delete_telegram_credentials" or
+            "set_llm_credentials" or
+            "delete_llm_credentials" or
+            "test_telegram" or
+            "get_copilot_status" or
+            "get_codex_status" or
+            "start_copilot_login" or
+            "start_codex_login" or
+            "logout_codex";
     }
 }

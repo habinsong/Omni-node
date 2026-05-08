@@ -218,7 +218,7 @@ public sealed class SkillFileService
         var sb = new StringBuilder();
         sb.Append("---\n");
         sb.Append("name: ").Append(name).Append('\n');
-        sb.Append("description: ").Append(sanitizedDescription).Append('\n');
+        sb.Append("description: ").Append(QuoteYamlScalar(sanitizedDescription)).Append('\n');
         sb.Append("---\n\n");
         if (bodyText.Length > 0)
         {
@@ -229,6 +229,11 @@ public sealed class SkillFileService
             }
         }
         return sb.ToString();
+    }
+
+    private static string QuoteYamlScalar(string value)
+    {
+        return "\"" + (value ?? string.Empty).Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
     }
 
     private static string ResolveProjectRoot(string workspaceRootDir)

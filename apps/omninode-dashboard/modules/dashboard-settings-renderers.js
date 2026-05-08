@@ -93,6 +93,7 @@ export function renderAutomationRootPanel(props) {
     defaultCodexModel,
     geminiModelChoices,
     cerebrasModelChoices,
+    nvidiaModelChoices,
     send,
     currentAutomationPane,
     setAutomationPane
@@ -127,6 +128,7 @@ export function renderAutomationRootPanel(props) {
       defaultCodexModel,
       geminiModelChoices,
       cerebrasModelChoices,
+      nvidiaModelChoices,
       send
     })
     : renderPlansPanel({
@@ -155,6 +157,7 @@ export function renderAutomationRootPanel(props) {
       defaultCodexModel,
       geminiModelChoices,
       cerebrasModelChoices,
+      nvidiaModelChoices,
       send
     });
   const navItems = [
@@ -221,6 +224,8 @@ export function renderSettingsPanel(props) {
     setGeminiApiKey,
     cerebrasApiKey,
     setCerebrasApiKey,
+    nvidiaApiKey,
+    setNvidiaApiKey,
     codexApiKey,
     setCodexApiKey,
     copilotStatus,
@@ -312,13 +317,19 @@ export function renderSettingsPanel(props) {
     settingsState.groqApiKeySet,
     settingsState.geminiApiKeySet,
     settingsState.cerebrasApiKeySet,
+    settingsState.nvidiaApiKeySet,
     settingsState.codexApiKeySet
   ];
   const keyReadyCount = keyReadyItems.filter(Boolean).length;
+  const remoteDashboardClient = !!settingsState.remoteDashboardClient;
+  const externalDashboardEnabled = !!settingsState.externalDashboardEnabled;
+  const dashboardExternalUrls = Array.isArray(settingsState.dashboardExternalUrls)
+    ? settingsState.dashboardExternalUrls.filter(Boolean)
+    : [];
   const copilotReady = /완료|인증|ready/i.test(copilotStatus || "");
   const codexReady = /완료|인증|logged|ready/i.test(codexStatus || "");
   const cliReadyCount = [copilotReady, codexReady].filter(Boolean).length;
-  const requestedSettingsPane = currentSettingsPane || "basic-auth";
+  const requestedSettingsPane = currentSettingsPane || (remoteDashboardClient ? "basic-preferences" : "basic-auth");
 
   const statusTone = (ok) => ok ? "ok" : "idle";
   const renderStatusChip = (label, ok) => e(
@@ -349,8 +360,8 @@ export function renderSettingsPanel(props) {
       ),
       e("div", { className: "settings-visual-card auth" },
         e("span", null, "SESSION"),
-        e("strong", null, authed ? "인증됨" : "OTP 대기"),
-        renderStatusChip(authed ? "접근 가능" : "인증 필요", authed)
+        e("strong", null, remoteDashboardClient && authed ? "외부 접속중" : authed ? "인증됨" : "OTP 대기"),
+        renderStatusChip(remoteDashboardClient && authed ? "외부 접속중" : authed ? "접근 가능" : "인증 필요", authed)
       )
     ),
     e("div", { className: "settings-mini-stat-grid" },
@@ -407,6 +418,58 @@ export function renderSettingsPanel(props) {
       renderInfoRow("Session", authMeta.sessionId || "-"),
       renderInfoRow("인증 만료", authExpiry || "-"),
       renderInfoRow("허용 범위", "1~168시간")
+    )
+  );
+
+  const externalAccessPanel = e("section", { className: "panel settings-optimized-panel settings-external-access-panel" },
+    e("div", { className: "settings-panel-hero" },
+      e("div", null,
+        e("h2", null, "외부접속"),
+        e("p", null, "같은 LAN의 다른 기기에서 현재 대시보드에 접속할 수 있게 합니다.")
+      ),
+      e("div", { className: "settings-visual-card console" },
+        e("span", null, "LAN ACCESS"),
+        e("strong", null, externalDashboardEnabled ? "활성화" : "비활성화"),
+        renderStatusChip(externalDashboardEnabled ? "외부 접속 허용" : "로컬 전용", externalDashboardEnabled)
+      )
+    ),
+    e("div", { className: "settings-form-card" },
+      e("label", { className: "settings-save-mode" },
+        e("input", {
+          type: "checkbox",
+          checked: externalDashboardEnabled,
+          onChange: (event) => send({ type: "set_external_dashboard_access", enabled: event.target.checked })
+        }),
+        e("span", null, "같은 LAN 기기 접속 허용"),
+        e("small", null, externalDashboardEnabled
+          ? "현재 리스너가 외부접속을 받도록 열려 있습니다."
+          : "현재 대시보드는 이 기기의 localhost에서만 열립니다.")
+      )
+    ),
+    e("div", { className: "settings-section" },
+      e("div", { className: "settings-section-head" },
+        e("div", null,
+          e("div", { className: "settings-section-kicker" }, "ACCESS URL"),
+          e("div", { className: "settings-section-title" }, "다른 기기에서 열 주소"),
+          e("div", { className: "settings-section-sub" }, externalDashboardEnabled
+            ? "같은 와이파이/LAN에 연결된 기기에서 아래 주소를 여세요."
+            : "외부접속을 활성화하면 접속 주소가 표시됩니다.")
+        )
+      ),
+      externalDashboardEnabled && dashboardExternalUrls.length > 0
+        ? e("div", { className: "settings-info-grid" },
+          dashboardExternalUrls.map((url) => renderInfoRow("주소", url, e("code", null, url)))
+        )
+        : e("div", { className: `settings-banner ${externalDashboardEnabled ? "warn" : ""}`.trim() },
+          e("span", null, externalDashboardEnabled
+            ? "사용 가능한 LAN IPv4 주소를 찾지 못했습니다. 네트워크 연결을 확인하세요."
+            : "외부접속 비활성 상태입니다.")
+        )
+    ),
+    e("div", { className: "settings-info-grid" },
+      renderInfoRow("상태", externalDashboardEnabled ? "외부접속 활성" : "로컬 전용"),
+      renderInfoRow("범위", "같은 LAN"),
+      renderInfoRow("적용", "즉시 반영")
     )
   );
 
@@ -485,6 +548,7 @@ export function renderSettingsPanel(props) {
     { key: "groq", label: "Groq", value: groqApiKey, setValue: setGroqApiKey, masked: settingsState.groqApiKeyMasked, set: settingsState.groqApiKeySet, helper: "빠른 응답 모델" },
     { key: "gemini", label: "Gemini", value: geminiApiKey, setValue: setGeminiApiKey, masked: settingsState.geminiApiKeyMasked, set: settingsState.geminiApiKeySet, helper: "grounding / 검색" },
     { key: "cerebras", label: "Cerebras", value: cerebrasApiKey, setValue: setCerebrasApiKey, masked: settingsState.cerebrasApiKeyMasked, set: settingsState.cerebrasApiKeySet, helper: "대체 고속 모델" },
+    { key: "nvidia", label: "NVIDIA NIM", value: nvidiaApiKey, setValue: setNvidiaApiKey, masked: settingsState.nvidiaApiKeyMasked, set: settingsState.nvidiaApiKeySet, helper: "OpenAI 호환 NIM" },
     { key: "codex", label: "Codex", value: codexApiKey, setValue: setCodexApiKey, masked: settingsState.codexApiKeyMasked, set: settingsState.codexApiKeySet, helper: "API 키 선택 사용" }
   ];
   const llmPanel = e("section", { className: "panel settings-optimized-panel settings-llm-panel" },
@@ -536,6 +600,7 @@ export function renderSettingsPanel(props) {
           groqApiKey: groqApiKey.trim() || undefined,
           geminiApiKey: geminiApiKey.trim() || undefined,
           cerebrasApiKey: cerebrasApiKey.trim() || undefined,
+          nvidiaApiKey: nvidiaApiKey.trim() || undefined,
           codexApiKey: codexApiKey.trim() || undefined,
           persist
         })
@@ -547,6 +612,7 @@ export function renderSettingsPanel(props) {
           setGroqApiKey("");
           setGeminiApiKey("");
           setCerebrasApiKey("");
+          setNvidiaApiKey("");
           setCodexApiKey("");
         }
       }, "키 삭제"),
@@ -1025,16 +1091,16 @@ export function renderSettingsPanel(props) {
     e("div", { className: "settings-summary-grid" },
       e("article", { className: "settings-summary-card" },
         e("div", { className: "settings-summary-label" }, "세션"),
-        e("strong", null, authed ? "인증됨" : "OTP 대기"),
-        e("span", null, authExpiry ? `만료 ${authExpiry}` : "OTP 인증 필요"),
+        e("strong", null, remoteDashboardClient && authed ? "외부 접속중" : authed ? "인증됨" : "OTP 대기"),
+        e("span", null, remoteDashboardClient && authed ? "외부 접속중" : authExpiry ? `만료 ${authExpiry}` : "OTP 인증 필요"),
         e("div", { className: "settings-chip-row" },
-          renderStatusChip(authed ? "접근 가능" : "미인증", authed)
+          renderStatusChip(remoteDashboardClient && authed ? "외부 접속중" : authed ? "접근 가능" : "미인증", authed)
         )
       ),
       e("article", { className: "settings-summary-card" },
         e("div", { className: "settings-summary-label" }, "연동 키"),
         e("strong", null, `${keyReadyCount} / ${keyReadyItems.length}`),
-        e("span", null, "Telegram, Groq, Gemini, Cerebras, Codex"),
+        e("span", null, "Telegram, Groq, Gemini, Cerebras, NVIDIA, Codex"),
         e("div", { className: "settings-meter" },
           e("span", { style: { width: `${Math.round((keyReadyCount / keyReadyItems.length) * 100)}%` } })
         )
@@ -1073,10 +1139,11 @@ export function renderSettingsPanel(props) {
       label: "기본 설정",
       summary: "접근과 외부 연동",
       items: [
-        { key: "basic-auth", label: "OTP 인증", summary: "대시보드 접근 세션", panel: otpPanel },
-        { key: "basic-telegram", label: "Telegram", summary: "알림 봇과 채팅 ID", panel: telegramPanel },
-        { key: "basic-keys", label: "LLM 키", summary: "Groq, Gemini, Cerebras, Codex", panel: llmPanel },
-        { key: "basic-cli", label: "CLI 인증", summary: "Copilot / Codex 로그인", panel: cliAuthPanel },
+        remoteDashboardClient ? null : { key: "basic-auth", label: "OTP 인증", summary: "대시보드 접근 세션", panel: otpPanel },
+        remoteDashboardClient ? null : { key: "basic-external", label: "외부접속", summary: "같은 LAN 접속 허용", panel: externalAccessPanel },
+        remoteDashboardClient ? null : { key: "basic-telegram", label: "Telegram", summary: "알림 봇과 채팅 ID", panel: telegramPanel },
+        remoteDashboardClient ? null : { key: "basic-keys", label: "LLM 키", summary: "Groq, Gemini, Cerebras, NVIDIA, Codex", panel: llmPanel },
+        remoteDashboardClient ? null : { key: "basic-cli", label: "CLI 인증", summary: "Copilot / Codex 로그인", panel: cliAuthPanel },
         uiPreferencePanel
           ? { key: "basic-preferences", label: "화면/단축키", summary: "테마, 키맵, 백업", panel: uiPreferencePanel }
           : null
@@ -1168,8 +1235,14 @@ export function renderSettingsPanel(props) {
 
   const mobileSettingsStack = e("div", { className: "settings-mobile-shell" },
     settingsSummary,
-    renderResponsiveSectionTabs(settingsGroups, activeGroup.key, (paneKey) => setResponsivePane("settings", defaultPaneByGroup[paneKey]), "settings-mobile-tabs"),
-    renderResponsiveSectionTabs(activeGroup.items, activeItem.key, (paneKey) => setResponsivePane("settings", paneKey), "settings-mobile-subtabs"),
+    e("nav", { className: "settings-mobile-nav-block primary", "aria-label": "설정 그룹" },
+      e("div", { className: "settings-mobile-nav-label" }, "설정 그룹"),
+      renderResponsiveSectionTabs(settingsGroups, activeGroup.key, (paneKey) => setResponsivePane("settings", defaultPaneByGroup[paneKey]), "settings-mobile-tabs")
+    ),
+    e("nav", { className: "settings-mobile-nav-block secondary", "aria-label": `${activeGroup.label} 항목` },
+      e("div", { className: "settings-mobile-nav-label" }, activeGroup.label),
+      renderResponsiveSectionTabs(activeGroup.items, activeItem.key, (paneKey) => setResponsivePane("settings", paneKey), "settings-mobile-subtabs")
+    ),
     detailStack
   );
 

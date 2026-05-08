@@ -1,12 +1,12 @@
 # Gemini 검색 리트리버 전환 계획 문서
 
-업데이트 기준: 2026-05-07
+업데이트 기준: 2026-05-08
 
 현재 상태:
 
 - 이 디렉터리는 검색 파이프라인 설계/확장 계획 묶음이다.
 - 실제 구현 기준은 `apps/omninode-middleware/src/CommandService.SearchPipeline.cs`, `GeminiGroundedRetriever.cs`, `SearchAnswerGuard.cs`, `DefaultSearchAnswerComposer.cs`를 우선 본다.
-- 현재 운영 문서는 상위 `docs/아키텍처_흐름.md`, `docs/도구_통합_패널_사용_가이드.md`, `docs/검증_가이드.md`를 우선 본다.
+- 현재 운영 문서는 상위 `README.md`, `docs/아키텍처_흐름.md`, `docs/도구_통합_패널_사용_가이드.md`, `docs/검증_가이드.md`를 우선 본다.
 - 이 하위 문서들은 검색 전환 당시의 설계/실행 기록 성격을 유지한다.
 
 ## 목적
@@ -18,9 +18,7 @@ Gemini 검색 리트리버 기반 구조를 Omni-node에 적용하기 위한 실
 - 최종 답변 생성은 `groq`, `gemini`, `copilot`, `cerebras` 멀티 제공자 경로를 유지한다.
 - `Evidence Pack` 외부 사실 단정은 금지한다.
 - `fail-closed`와 `count-lock` 정책을 기본 적용한다.
-- 설정 탭 Gemini API Key 저장값만 사용한다.
-- macOS는 Keychain, Windows/Linux는 600 권한 파일 또는 로컬 secure store 값을 사용한다.
-- 환경변수 직접 주입 키를 테스트/검증/회귀/실행 경로에서 허용하지 않는다.
+- 현재 운영의 시크릿 로딩 우선순위와 provider 범위는 상위 환경변수 문서와 `AppConfig.cs`를 기준으로 한다.
 
 ## 문서 목록
 - [01_master_plan.md](./01_master_plan.md): 전체 목표, 범위, 단계, 완료 기준

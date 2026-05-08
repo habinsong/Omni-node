@@ -67,7 +67,7 @@ public sealed partial class CommandService
         {
             if (tokens.Length < 3)
             {
-                return "사용법: /provider <single|orchestration|summary> <groq|gemini|copilot|cerebras|codex|auto>";
+                return "사용법: /provider <single|orchestration|summary> <groq|gemini|copilot|cerebras|nvidia|codex|auto>";
             }
 
             var slot = tokens[1].Trim().ToLowerInvariant();
@@ -80,7 +80,12 @@ public sealed partial class CommandService
             if (tokens.Length == 2)
             {
                 var quickProvider = tokens[1].Trim().ToLowerInvariant();
-                if (quickProvider is "groq" or "gemini" or "copilot" or "cerebras" or "codex")
+                if (quickProvider is "nvidia-nim" or "nvidia_nim" or "nim")
+                {
+                    quickProvider = "nvidia";
+                }
+
+                if (quickProvider is "groq" or "gemini" or "copilot" or "cerebras" or "nvidia" or "codex")
                 {
                     return SetChannelProvider(source, "single", quickProvider);
                 }
@@ -88,7 +93,7 @@ public sealed partial class CommandService
 
             if (tokens.Length < 3)
             {
-                return "사용법: /model <single|orchestration|multi.groq|multi.gemini|multi.copilot|multi.cerebras|multi.codex> <model-id>";
+                return "사용법: /model <single|orchestration|multi.groq|multi.gemini|multi.copilot|multi.cerebras|multi.nvidia|multi.codex> <model-id>";
             }
 
             var slot = tokens[1].Trim().ToLowerInvariant();
@@ -208,7 +213,7 @@ public sealed partial class CommandService
         {
             if (tokens.Count < 4)
             {
-                return "사용법: /llm single provider <groq|gemini|copilot|cerebras|codex> | /llm single model <model-id>";
+                return "사용법: /llm single provider <groq|gemini|copilot|cerebras|nvidia|codex> | /llm single model <model-id>";
             }
 
             if (tokens[2].Equals("provider", StringComparison.OrdinalIgnoreCase))
@@ -222,14 +227,14 @@ public sealed partial class CommandService
                 return SetChannelModel(source, "single", model);
             }
 
-            return "사용법: /llm single provider <groq|gemini|copilot|cerebras|codex> | /llm single model <model-id>";
+            return "사용법: /llm single provider <groq|gemini|copilot|cerebras|nvidia|codex> | /llm single model <model-id>";
         }
 
         if (sub == "orchestration")
         {
             if (tokens.Count < 4)
             {
-                return "사용법: /llm orchestration provider <auto|groq|gemini|copilot|cerebras|codex> | /llm orchestration model <model-id>";
+                return "사용법: /llm orchestration provider <auto|groq|gemini|copilot|cerebras|nvidia|codex> | /llm orchestration model <model-id>";
             }
 
             if (tokens[2].Equals("provider", StringComparison.OrdinalIgnoreCase))
@@ -243,14 +248,14 @@ public sealed partial class CommandService
                 return SetChannelModel(source, "orchestration", model);
             }
 
-            return "사용법: /llm orchestration provider <auto|groq|gemini|copilot|cerebras|codex> | /llm orchestration model <model-id>";
+            return "사용법: /llm orchestration provider <auto|groq|gemini|copilot|cerebras|nvidia|codex> | /llm orchestration model <model-id>";
         }
 
         if (sub == "multi")
         {
             if (tokens.Count < 4)
             {
-                return "사용법: /llm multi <groq|gemini|copilot|cerebras|codex> <model-id> | /llm multi summary <auto|groq|gemini|copilot|cerebras|codex>";
+                return "사용법: /llm multi <groq|gemini|copilot|cerebras|nvidia|codex> <model-id> | /llm multi summary <auto|groq|gemini|copilot|cerebras|nvidia|codex>";
             }
 
             var slot = tokens[2].Trim().ToLowerInvariant();
@@ -266,13 +271,14 @@ public sealed partial class CommandService
                 "gemini" => "multi.gemini",
                 "copilot" => "multi.copilot",
                 "cerebras" => "multi.cerebras",
+                "nvidia" or "nvidia-nim" or "nvidia_nim" or "nim" => "multi.nvidia",
                 "codex" => "multi.codex",
                 _ => string.Empty
             };
 
             if (string.IsNullOrWhiteSpace(canonicalSlot))
             {
-                return "사용법: /llm multi <groq|gemini|copilot|cerebras|codex> <model-id> | /llm multi summary <auto|groq|gemini|copilot|cerebras|codex>";
+                return "사용법: /llm multi <groq|gemini|copilot|cerebras|nvidia|codex> <model-id> | /llm multi summary <auto|groq|gemini|copilot|cerebras|nvidia|codex>";
             }
 
             return SetChannelModel(source, canonicalSlot, model);
@@ -288,7 +294,7 @@ public sealed partial class CommandService
         {
             if (tokens.Count < 4)
             {
-                return "사용법: /llm set <groq|copilot|codex> <model-id>";
+                return "사용법: /llm set <groq|copilot|nvidia|codex> <model-id>";
             }
 
             var provider = tokens[2].Trim().ToLowerInvariant();
@@ -345,7 +351,19 @@ public sealed partial class CommandService
                 return SetChannelModel(source, "single", model);
             }
 
-            return "사용법: /llm set <groq|copilot|codex> <model-id>";
+            if (provider == "nvidia" || provider == "nvidia-nim" || provider == "nvidia_nim" || provider == "nim")
+            {
+                var providerSet = SetChannelProvider(source, "single", "nvidia");
+                if (providerSet.StartsWith("지원", StringComparison.OrdinalIgnoreCase)
+                    || providerSet.StartsWith("invalid", StringComparison.OrdinalIgnoreCase))
+                {
+                    return providerSet;
+                }
+
+                return SetChannelModel(source, "single", model);
+            }
+
+            return "사용법: /llm set <groq|copilot|nvidia|codex> <model-id>";
         }
 
         return "알 수 없는 /llm 명령입니다. /llm help 또는 자연어 요청을 사용하세요.";
@@ -501,6 +519,7 @@ public sealed partial class CommandService
                 snapshot.MultiGeminiModel,
                 snapshot.MultiCopilotModel,
                 snapshot.MultiCerebrasModel,
+                snapshot.MultiNvidiaModel,
                 snapshot.MultiCodexModel,
                 input
             );
@@ -524,6 +543,7 @@ public sealed partial class CommandService
             webSnapshot.MultiGeminiModel,
             webSnapshot.MultiCopilotModel,
             webSnapshot.MultiCerebrasModel,
+            webSnapshot.MultiNvidiaModel,
             webSnapshot.MultiCodexModel,
             input
         );
@@ -541,6 +561,7 @@ public sealed partial class CommandService
         string multiGeminiModel,
         string multiCopilotModel,
         string multiCerebrasModel,
+        string multiNvidiaModel,
         string multiCodexModel,
         string input
     )
@@ -575,7 +596,7 @@ public sealed partial class CommandService
             preferredProviders.Add(single);
         }
 
-        foreach (var provider in new[] { "gemini", "groq", "codex", "copilot", "cerebras" })
+        foreach (var provider in new[] { "gemini", "groq", "nvidia", "codex", "copilot", "cerebras" })
         {
             if (!preferredProviders.Contains(provider, StringComparer.OrdinalIgnoreCase))
             {
@@ -602,6 +623,7 @@ public sealed partial class CommandService
                 multiGeminiModel,
                 multiCopilotModel,
                 multiCerebrasModel,
+                multiNvidiaModel,
                 multiCodexModel,
                 input
             );
@@ -625,6 +647,7 @@ public sealed partial class CommandService
         string multiGeminiModel,
         string multiCopilotModel,
         string multiCerebrasModel,
+        string multiNvidiaModel,
         string multiCodexModel,
         string input
     )
@@ -657,6 +680,7 @@ public sealed partial class CommandService
                 "gemini" => ResolveModel("gemini", multiGeminiModel),
                 "copilot" => ResolveModel("copilot", multiCopilotModel),
                 "cerebras" => ResolveModel("cerebras", multiCerebrasModel),
+                "nvidia" => ResolveModel("nvidia", multiNvidiaModel),
                 "codex" => ResolveModel("codex", multiCodexModel),
                 _ => ResolveModel(provider, null)
             };
@@ -699,8 +723,8 @@ public sealed partial class CommandService
                - args는 문자열 값만 사용.
                - profile.set args: profile=talk|code, thinking=low|high(선택)
                - mode.set args: mode=single|orchestration|multi
-               - provider.set args: slot=single|orchestration|summary, provider=groq|gemini|copilot|cerebras|codex|auto
-               - model.set args: slot=single|orchestration|multi.groq|multi.gemini|multi.copilot|multi.cerebras|multi.codex, model=<id>
+               - provider.set args: slot=single|orchestration|summary, provider=groq|gemini|copilot|cerebras|nvidia|codex|auto
+               - model.set args: slot=single|orchestration|multi.groq|multi.gemini|multi.copilot|multi.cerebras|multi.nvidia|multi.codex, model=<id>
                - memory.create args: compact=true|false(선택)
                - doctor.run args: latest=true|false(선택), format=text|json(선택)
                - plan.get/review/approve/run args: plan_id=<id>
@@ -712,7 +736,7 @@ public sealed partial class CommandService
                - notebook.append args: kind=learning|decision|verification, content=<내용>
                - handoff.create args: project_key=<선택>
                - help.show args: topic=llm|routine|coding|refactor|doctor|plan|task|notebook|memory|natural (선택)
-               - llm.models args: target=all|groq|gemini|copilot|cerebras|codex(선택)
+               - llm.models args: target=all|groq|gemini|copilot|cerebras|nvidia|codex(선택)
                - routine.create args: request=<원문>
                - routine.update args: routine_id=<id>, request=<원문>
                - routine.run/runs/on/off/delete args: routine_id=<id>
@@ -722,9 +746,9 @@ public sealed partial class CommandService
                - coding.run args: mode=single|orchestration|multi(선택), request=<요구사항>
                - coding.mode.set args: mode=single|orchestration|multi
                - coding.language.set args: mode=single|orchestration|multi(선택), language=<language|auto>
-               - coding.provider.set args: mode=single|orchestration|multi, provider=auto|groq|gemini|copilot|cerebras|codex
+               - coding.provider.set args: mode=single|orchestration|multi, provider=auto|groq|gemini|copilot|cerebras|nvidia|codex
                - coding.model.set args: mode=single|orchestration|multi, model=<id>
-               - coding.worker.set args: mode=orchestration|multi, provider=groq|gemini|copilot|cerebras|codex, model=<id|none>
+               - coding.worker.set args: mode=orchestration|multi, provider=groq|gemini|copilot|cerebras|nvidia|codex, model=<id|none>
                - refactor.status args 없음
                - refactor.read args: path=<상대경로 또는 절대경로>, start=<선택>, end=<선택>
                - refactor.apply args: preview_id=<선택>
@@ -970,7 +994,7 @@ public sealed partial class CommandService
                     return new NaturalCommandValidationResult(false, false, null, "invalid_provider_slot", "invalid provider slot");
                 }
 
-                if (provider is not ("groq" or "gemini" or "copilot" or "cerebras" or "codex" or "auto"))
+                if (provider is not ("groq" or "gemini" or "copilot" or "cerebras" or "nvidia" or "codex" or "auto"))
                 {
                     return new NaturalCommandValidationResult(false, false, null, "invalid_provider", "invalid provider");
                 }
@@ -986,7 +1010,7 @@ public sealed partial class CommandService
 
                 var slot = GetArg("slot", "target").ToLowerInvariant();
                 var model = GetArg("model", "value");
-                if (slot is not ("single" or "orchestration" or "multi.groq" or "multi.gemini" or "multi.copilot" or "multi.cerebras" or "multi.codex"))
+                if (slot is not ("single" or "orchestration" or "multi.groq" or "multi.gemini" or "multi.copilot" or "multi.cerebras" or "multi.nvidia" or "multi.codex"))
                 {
                     return new NaturalCommandValidationResult(false, false, null, "invalid_model_slot", "invalid model slot");
                 }
@@ -1391,7 +1415,7 @@ public sealed partial class CommandService
                     return new NaturalCommandValidationResult(false, false, null, "invalid_coding_mode", "invalid coding mode");
                 }
 
-                if (provider is not ("auto" or "groq" or "gemini" or "copilot" or "cerebras" or "codex"))
+                if (provider is not ("auto" or "groq" or "gemini" or "copilot" or "cerebras" or "nvidia" or "codex"))
                 {
                     return new NaturalCommandValidationResult(false, false, null, "invalid_provider", "invalid provider");
                 }
@@ -1444,7 +1468,7 @@ public sealed partial class CommandService
                     return new NaturalCommandValidationResult(false, false, null, "invalid_coding_worker_mode", "worker는 orchestration 또는 multi 모드만 지원합니다.");
                 }
 
-                if (provider is not ("groq" or "gemini" or "copilot" or "cerebras" or "codex"))
+                if (provider is not ("groq" or "gemini" or "copilot" or "cerebras" or "nvidia" or "codex"))
                 {
                     return new NaturalCommandValidationResult(false, false, null, "invalid_provider", "invalid provider");
                 }
@@ -2202,7 +2226,7 @@ public sealed partial class CommandService
         var normalizedProvider = NormalizeProvider(provider, allowAuto);
         if (!allowAuto && normalizedProvider == "auto")
         {
-            return "지원 제공자는 groq, gemini, copilot, cerebras, codex 입니다.";
+            return "지원 제공자는 groq, gemini, copilot, cerebras, nvidia, codex 입니다.";
         }
 
         if (source.Equals("telegram", StringComparison.OrdinalIgnoreCase))
@@ -2252,7 +2276,7 @@ public sealed partial class CommandService
                 snapshot = _telegramLlmPreferences.Clone();
             }
 
-            return BuildModelStatusText("telegram", snapshot.Mode, snapshot.SingleProvider, snapshot.SingleModel, snapshot.OrchestrationProvider, snapshot.OrchestrationModel, snapshot.MultiGroqModel, snapshot.MultiGeminiModel, snapshot.MultiCopilotModel, snapshot.MultiCerebrasModel, snapshot.MultiCodexModel, snapshot.MultiSummaryProvider);
+            return BuildModelStatusText("telegram", snapshot.Mode, snapshot.SingleProvider, snapshot.SingleModel, snapshot.OrchestrationProvider, snapshot.OrchestrationModel, snapshot.MultiGroqModel, snapshot.MultiGeminiModel, snapshot.MultiCopilotModel, snapshot.MultiCerebrasModel, snapshot.MultiNvidiaModel, snapshot.MultiCodexModel, snapshot.MultiSummaryProvider);
         }
 
         WebLlmPreferences webSnapshot;
@@ -2261,7 +2285,7 @@ public sealed partial class CommandService
             webSnapshot = _webLlmPreferences.Clone();
         }
 
-        return BuildModelStatusText("web", webSnapshot.Mode, webSnapshot.SingleProvider, webSnapshot.SingleModel, webSnapshot.OrchestrationProvider, webSnapshot.OrchestrationModel, webSnapshot.MultiGroqModel, webSnapshot.MultiGeminiModel, webSnapshot.MultiCopilotModel, webSnapshot.MultiCerebrasModel, webSnapshot.MultiCodexModel, webSnapshot.MultiSummaryProvider);
+        return BuildModelStatusText("web", webSnapshot.Mode, webSnapshot.SingleProvider, webSnapshot.SingleModel, webSnapshot.OrchestrationProvider, webSnapshot.OrchestrationModel, webSnapshot.MultiGroqModel, webSnapshot.MultiGeminiModel, webSnapshot.MultiCopilotModel, webSnapshot.MultiCerebrasModel, webSnapshot.MultiNvidiaModel, webSnapshot.MultiCodexModel, webSnapshot.MultiSummaryProvider);
     }
 
     private string BuildModelStatusText(
@@ -2275,6 +2299,7 @@ public sealed partial class CommandService
         string multiGeminiModel,
         string multiCopilotModel,
         string multiCerebrasModel,
+        string multiNvidiaModel,
         string multiCodexModel,
         string multiSummaryProvider
     )
@@ -2288,6 +2313,7 @@ public sealed partial class CommandService
                 다중 Gemini: {FormatProviderWithModel("gemini", multiGeminiModel)}
                 다중 Copilot: {FormatProviderWithModel("copilot", multiCopilotModel)}
                 다중 Cerebras: {FormatProviderWithModel("cerebras", multiCerebrasModel)}
+                다중 NVIDIA NIM: {FormatProviderWithModel("nvidia", multiNvidiaModel)}
                 다중 Codex: {FormatProviderWithModel("codex", multiCodexModel)}
                 다중 요약 담당: {FormatProviderDisplayName(multiSummaryProvider, allowAuto: true)}
                 """;
@@ -2307,15 +2333,15 @@ public sealed partial class CommandService
                 자주 쓰는 명령:
                 - /talk [low|high]
                 - /code [low|high]
-                - /model <groq|gemini|copilot|cerebras|codex>
+                - /model <groq|gemini|copilot|cerebras|nvidia|codex>
                 - /llm status
-                - /llm models [groq|gemini|copilot|cerebras|codex|all]
+                - /llm models [groq|gemini|copilot|cerebras|nvidia|codex|all]
                 - /llm usage
 
                 세부 설정:
                 - /mode <single|orchestration|multi>
-                - /provider <single|orchestration|summary> <groq|gemini|copilot|cerebras|codex|auto>
-                - /model <single|orchestration|multi.groq|multi.gemini|multi.copilot|multi.cerebras|multi.codex> <model-id>
+                - /provider <single|orchestration|summary> <groq|gemini|copilot|cerebras|nvidia|codex|auto>
+                - /model <single|orchestration|multi.groq|multi.gemini|multi.copilot|multi.cerebras|multi.nvidia|multi.codex> <model-id>
                 """;
     }
 
@@ -2363,6 +2389,7 @@ public sealed partial class CommandService
             "gemini" => "Gemini",
             "copilot" => "Copilot",
             "cerebras" => "Cerebras",
+            "nvidia" => "NVIDIA NIM",
             "codex" => "Codex",
             "auto" => "자동 선택",
             _ => "Groq"
@@ -2383,6 +2410,7 @@ public sealed partial class CommandService
         _webLlmPreferences.MultiGeminiModel = _config.GeminiModel;
         _webLlmPreferences.MultiCopilotModel = DefaultCopilotModel;
         _webLlmPreferences.MultiCerebrasModel = _config.CerebrasModel;
+        _webLlmPreferences.MultiNvidiaModel = _config.NvidiaModel;
         _webLlmPreferences.MultiCodexModel = _config.CodexModel;
         _webLlmPreferences.MultiSummaryProvider = "gemini";
         _webLlmPreferences.TalkThinkingLevel = NormalizeThinkingLevel(requestedThinking, "low");
@@ -2402,6 +2430,7 @@ public sealed partial class CommandService
         _webLlmPreferences.MultiGeminiModel = _config.GeminiModel;
         _webLlmPreferences.MultiCopilotModel = DefaultCopilotModel;
         _webLlmPreferences.MultiCerebrasModel = _config.CerebrasModel;
+        _webLlmPreferences.MultiNvidiaModel = _config.NvidiaModel;
         _webLlmPreferences.MultiCodexModel = _config.CodexModel;
         _webLlmPreferences.MultiSummaryProvider = "gemini";
         _webLlmPreferences.CodeThinkingLevel = NormalizeThinkingLevel(requestedThinking, "high");
@@ -2427,6 +2456,7 @@ public sealed partial class CommandService
                 _telegramLlmPreferences.SingleModel = provider switch
                 {
                     "cerebras" => _config.CerebrasModel,
+                    "nvidia" => _config.NvidiaModel,
                     "codex" => _config.CodexModel,
                     _ => _config.GeminiModel
                 };
@@ -2471,6 +2501,7 @@ public sealed partial class CommandService
                 _webLlmPreferences.SingleModel = provider switch
                 {
                     "cerebras" => _config.CerebrasModel,
+                    "nvidia" => _config.NvidiaModel,
                     "codex" => _config.CodexModel,
                     _ => _config.GeminiModel
                 };
@@ -2538,13 +2569,19 @@ public sealed partial class CommandService
             return $"텔레그램 다중 Cerebras 모델을 {model}로 바꿨습니다.";
         }
 
+        if (slot == "multi.nvidia")
+        {
+            _telegramLlmPreferences.MultiNvidiaModel = model;
+            return $"텔레그램 다중 NVIDIA NIM 모델을 {model}로 바꿨습니다.";
+        }
+
         if (slot == "multi.codex")
         {
             _telegramLlmPreferences.MultiCodexModel = model;
             return $"텔레그램 다중 Codex 모델을 {model}로 바꿨습니다.";
         }
 
-        return "지원 슬롯은 single, orchestration, multi.groq, multi.gemini, multi.copilot, multi.cerebras, multi.codex 입니다.";
+        return "지원 슬롯은 single, orchestration, multi.groq, multi.gemini, multi.copilot, multi.cerebras, multi.nvidia, multi.codex 입니다.";
     }
 
     private string SetWebModelCore(string slot, string model)
@@ -2590,12 +2627,18 @@ public sealed partial class CommandService
             return $"웹 다중 Cerebras 모델을 {model}로 바꿨습니다.";
         }
 
+        if (slot == "multi.nvidia")
+        {
+            _webLlmPreferences.MultiNvidiaModel = model;
+            return $"웹 다중 NVIDIA NIM 모델을 {model}로 바꿨습니다.";
+        }
+
         if (slot == "multi.codex")
         {
             _webLlmPreferences.MultiCodexModel = model;
             return $"웹 다중 Codex 모델을 {model}로 바꿨습니다.";
         }
 
-        return "지원 슬롯은 single, orchestration, multi.groq, multi.gemini, multi.copilot, multi.cerebras, multi.codex 입니다.";
+        return "지원 슬롯은 single, orchestration, multi.groq, multi.gemini, multi.copilot, multi.cerebras, multi.nvidia, multi.codex 입니다.";
     }
 }

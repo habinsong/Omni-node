@@ -24,18 +24,44 @@ internal sealed class AuthSessionGateway
     public async Task<string> CreatePendingSessionAsync(
         WebSocket socket,
         SemaphoreSlim sendLock,
+        bool remoteDashboardClient,
         CancellationToken cancellationToken
     )
     {
         var session = _sessionManager.CreatePending(TimeSpan.FromMinutes(3));
         var sessionId = session.SessionId;
+        var remoteAccepted = remoteDashboardClient
+                             && _sessionManager.MarkAuthenticatedForRemoteDashboard(sessionId, TimeSpan.FromHours(12));
+        if (remoteAccepted)
+        {
+            var expiresAtUtc = DateTimeOffset.UtcNow.AddHours(12);
+            await WebSocketGateway.SendTextAsync(
+                socket,
+                sendLock,
+                "{"
+                + "\"type\":\"auth_result\","
+                + "\"ok\":true,"
+                + "\"resumed\":false,"
+                + "\"authToken\":\"\","
+                + $"\"expiresAtUtc\":\"{WebSocketGateway.EscapeJson(expiresAtUtc.ToString("O"))}\","
+                + $"\"expiresAtLocal\":\"{WebSocketGateway.EscapeJson(WebSocketGateway.FormatLocalDateTime(expiresAtUtc))}\","
+                + $"\"localUtcOffset\":\"{WebSocketGateway.EscapeJson(WebSocketGateway.FormatUtcOffset(expiresAtUtc.ToLocalTime().Offset))}\","
+                + "\"ttlHours\":12,"
+                + "\"remoteDashboardClient\":true"
+                + "}",
+                cancellationToken
+            );
+            return sessionId;
+        }
+
         await WebSocketGateway.SendTextAsync(
             socket,
             sendLock,
             "{"
             + "\"type\":\"auth_required\","
             + $"\"sessionId\":\"{WebSocketGateway.EscapeJson(sessionId)}\","
-            + $"\"telegramConfigured\":{(_telegramClient.IsConfigured ? "true" : "false")}"
+            + $"\"telegramConfigured\":{(_telegramClient.IsConfigured ? "true" : "false")},"
+            + $"\"remoteDashboardClient\":{(remoteDashboardClient ? "true" : "false")}"
             + "}",
             cancellationToken
         );
@@ -48,6 +74,7 @@ internal sealed class AuthSessionGateway
         string? otp,
         string? authToken,
         int? authTtlHours,
+        bool remoteDashboardClient,
         WebSocket socket,
         SemaphoreSlim sendLock,
         CancellationToken cancellationToken
@@ -55,6 +82,17 @@ internal sealed class AuthSessionGateway
     {
         if (string.Equals(messageType, "request_otp", StringComparison.Ordinal))
         {
+            if (remoteDashboardClient)
+            {
+                await WebSocketGateway.SendTextAsync(
+                    socket,
+                    sendLock,
+                    "{\"type\":\"error\",\"message\":\"forbidden_remote_dashboard\"}",
+                    cancellationToken
+                );
+                return new AuthSessionDispatchResult(true, false);
+            }
+
             await HandleRequestOtpAsync(sessionId, socket, sendLock, cancellationToken);
             return new AuthSessionDispatchResult(true, false);
         }
@@ -65,6 +103,7 @@ internal sealed class AuthSessionGateway
                 sessionId,
                 otp,
                 authTtlHours,
+                remoteDashboardClient,
                 socket,
                 sendLock,
                 cancellationToken
@@ -74,9 +113,21 @@ internal sealed class AuthSessionGateway
 
         if (string.Equals(messageType, "resume_auth", StringComparison.Ordinal))
         {
+            if (remoteDashboardClient)
+            {
+                var ok = await HandleRemoteDashboardAuthenticateAsync(
+                    sessionId,
+                    socket,
+                    sendLock,
+                    cancellationToken
+                );
+                return new AuthSessionDispatchResult(true, ok);
+            }
+
             var resumed = await HandleResumeAsync(
                 sessionId,
                 authToken,
+                remoteDashboardClient,
                 socket,
                 sendLock,
                 cancellationToken
@@ -85,6 +136,35 @@ internal sealed class AuthSessionGateway
         }
 
         return default;
+    }
+
+    private async Task<bool> HandleRemoteDashboardAuthenticateAsync(
+        string? sessionId,
+        WebSocket socket,
+        SemaphoreSlim sendLock,
+        CancellationToken cancellationToken
+    )
+    {
+        var ttl = TimeSpan.FromHours(12);
+        var ok = !string.IsNullOrWhiteSpace(sessionId)
+                 && _sessionManager.MarkAuthenticatedForRemoteDashboard(sessionId, ttl);
+        var expiresAtUtc = DateTimeOffset.UtcNow.Add(ttl);
+        await WebSocketGateway.SendTextAsync(
+            socket,
+            sendLock,
+            "{"
+            + "\"type\":\"auth_result\","
+            + $"\"ok\":{(ok ? "true" : "false")},"
+            + "\"resumed\":true,"
+            + "\"authToken\":\"\","
+            + $"\"expiresAtUtc\":\"{WebSocketGateway.EscapeJson(ok ? expiresAtUtc.ToString("O") : string.Empty)}\","
+            + $"\"expiresAtLocal\":\"{WebSocketGateway.EscapeJson(ok ? WebSocketGateway.FormatLocalDateTime(expiresAtUtc) : string.Empty)}\","
+            + $"\"localUtcOffset\":\"{WebSocketGateway.EscapeJson(ok ? WebSocketGateway.FormatUtcOffset(expiresAtUtc.ToLocalTime().Offset) : string.Empty)}\","
+            + "\"remoteDashboardClient\":true"
+            + "}",
+            cancellationToken
+        );
+        return ok;
     }
 
     private async Task HandleRequestOtpAsync(
@@ -136,6 +216,7 @@ internal sealed class AuthSessionGateway
         string? sessionId,
         string? otp,
         int? authTtlHours,
+        bool remoteDashboardClient,
         WebSocket socket,
         SemaphoreSlim sendLock,
         CancellationToken cancellationToken
@@ -157,7 +238,8 @@ internal sealed class AuthSessionGateway
             + $"\"expiresAtUtc\":\"{WebSocketGateway.EscapeJson(ok ? ticket.ExpiresAtUtc.ToString("O") : string.Empty)}\","
             + $"\"expiresAtLocal\":\"{WebSocketGateway.EscapeJson(ok ? WebSocketGateway.FormatLocalDateTime(ticket.ExpiresAtUtc) : string.Empty)}\","
             + $"\"localUtcOffset\":\"{WebSocketGateway.EscapeJson(ok ? WebSocketGateway.FormatUtcOffset(ticket.ExpiresAtUtc.ToLocalTime().Offset) : string.Empty)}\","
-            + $"\"ttlHours\":{(int)Math.Round(trustedTtl.TotalHours)}"
+            + $"\"ttlHours\":{(int)Math.Round(trustedTtl.TotalHours)},"
+            + $"\"remoteDashboardClient\":{(remoteDashboardClient ? "true" : "false")}"
             + "}",
             cancellationToken
         );
@@ -167,6 +249,7 @@ internal sealed class AuthSessionGateway
     private async Task<bool> HandleResumeAsync(
         string? sessionId,
         string? authToken,
+        bool remoteDashboardClient,
         WebSocket socket,
         SemaphoreSlim sendLock,
         CancellationToken cancellationToken
@@ -189,7 +272,8 @@ internal sealed class AuthSessionGateway
             + $"\"authToken\":\"{WebSocketGateway.EscapeJson(resumed ? authToken ?? string.Empty : string.Empty)}\","
             + $"\"expiresAtUtc\":\"{WebSocketGateway.EscapeJson(resumed ? expiresAtUtc.ToString("O") : string.Empty)}\","
             + $"\"expiresAtLocal\":\"{WebSocketGateway.EscapeJson(resumed ? WebSocketGateway.FormatLocalDateTime(expiresAtUtc) : string.Empty)}\","
-            + $"\"localUtcOffset\":\"{WebSocketGateway.EscapeJson(resumed ? WebSocketGateway.FormatUtcOffset(expiresAtUtc.ToLocalTime().Offset) : string.Empty)}\""
+            + $"\"localUtcOffset\":\"{WebSocketGateway.EscapeJson(resumed ? WebSocketGateway.FormatUtcOffset(expiresAtUtc.ToLocalTime().Offset) : string.Empty)}\","
+            + $"\"remoteDashboardClient\":{(remoteDashboardClient ? "true" : "false")}"
             + "}",
             cancellationToken
         );

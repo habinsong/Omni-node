@@ -3,7 +3,8 @@ export function createCodingState(options) {
     noneModel,
     defaultGroqWorkerModel,
     defaultGeminiWorkerModel,
-    defaultCerebrasModel
+    defaultCerebrasModel,
+    defaultNvidiaModel
   } = options;
 
   return {
@@ -25,6 +26,7 @@ export function createCodingState(options) {
     orchGroqModel: defaultGroqWorkerModel,
     orchGeminiModel: defaultGeminiWorkerModel,
     orchCerebrasModel: defaultCerebrasModel,
+    orchNvidiaModel: defaultNvidiaModel,
     orchCopilotModel: noneModel,
     orchCodexModel: noneModel,
     multiProvider: "gemini",
@@ -33,6 +35,7 @@ export function createCodingState(options) {
     multiGroqModel: defaultGroqWorkerModel,
     multiGeminiModel: defaultGeminiWorkerModel,
     multiCerebrasModel: defaultCerebrasModel,
+    multiNvidiaModel: defaultNvidiaModel,
     multiCopilotModel: noneModel,
     multiCodexModel: noneModel
   };
