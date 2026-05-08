@@ -17264,3 +17264,85 @@ video {
   border-color: var(--dark-border-strong) !important;
   color: var(--dark-text) !important;
 }
+
+/* Dark mode coverage v7: tiny text, tool-control-group, sidebar nav flatten */
+
+/* 1. .tiny 보조 텍스트 (Doctor 등 곳곳에서 회색 글씨) — dark에서 가독성 확보 */
+:root[data-theme="dark"] body .tiny,
+:root[data-theme="dark"] body :is(small, .small-note) {
+  color: var(--dark-muted) !important;
+}
+
+/* 2. .tool-control-group — 도구 통합 패널의 그룹 카드 */
+:root[data-theme="dark"] body :is(
+  .tool-control-group,
+  .tool-control-group-head,
+  .tool-control-group-body,
+  .tool-control-group-actions
+) {
+  background: var(--dark-surface-1) !important;
+  border-color: var(--dark-border) !important;
+  color: var(--dark-text) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .tool-control-group input,
+  .tool-control-group select,
+  .tool-control-group textarea
+) {
+  background: var(--dark-surface-0) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .tool-control-group button,
+  .tool-control-group .btn
+) {
+  background: var(--dark-surface-2) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body :is(
+  .tool-control-group small,
+  .tool-control-group .tiny,
+  .tool-control-group p,
+  .tool-control-group label
+) {
+  color: var(--dark-muted) !important;
+}
+
+/* 3. 좌측 글로벌 nav — 다크에서 각 탭이 카드/박스처럼 보이는 효과 제거 */
+:root[data-theme="dark"] body .global-nav {
+  background: var(--dark-surface-0) !important;
+  border-color: var(--dark-border) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] body .global-nav-menu {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  gap: 2px !important;
+}
+
+:root[data-theme="dark"] body .global-nav .nav-btn {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--dark-muted) !important;
+}
+
+:root[data-theme="dark"] body .global-nav .nav-btn:hover {
+  background: rgba(75, 105, 145, 0.18) !important;
+  color: var(--dark-text) !important;
+}
+
+:root[data-theme="dark"] body .global-nav .nav-btn.active {
+  background: var(--dark-accent-soft) !important;
+  color: #dceaff !important;
+  border: none !important;
+  box-shadow: none !important;
+}
