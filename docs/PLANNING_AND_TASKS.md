@@ -1,6 +1,6 @@
 # Omni-node 자동화 / 계획 / Task Graph
 
-업데이트 기준: 2026-05-07
+업데이트 기준: 2026-05-08
 
 이 문서는 현재 코드 기준의 `자동화/계획` 탭, planning 저장소, background task graph 실행 흐름, LLM 라우팅 UI를 정리합니다.
 

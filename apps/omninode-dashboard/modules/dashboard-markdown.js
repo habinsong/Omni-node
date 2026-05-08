@@ -250,9 +250,43 @@ function isMarkdownTableSeparatorLine(line) {
 
 function renderFallbackInlineMarkdown(value) {
   let html = escapeHtml(`${value ?? ""}`);
+  // 인라인 코드 (백틱)
+  html = html.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  // 볼드
   html = html.replace(/\*\*([^*\n][\s\S]*?)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/__([^_\n][\s\S]*?)__/g, "<strong>$1</strong>");
+  // 이탈릭
+  html = html.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+  html = html.replace(/_([^_\n]+)_/g, "<em>$1</em>");
+  // 취소선
+  html = html.replace(/~~([^~\n]+)~~/g, "<del>$1</del>");
   return html;
+}
+
+function renderFallbackBlockLine(line) {
+  const trimmed = `${line ?? ""}`.trim();
+  // 헤더
+  const headerMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
+  if (headerMatch) {
+    const level = headerMatch[1].length;
+    return `<h${level}>${renderFallbackInlineMarkdown(headerMatch[2])}</h${level}>`;
+  }
+  // 비순서 리스트
+  const ulMatch = trimmed.match(/^[-*+]\s+(.+)$/);
+  if (ulMatch) {
+    return `<li>${renderFallbackInlineMarkdown(ulMatch[1])}</li>`;
+  }
+  // 순서 리스트
+  const olMatch = trimmed.match(/^\d+[.)]\s+(.+)$/);
+  if (olMatch) {
+    return `<li>${renderFallbackInlineMarkdown(olMatch[1])}</li>`;
+  }
+  // 인용
+  const bqMatch = trimmed.match(/^>\s*(.*)$/);
+  if (bqMatch) {
+    return `<blockquote>${renderFallbackInlineMarkdown(bqMatch[1])}</blockquote>`;
+  }
+  return renderFallbackInlineMarkdown(line);
 }
 
 function splitMarkdownTableCells(line) {
@@ -305,7 +339,7 @@ function renderTableAwareFallbackHtml(text) {
     if (`${line ?? ""}`.trim().length === 0) {
       chunks.push("<br>");
     } else {
-      chunks.push(renderFallbackInlineMarkdown(line));
+      chunks.push(renderFallbackBlockLine(line));
     }
     i += 1;
   }
@@ -351,6 +385,30 @@ function normalizeStructuredMarkdownArtifacts(value) {
       return `${prefix}${normalizedLead}**${normalizedBody}**`;
     }
   );
+
+  // "레이블: 값" 패턴을 "**레이블:** 값"으로 변환 (볼드 강조)
+  // 이미 **로 감싸진 줄, URL, 코드블록, 테이블 줄은 제외
+  text = text.replace(
+    /(^|\n)((?:[-•▪][ \t]*)?(?:(?:No\.\d+|\d+[.)][ \t]*)?)?)([A-Za-z가-힣0-9('‘’][A-Za-z가-힣0-9()'‘’,.&+_/\-· \t]{1,60}?)[ \t]*[:：][ \t]*(.*)$/gm,
+    (match, prefix, lead, label, value) => {
+      const trimLabel = label.trim();
+      const trimValue = (value || "").trim();
+      // 이미 볼드면 건너뜀
+      if (/\*\*/.test(match)) return match;
+      // URL 줄이면 건너뜀
+      if (/https?:\/\//i.test(trimLabel)) return match;
+      // 코드블록이나 테이블이면 건너뜀
+      if (match.trim().startsWith("```") || match.trim().startsWith("|")) return match;
+      // 너무 짧은 레이블 건너뜀
+      if (trimLabel.length < 2) return match;
+      // 출처/요약/핵심 같은 메타 레이블은 건너뜀
+      if (/^(출처|sources?)\s*$/i.test(trimLabel)) return match;
+
+      const formattedValue = trimValue ? ` ${trimValue}` : "";
+      return `${prefix}${lead}**${trimLabel}:**${formattedValue}`;
+    }
+  );
+
   return text;
 }
 
@@ -399,6 +457,52 @@ export function normalizeMarkdownSource(value) {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
+  // 일반 텍스트 줄 사이의 단일 \n → \n\n 변환 (문단 분리).
+  // 코드블록(```) 내부, 테이블(|), 리스트(-/*/+/숫자.), 헤더(#) 줄은 제외.
+  const codeBlockRegex = /```[\s\S]*?```/g;
+  const codeBlocks = [];
+  text = text.replace(codeBlockRegex, (match) => {
+    const placeholder = `\x00CODE${codeBlocks.length}\x00`;
+    codeBlocks.push(match);
+    return placeholder;
+  });
+
+  const lines = text.split("\n");
+  const result = [];
+  for (let li = 0; li < lines.length; li++) {
+    result.push(lines[li]);
+    if (li < lines.length - 1) {
+      const curr = lines[li].trim();
+      const next = lines[li + 1].trim();
+      // 현재 줄이나 다음 줄이 빈 줄이면 이미 문단 분리
+      if (!curr || !next) {
+        result.push("");
+        continue;
+      }
+      // 코드블록 placeholder면 건드리지 않음
+      if (curr.startsWith("\x00CODE") || next.startsWith("\x00CODE")) {
+        result.push("");
+        continue;
+      }
+      // 다음 줄이 마크다운 특수 구문이면 이미 위에서 \n\n 처리됨
+      const isSpecialNext = /^(#{1,6}\s|[-*+]\s|\d+[.)]\s|>\s|\|)/.test(next);
+      // 다음 줄이 새로운 마크다운 특수 구문이 아닐 때, 현재 줄이 문장 끝이면 문단 분리
+      if (!isSpecialNext) {
+        // 현재 줄이 문장 종결 어미, 문장 부호, 또는 항목의 끝으로 보이는지 확인
+        const isSentenceEnd = /[.!?…~:;%)\]"']|다\.|요\.|습니다\.|입니다\.|]$/.test(curr) || curr.endsWith("**");
+        if (isSentenceEnd) {
+          result.push("");
+        }
+      }
+    }
+  }
+  text = result.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+
+  // 코드블록 복원
+  codeBlocks.forEach((block, idx) => {
+    text = text.replace(`\x00CODE${idx}\x00`, block);
+  });
+
   return text;
 }
 
@@ -409,7 +513,7 @@ function createMarkdownRenderer(windowLike) {
     }
 
     const renderer = windowLike.markdownit({
-      html: false,
+      html: true,
       linkify: true,
       breaks: true,
       typographer: false
@@ -442,14 +546,22 @@ function createMarkdownRenderer(windowLike) {
 
 export function createMarkdownSupport({ React, window: windowLike }) {
   const { useEffect, useMemo, useRef } = React;
-  const markdownRenderer = createMarkdownRenderer(windowLike);
+  let markdownRenderer = createMarkdownRenderer(windowLike);
+
+  function getMarkdownRenderer() {
+    if (!markdownRenderer) {
+      markdownRenderer = createMarkdownRenderer(windowLike);
+    }
+    return markdownRenderer;
+  }
 
   function renderMarkdownToSafeHtml(value) {
     const text = normalizeMarkdownSource(value);
     let html = "";
+    const renderer = getMarkdownRenderer();
 
-    if (markdownRenderer) {
-      html = markdownRenderer.render(text);
+    if (renderer) {
+      html = renderer.render(text);
       if (hasMarkdownTableBlock(text) && !/<table[\s>]/i.test(html)) {
         html = renderTableAwareFallbackHtml(text);
       }

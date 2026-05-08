@@ -753,9 +753,9 @@ body,
 }
 
 .bubble-text.markdown br {
-  content: "";
   display: block;
-  margin-top: 6px;
+  content: "";
+  margin-top: 8px;
 }
 
 .bubble-text.markdown h1,
@@ -18111,7 +18111,7 @@ video {
 .bubble-with-tts {
   display: inline-flex;
   align-items: flex-end;
-  gap: 0px;
+  gap: 0;
   min-width: 0;
   max-width: 100%;
 }
@@ -18119,6 +18119,12 @@ video {
 .bubble-with-tts>.bubble {
   flex: 0 1 auto;
   min-width: 0;
+  margin-right: 0px !important;
+}
+
+.bubble-with-tts>.tts-pill {
+  flex: 0 0 auto;
+  margin-left: 2px;
 }
 
 .message-tts-aside {
