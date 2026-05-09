@@ -18659,3 +18659,96 @@ video {
     padding: 4px 8px 0;
   }
 }
+
+/* ─────────────────────────────────────────────
+   v21 — 루틴 탭 반응형 폭 보강 (노트북 ~1280px 이하)
+   증상: routine-create-panel 안의 5개 모드 버튼(자동/일반 답변/URL 참조/스크립트/
+        브라우저 에이전트)과 schedule editor 의 입력이 column 폭을 초과해
+        오른쪽이 잘려 보임. 특히 wizard step 2 (스케줄 + 모드).
+   원인: .routine-mode-control 이 모든 폭에서 grid-template-columns:
+        repeat(5, minmax(0, 1fr)) !important 로 강제되어 있고, 하위 버튼의
+        한국어 텍스트("스크립트", "URL 참조") 가 keep-all 워드브레이크 때문에
+        ~50px 셀에서 자기 너비를 유지하며 panel 밖으로 빠져나감.
+   해법: 1) panel 자체 overflow-x: clip 으로 시각적 누수 방지.
+        2) ≤1280px 부터 mode-control 을 auto-fit minmax(80px, 1fr) 로
+           panel 폭에 맞춰 자동 wrap (5→3→2→1 단계적). 폰트/패딩도 한 단계 축소.
+        3) schedule input 들이 box-sizing/min-width 로 panel 을 밀지 않게.
+   ───────────────────────────────────────────── */
+
+.routine-create-panel,
+.routine-list-panel,
+.routine-detail-panel {
+  overflow-x: clip;
+}
+
+.routine-create-panel *,
+.routine-list-panel *,
+.routine-detail-panel * {
+  max-width: 100%;
+}
+
+.routine-create-panel input,
+.routine-create-panel select,
+.routine-create-panel textarea,
+.routine-list-panel input,
+.routine-list-panel select,
+.routine-list-panel textarea,
+.routine-detail-panel input,
+.routine-detail-panel select,
+.routine-detail-panel textarea {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* schedule editor 의 시간/시간대 input row 가 panel 폭을 초과하지 않게. */
+.routine-schedule-editor .routine-form-grid {
+  min-width: 0;
+}
+
+.routine-schedule-editor .routine-form-grid input,
+.routine-schedule-editor .routine-form-grid select {
+  width: 100%;
+  min-width: 0;
+}
+
+/* 노트북 폭 (≤1280px): mode 버튼을 panel 폭에 맞게 auto-fit. */
+@media (max-width: 1280px) {
+  .routine-wizard .routine-mode-control,
+  .routine-mode-control {
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)) !important;
+    gap: 6px !important;
+  }
+
+  .routine-wizard .routine-mode-control .routine-segment-btn,
+  .routine-mode-control .routine-segment-btn {
+    font-size: 11.5px;
+    padding: 7px 5px;
+    line-height: 1.2;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* 더 좁은 폭 (≤920px): 더 작게. */
+@media (max-width: 920px) {
+  .routine-wizard .routine-mode-control,
+  .routine-mode-control {
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)) !important;
+  }
+
+  .routine-wizard .routine-mode-control .routine-segment-btn,
+  .routine-mode-control .routine-segment-btn {
+    font-size: 11px;
+    padding: 6px 4px;
+  }
+}
+
+/* wizard stepnav 라벨이 좁은 panel 에서 잘리지 않게 ellipsis 유지하면서 안전망. */
+.routine-wizard-stepnav {
+  min-width: 0;
+}
+
+.routine-wizard-step {
+  min-width: 0;
+  overflow: hidden;
+}
