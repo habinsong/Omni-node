@@ -400,6 +400,20 @@ public sealed partial class CommandService
             return "보안 정책상 자연어 종료 요청은 허용되지 않습니다. /kill <pid> 형식으로만 실행할 수 있습니다.";
         }
 
+        // LLM 해석기 우회 fast-path: 스킬 별명 등록/제거/목록·think/web/history 같은
+        // 한정된 한국어 패턴은 regex 로 즉시 슬래시 명령으로 변환해 안정성 확보.
+        var deterministic = TryResolveDeterministicNaturalCommand(normalized);
+        if (!string.IsNullOrWhiteSpace(deterministic))
+        {
+            _auditLogger.Log(
+                source,
+                "natural_command_deterministic",
+                "ok",
+                $"cmd={NormalizeAuditToken(deterministic, "-")}"
+            );
+            return await ExecuteAsync(deterministic!, source, cancellationToken, attachments, webUrls, webSearchEnabled);
+        }
+
         var interpretation = await ResolveNaturalCommandInterpretationAsync(source, normalized, cancellationToken);
         if (interpretation == null)
         {
@@ -764,8 +778,14 @@ public sealed partial class CommandService
                - "추론 모드/Think+/웹검색 모드/웹 컨텍스트" 토글 요청은 think.* / web.* 명령으로 매핑.
                - "최근 대화/히스토리/지난 대화 N개 보여줘"는 history.show 로 매핑.
                - "<X> 스킬 별명/단축으로 등록/지정해줘" → skill.quick.add 로 매핑 (alias=<별명>, name=<X>).
+                 예시:
+                   "casual-chat 스킬을 c 라는 별명으로 등록해줘" → command=skill.quick.add, args={alias:"c", name:"casual-chat"}
+                   "eli5 단축키 e로 만들어" → command=skill.quick.add, args={alias:"e", name:"eli5"}
+                   "review 스킬 alias r 추가" → command=skill.quick.add, args={alias:"r", name:"review"}
+                   "별명 c로 casual-chat 스킬 등록" → command=skill.quick.add, args={alias:"c", name:"casual-chat"}
                - "스킬 별명/단축 목록 보여줘" → skill.quick.list.
                - "스킬 별명/단축 <X> 지워/삭제/제거" → skill.quick.remove (alias=<X>).
+                 예시: "별명 e 지워" → command=skill.quick.remove, args={alias:"e"}
                - "스킬 상태/현재 스킬/활성 스킬" → skill.status.
                - "스킬 종료/해제/그만/꺼" → skill.off.
                - "<X> 스킬 사용/적용/켜" 형식이면 skill.use(name=X). 만약 추가 지시문(예: "사용해서 …설명해줘")이 함께 있으면 kind=chat 으로 두어 LLM 본흐름이 직접 처리하게 한다.
@@ -1807,6 +1827,139 @@ public sealed partial class CommandService
             "kill" => "kill.request",
             _ => normalized
         };
+    }
+
+    // 자주 쓰는 한국어 자연어를 LLM 호출 없이 슬래시 명령으로 즉시 변환.
+    // 매칭 우선 순위는 구체적 패턴부터 일반 패턴 순. 매칭 실패 시 null → LLM 해석기로 fallback.
+    private static string? TryResolveDeterministicNaturalCommand(string input)
+    {
+        var raw = (input ?? string.Empty).Trim();
+        if (raw.Length == 0)
+        {
+            return null;
+        }
+
+        var normalized = Regex.Replace(raw, @"\s+", " ").Trim();
+
+        // 스킬 별명 등록: "<X> 스킬(을/로) <Y>(라는)? (별명/단축)(으로|키)? (등록/만들/지정/추가)"
+        // 또는: "별명 <Y>(으로|로)? <X> 스킬 (등록/만들)"
+        // 또는: "스킬 단축키 <Y> -> <X>" 같은 형태도 허용.
+        var aliasAdd1 = Regex.Match(
+            normalized,
+            @"^(?<name>[A-Za-z0-9가-힣_-]{2,40})\s*스킬을?\s*(?<alias>[A-Za-z0-9가-힣_-]{1,16})\s*(?:라는|로|으로)?\s*(?:별명|단축|단축키|alias)\s*(?:으로|로|키)?\s*(?:등록|추가|지정|만들|만들어|저장)",
+            RegexOptions.IgnoreCase
+        );
+        if (aliasAdd1.Success)
+        {
+            return BuildSkillQuickAddCommand(aliasAdd1.Groups["alias"].Value, aliasAdd1.Groups["name"].Value);
+        }
+
+        var aliasAdd2 = Regex.Match(
+            normalized,
+            @"^(?:스킬\s*)?(?:별명|단축|단축키|alias)\s*(?<alias>[A-Za-z0-9가-힣_-]{1,16})\s*(?:으로|로|에)?\s*(?<name>[A-Za-z0-9가-힣_-]{2,40})\s*스킬\s*(?:등록|추가|지정|만들|만들어|저장)",
+            RegexOptions.IgnoreCase
+        );
+        if (aliasAdd2.Success)
+        {
+            return BuildSkillQuickAddCommand(aliasAdd2.Groups["alias"].Value, aliasAdd2.Groups["name"].Value);
+        }
+
+        var aliasAdd3 = Regex.Match(
+            normalized,
+            @"^(?<name>[A-Za-z0-9가-힣_-]{2,40})\s*(?:을|를)?\s*(?<alias>[A-Za-z0-9가-힣_-]{1,16})\s*(?:로|으로)\s*(?:등록|추가|지정|만들|만들어|저장)\s*해?\s*줘?$",
+            RegexOptions.IgnoreCase
+        );
+        if (aliasAdd3.Success
+            && (normalized.Contains("스킬", StringComparison.OrdinalIgnoreCase)
+                || normalized.Contains("별명", StringComparison.OrdinalIgnoreCase)
+                || normalized.Contains("단축", StringComparison.OrdinalIgnoreCase)))
+        {
+            return BuildSkillQuickAddCommand(aliasAdd3.Groups["alias"].Value, aliasAdd3.Groups["name"].Value);
+        }
+
+        // 스킬 별명 제거: "(스킬\s*)?(별명|단축|alias)\s*<Y>\s*(지워|삭제|제거|remove)"
+        var aliasRemove = Regex.Match(
+            normalized,
+            @"(?:스킬\s*)?(?:별명|단축|단축키|alias)\s*(?<alias>[A-Za-z0-9가-힣_-]{1,16})\s*(?:을|를)?\s*(?:지워|삭제|제거|remove|delete|rm)",
+            RegexOptions.IgnoreCase
+        );
+        if (aliasRemove.Success)
+        {
+            return $"/skill quick remove {aliasRemove.Groups["alias"].Value.TrimStart('/')}";
+        }
+
+        // 스킬 별명 목록: "스킬 별명/단축 (목록|리스트|보여)"
+        if (Regex.IsMatch(
+                normalized,
+                @"(?:스킬\s*)?(?:별명|단축|단축키|alias)\s*(?:목록|리스트|보여\s*줘?|list)",
+                RegexOptions.IgnoreCase))
+        {
+            return "/skill quick list";
+        }
+
+        // 스킬 상태: "(현재|지금)?\s*(활성|활성화된|active)?\s*스킬\s*(상태|뭐|확인)"
+        if (Regex.IsMatch(
+                normalized,
+                @"(?:현재|지금)?\s*(?:활성|활성화된|active)?\s*스킬\s*(?:상태|뭐(야|에요)?|확인|status)",
+                RegexOptions.IgnoreCase))
+        {
+            return "/skill status";
+        }
+
+        // 추론 모드 토글: 단순 패턴은 직접 매핑.
+        if (Regex.IsMatch(normalized, @"^(추론\s*모드|think\+?|thinking)\s*(켜|on|활성|시작)$", RegexOptions.IgnoreCase))
+        {
+            return "/think on";
+        }
+        if (Regex.IsMatch(normalized, @"^(추론\s*모드|think\+?|thinking)\s*(꺼|끄|off|비활성|중지|해제|그만)$", RegexOptions.IgnoreCase))
+        {
+            return "/think off";
+        }
+        if (Regex.IsMatch(normalized, @"^(추론\s*모드|think\+?|thinking)\s*(상태|status|확인)$", RegexOptions.IgnoreCase))
+        {
+            return "/think status";
+        }
+
+        // 웹검색 토글.
+        if (Regex.IsMatch(normalized, @"^웹\s*(검색|컨텍스트|context)\s*(켜|on|활성|시작)$", RegexOptions.IgnoreCase))
+        {
+            return "/web on";
+        }
+        if (Regex.IsMatch(normalized, @"^웹\s*(검색|컨텍스트|context)\s*(꺼|끄|off|비활성|중지|해제|그만)$", RegexOptions.IgnoreCase))
+        {
+            return "/web off";
+        }
+
+        // 대화 이력: "최근/지난/이전 대화 (N개)? (보여|확인)"
+        var history = Regex.Match(
+            normalized,
+            @"(?:최근|지난|이전)\s*대화\s*(?<n>\d{1,2})?\s*(?:개|건)?\s*(?:보여|확인|보기)?",
+            RegexOptions.IgnoreCase
+        );
+        if (history.Success)
+        {
+            var nStr = history.Groups["n"].Value;
+            if (!string.IsNullOrEmpty(nStr) && int.TryParse(nStr, out var n) && n >= 1 && n <= 20)
+            {
+                return $"/history {n}";
+            }
+            return "/history";
+        }
+
+        return null;
+    }
+
+    private static string? BuildSkillQuickAddCommand(string alias, string name)
+    {
+        var a = (alias ?? string.Empty).Trim().TrimStart('/');
+        var n = (name ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(n))
+        {
+            return null;
+        }
+        // 별명이 예약 슬래시 명령과 충돌하면 패스 (skill 핸들러가 거부 메시지 반환).
+        // 여기선 단순히 슬래시 명령만 만들고, 검증은 핸들러에 위임.
+        return $"/skill quick {a} {n}";
     }
 
     private static bool LooksLikeNaturalKillIntent(string text)
