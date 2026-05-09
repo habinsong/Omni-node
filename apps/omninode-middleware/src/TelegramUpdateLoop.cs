@@ -141,6 +141,7 @@ public sealed class TelegramUpdateLoop
                         var progressStream = progressMessageId.HasValue && progressMessageId.Value > 0
                             ? CreateProgressStreamCallback(progressMessageId.Value, cancellationToken)
                             : null;
+                        var perfStopwatch = System.Diagnostics.Stopwatch.StartNew();
                         var result = await _commandService.ExecuteAsync(
                             input,
                             "telegram",
@@ -150,7 +151,9 @@ public sealed class TelegramUpdateLoop
                             true,
                             progressStream
                         );
-                        await SendTelegramReplyAsync(progressMessageId, result, cancellationToken);
+                        perfStopwatch.Stop();
+                        var resultWithPerf = AppendElapsedTimeToFooter(result, perfStopwatch.ElapsedMilliseconds);
+                        await SendTelegramReplyAsync(progressMessageId, resultWithPerf, cancellationToken);
                     }
                     finally
                     {
@@ -227,6 +230,40 @@ public sealed class TelegramUpdateLoop
         {
             QueueReplyForRetry(cleanedText, progressMessageId.HasValue ? "reply_replace_and_send_failed" : "reply_send_failed");
         }
+    }
+
+    // 응답 본문이 footer("\n\n— provider·model · ...")를 가지고 있으면 그 끝에 ⏱ 시간을 append.
+    // footer가 없으면(slash 명령 응답 등 짧은 텍스트) 표시 생략 — 노이즈를 피한다.
+    private static string AppendElapsedTimeToFooter(string text, long elapsedMs)
+    {
+        if (string.IsNullOrWhiteSpace(text) || elapsedMs < 0)
+        {
+            return text;
+        }
+        // 너무 짧은 turn 은 표시 안 함 (sub-second slash commands).
+        if (elapsedMs < 1000)
+        {
+            return text;
+        }
+
+        // 마지막 footer 라인 찾기. AppendTelegramResponseFooter가 만든 패턴: \n\n— ...
+        var idx = text.LastIndexOf("\n\n— ", StringComparison.Ordinal);
+        if (idx < 0)
+        {
+            return text;
+        }
+        var afterFooterStart = idx + 4; // skip "\n\n— "
+        // footer 가 한 줄이 아니라 그 뒤에도 텍스트가 붙을 수 있으므로 그 줄 끝까지만 본다.
+        var lineEnd = text.IndexOf('\n', afterFooterStart);
+        if (lineEnd < 0)
+        {
+            lineEnd = text.Length;
+        }
+        var elapsedLabel = elapsedMs >= 60_000
+            ? $"{elapsedMs / 60_000.0:0.0}m"
+            : $"{elapsedMs / 1000.0:0.0}s";
+        var insertion = $" · ⏱ {elapsedLabel}";
+        return text.Insert(lineEnd, insertion);
     }
 
     // 본문 끝의 __TG_BUTTONS__/__/TG_BUTTONS__ 블록을 파싱해 버튼 행으로 변환. 본문에서 마커는 제거.

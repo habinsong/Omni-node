@@ -4301,6 +4301,10 @@ public sealed partial class CommandService
                      ---
                      스킬 본문
                    - /skill off
+                   - /skill quick <별명> <스킬이름> — 단축 별명 등록 (예: /skill quick e eli5)
+                   - /skill quick list — 등록된 별명 목록
+                   - /skill quick remove <별명>
+                     ↳ 등록 후 /<별명> [질문] 으로 즉시 호출 가능 (예: /e 디지털 카메라 원리)
                    """;
         }
 

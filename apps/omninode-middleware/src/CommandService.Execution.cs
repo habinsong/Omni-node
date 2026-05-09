@@ -85,6 +85,17 @@ public sealed partial class CommandService
 
         try
         {
+            // 텔레그램에서 등록한 스킬 별명을 슬래시 명령으로 받았을 때 자연어 호출로 rewrite.
+            // 예: "/e 디지털 카메라" + alias e→eli5  =>  "eli5 스킬 사용해서 디지털 카메라"
+            if (source.Equals("telegram", StringComparison.OrdinalIgnoreCase) && text.StartsWith("/", StringComparison.Ordinal))
+            {
+                var rewritten = TryRewriteSlashAliasToSkillInvocation(text);
+                if (!string.IsNullOrWhiteSpace(rewritten))
+                {
+                    text = rewritten!;
+                }
+            }
+
             if (text.StartsWith("/help", StringComparison.OrdinalIgnoreCase)
                 || text.Equals("/start", StringComparison.OrdinalIgnoreCase))
             {
