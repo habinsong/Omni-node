@@ -1073,13 +1073,18 @@ import {
     const threadInfoOpen = !!threadInfoOpenByScope[threadInfoScopeKey];
     const responsiveWorkspaceKey = rootTab === "coding" ? "coding" : "chat";
     const isPortraitMobileLayout = viewportSize.width <= 920 && viewportSize.height > viewportSize.width;
+    // 노트북 가로 좁은 창 (≤1024px) 에서도 루틴 탭은 mobile-tabs UI 로 전환해
+    // 목록/생성/상세를 탭으로 분리. 안 그러면 createPanel 이 길어지면 listPanel 이
+    // 화면 아래로 밀려나 "목록이 사라진" 것처럼 보임.
+    const isRoutineCompactLayout = isPortraitMobileLayout || viewportSize.width <= 1024;
     const mobileWorkspaceHeight = isPortraitMobileLayout
       ? Math.max(360, viewportSize.height - Math.max(0, mainShellViewportTop))
       : 0;
     const currentWorkspacePane = mobilePaneByTab[responsiveWorkspaceKey]
       || (currentConversationId ? "thread" : "list");
     const mobileComposerOpen = !!mobileComposerOpenByTab[responsiveWorkspaceKey];
-    const currentRoutinePane = mobilePaneByTab.routine || (routineSelectedId ? "detail" : "overview");
+    const currentRoutinePane = mobilePaneByTab.routine
+      || (routineSelectedId ? "detail" : (isRoutineCompactLayout ? "list" : "overview"));
     const currentLogicPane = mobilePaneByTab.logic || (isPortraitMobileLayout ? "canvas" : "selection");
     const currentSettingsPane = mobilePaneByTab.settings || "auth";
     const currentAutomationPane = mobilePaneByTab.automation || "plans";
@@ -7799,6 +7804,7 @@ import {
         routineSelectedId,
         currentRoutinePane,
         isPortraitMobileLayout,
+        isRoutineCompactLayout,
         errorByKey,
         routineCreateForm,
         routineEditForm,

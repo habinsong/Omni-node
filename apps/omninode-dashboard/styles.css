@@ -18752,3 +18752,34 @@ video {
   min-width: 0;
   overflow: hidden;
 }
+
+/* ─────────────────────────────────────────────
+   v22 — 루틴 탭 narrow desktop (≤1024px) 에서도 mobile-tabs UI 활성화
+   증상: 노트북 가로 좁은 창에서 routine-layout 이 1칸으로 collapse 되면
+        createPanel 위에 listPanel 이 스택되고, createPanel 이 길어지면
+        listPanel 이 화면 아래로 밀려나 사용자에게 사라진 것처럼 보임.
+   해법: app.js 에서 isRoutineCompactLayout (≤1024px) 을 true 로 두고
+        routine-mobile-shell + routine-mobile-tabs UI 로 분리 → 사용자가
+        "목록/생성/상세" 탭으로 명시적 전환. 기본 pane 도 list 자동 선택.
+   추가 보강: 4탭 (개요/목록/생성/상세) 을 narrow desktop 폭 (>=520px)
+   에서는 한 줄(4cols)로 보여 클릭 동선 단축.
+   ───────────────────────────────────────────── */
+
+@media (min-width: 641px) {
+  .routine-mobile-tabs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* mobile-shell 로 들어왔을 때 panel 들이 화면 안에 깔끔히 들어가게. */
+.routine-mobile-shell {
+  width: 100%;
+  min-width: 0;
+}
+
+.routine-mobile-shell > .routine-list-panel,
+.routine-mobile-shell > .routine-create-panel,
+.routine-mobile-shell > .routine-detail-panel {
+  width: 100%;
+  height: auto;
+}

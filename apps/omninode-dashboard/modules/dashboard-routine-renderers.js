@@ -300,6 +300,7 @@ export function renderRoutineTab(props) {
     routineSelectedId,
     currentRoutinePane,
     isPortraitMobileLayout,
+    isRoutineCompactLayout,
     errorByKey,
     routineCreateForm,
     routineEditForm,
@@ -434,7 +435,7 @@ export function renderRoutineTab(props) {
             className: `routine-item ${routineSelectedId === item.id ? "active" : ""}`,
             onClick: () => {
               setRoutineSelectedId(item.id);
-              if (isPortraitMobileLayout) {
+              if (isPortraitMobileLayout || isRoutineCompactLayout) {
                 setResponsivePane("routine", "detail");
               }
             }
@@ -666,7 +667,7 @@ export function renderRoutineTab(props) {
     e("div", { className: "routine-hero" },
       renderRoutineProgressPanelV2(e, routineProgress)
     ),
-    isPortraitMobileLayout
+    (isPortraitMobileLayout || isRoutineCompactLayout)
       ? e(
         "div",
         { className: "routine-mobile-shell" },
@@ -682,6 +683,8 @@ export function renderRoutineTab(props) {
         overviewCards,
         e("div", { className: "routine-layout" },
           e("div", { className: "routine-left-column" },
+            // 좁은 폭일 때는 list 가 위로 오도록 — createPanel 이 길어도 목록이 안 가려짐.
+            // 단, 위 분기에서 mobile-shell 이 처리하므로 여기는 정상 데스크탑 (>1024px) 흐름.
             createPanel,
             listPanel
           ),
