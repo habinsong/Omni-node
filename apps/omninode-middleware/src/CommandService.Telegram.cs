@@ -155,7 +155,7 @@ public sealed partial class CommandService
             var enabledText = enabledTools.Length == 0 ? "(none)" : string.Join(", ", enabledTools);
             var pendingText = pendingTools.Length == 0 ? "(none)" : string.Join(", ", pendingTools);
 
-            return $"""
+            var statusBody = $"""
                     {BuildChannelModelStatus("telegram")}
 
                     [부가 상태]
@@ -167,6 +167,16 @@ public sealed partial class CommandService
                     사용 가능 도구: {enabledText}
                     대기 중 도구: {pendingText}
                     """;
+
+            // single chat provider 빠른 전환 버튼.
+            return AppendTelegramInlineButtons(
+                statusBody,
+                ("/llm single provider groq", "Groq"),
+                ("/llm single provider gemini", "Gemini"),
+                ("/llm single provider cerebras", "Cerebras"),
+                ("/llm single provider nvidia", "NVIDIA"),
+                ("/llm single provider copilot", "Copilot")
+            );
         }
 
         if (tokens[1].Equals("mode", StringComparison.OrdinalIgnoreCase))
@@ -4326,6 +4336,7 @@ public sealed partial class CommandService
                    - /coding last
                    - /coding files
                    - /coding file <번호|경로>
+                   - /coding download <번호|경로> — 텔레그램 첨부로 다운로드
                    """;
         }
 
@@ -4477,6 +4488,10 @@ public sealed partial class CommandService
                - "환경 진단해줘"
                - "루틴 목록 보여줘"
                - "노트북 보여줘"
+
+               🎙️ 음성 메시지: 자동 전사(STT) 후 LLM에 전달. 들은 내용을 echo로 확인 후 답변.
+               🖼️ 사진 첨부: Vision 모델로 이미지 분석. 캡션이 없으면 "첨부 분석" 자동 안내.
+               📎 문서/파일 첨부: PDF/텍스트/코드 등은 모델이 직접 참조해 요약·분석.
 
                자주 쓰는 slash:
                - /talk [low|high]

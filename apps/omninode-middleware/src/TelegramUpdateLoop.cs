@@ -186,6 +186,17 @@ public sealed class TelegramUpdateLoop
 
     private async Task SendTelegramReplyAsync(int? progressMessageId, string text, CancellationToken cancellationToken)
     {
+        // 빈 응답은 별도 전송 생략 — 첨부 파일 등 부수 효과로 답한 핸들러용.
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            if (progressMessageId.HasValue && progressMessageId.Value > 0)
+            {
+                // progress 메시지가 떠 있으면 짧은 안내로 교체해서 spinner 제거.
+                await _telegramClient.ReplaceMessageAsync(progressMessageId.Value, "✅ 첨부로 보냈습니다.", cancellationToken);
+            }
+            return;
+        }
+
         // 응답 끝에 inline keyboard 마커가 붙어 있으면 떼어내서 별도로 전송.
         var (cleanedText, buttonRows) = ExtractInlineButtonsFromText(text);
 

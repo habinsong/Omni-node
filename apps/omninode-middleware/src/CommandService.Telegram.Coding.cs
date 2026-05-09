@@ -47,6 +47,14 @@ public sealed partial class CommandService
             return BuildTelegramLatestCodingFilePreviewText(query);
         }
 
+        if (tokens[1].Equals("download", StringComparison.OrdinalIgnoreCase)
+            || tokens[1].Equals("dl", StringComparison.OrdinalIgnoreCase)
+            || tokens[1].Equals("save", StringComparison.OrdinalIgnoreCase))
+        {
+            var query = ExtractCommandTail(normalized, $"/coding {tokens[1]}");
+            return await TrySendTelegramLatestCodingFileAsDocumentAsync(query, cancellationToken);
+        }
+
         if (tokens[1].Equals("mode", StringComparison.OrdinalIgnoreCase))
         {
             if (tokens.Length < 3)
@@ -751,10 +759,81 @@ public sealed partial class CommandService
         }
 
         builder.AppendLine();
-        builder.AppendLine("프리뷰 예시:");
-        builder.AppendLine("- /coding file 1");
-        builder.AppendLine("- /coding file src/App.tsx");
-        return builder.ToString().Trim();
+        builder.AppendLine("프리뷰: /coding file <번호>");
+        builder.AppendLine("다운로드: /coding download <번호>");
+
+        // 최대 3개 파일에 대해 1번 다운로드 버튼 자동 부착.
+        var fileCount = Math.Min(result.ChangedFiles.Count, 3);
+        var buttons = new (string, string)[fileCount];
+        for (var i = 0; i < fileCount; i += 1)
+        {
+            buttons[i] = ($"/coding download {i + 1}", $"⬇️ {i + 1}");
+        }
+        return AppendTelegramInlineButtons(builder.ToString().Trim(), buttons);
+    }
+
+    // 텔레그램에서 마지막 코딩 결과의 파일을 .txt 파일로 첨부 전송. query는 번호 또는 경로.
+    // 성공 시 빈 문자열, 실패 시 사용자에게 보일 메시지 반환.
+    private async Task<string> TrySendTelegramLatestCodingFileAsDocumentAsync(
+        string query,
+        CancellationToken cancellationToken
+    )
+    {
+        var latest = GetLatestTelegramCodingConversation();
+        var result = latest?.LatestCodingResult;
+        if (latest == null || result == null)
+        {
+            return "최근 텔레그램 코딩 결과가 없습니다.";
+        }
+
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return AppendTelegramInlineButtons(
+                "사용법: /coding download <번호|경로>\n먼저 `/coding files` 로 번호를 확인하세요.",
+                ("/coding files", "📋 파일 목록")
+            );
+        }
+
+        if (!TryResolveTelegramCodingFilePath(result, query, out var path, out var displayPath))
+        {
+            return $"파일을 찾지 못했습니다: {query}\n먼저 `/coding files` 로 번호나 경로를 확인하세요.";
+        }
+
+        if (!File.Exists(path))
+        {
+            return $"파일이 디스크에 없습니다: {displayPath}";
+        }
+
+        try
+        {
+            var bytes = await File.ReadAllBytesAsync(path, cancellationToken);
+            // 안전 상한 (텔레그램 sendDocument: 50MB. 여기서는 8MB 까지만).
+            const int maxBytes = 8 * 1024 * 1024;
+            if (bytes.Length > maxBytes)
+            {
+                return $"파일이 너무 큽니다 ({bytes.Length / 1024}KB > 8MB). 대시보드에서 확인하세요.";
+            }
+
+            var safeName = Path.GetFileName(displayPath);
+            if (string.IsNullOrWhiteSpace(safeName))
+            {
+                safeName = $"coding-file-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}.txt";
+            }
+            var caption = $"📎 {displayPath}\n대화: {latest.Title}\n크기: {bytes.Length:N0} bytes";
+            var ok = await _telegramClient.SendDocumentAsync(bytes, safeName, caption, cancellationToken);
+            if (ok)
+            {
+                _auditLogger.Log("telegram", "coding_download", "ok", $"path={displayPath} bytes={bytes.Length}");
+                return string.Empty;
+            }
+            _auditLogger.Log("telegram", "coding_download", "failed", $"path={displayPath}");
+            return $"첨부 전송 실패: {displayPath}\n잠시 후 다시 시도해 주세요.";
+        }
+        catch (Exception ex)
+        {
+            _auditLogger.Log("telegram", "coding_download", "error", ex.Message);
+            return $"파일 전송 오류: {ex.Message}";
+        }
     }
 
     private string BuildTelegramLatestCodingFilePreviewText(string query)
