@@ -400,6 +400,30 @@ public sealed partial class CommandService
             return "보안 정책상 자연어 종료 요청은 허용되지 않습니다. /kill <pid> 형식으로만 실행할 수 있습니다.";
         }
 
+        // 복합 토글 fast-path: "추론모드와 스킬 꺼" 같이 한 문장에 두 개 이상의 토글 대상이
+        // 들어 있으면 각각의 슬래시 명령을 순차 실행하고 결과를 모은다.
+        var compoundCommands = TryResolveCompoundOffToggle(normalized);
+        if (compoundCommands != null && compoundCommands.Count > 0)
+        {
+            _auditLogger.Log(
+                source,
+                "natural_command_compound",
+                "ok",
+                $"count={compoundCommands.Count} cmds={string.Join(",", compoundCommands)}"
+            );
+            var combined = new StringBuilder();
+            foreach (var cmd in compoundCommands)
+            {
+                var partial = await ExecuteAsync(cmd, source, cancellationToken, attachments, webUrls, webSearchEnabled);
+                if (combined.Length > 0)
+                {
+                    combined.Append("\n\n");
+                }
+                combined.Append(partial);
+            }
+            return combined.ToString();
+        }
+
         // LLM 해석기 우회 fast-path: 스킬 별명 등록/제거/목록·think/web/history 같은
         // 한정된 한국어 패턴은 regex 로 즉시 슬래시 명령으로 변환해 안정성 확보.
         var deterministic = TryResolveDeterministicNaturalCommand(normalized);
@@ -1827,6 +1851,73 @@ public sealed partial class CommandService
             "kill" => "kill.request",
             _ => normalized
         };
+    }
+
+    // 한 문장에 추론·스킬·웹 같은 토글 대상이 두 개 이상 들어있고 off 동사가 끝에 한 번 붙어 있는
+    // 한국어 복합 명령("추론모드와 스킬 꺼", "스킬과 웹 다 해제", "추론·웹·스킬 모두 꺼")을 인식해
+    // 각 대상에 해당하는 슬래시 명령 리스트를 반환. 켜기는 스킬 활성에 이름이 필요하므로 처리하지 않음.
+    private static IReadOnlyList<string>? TryResolveCompoundOffToggle(string input)
+    {
+        var raw = (input ?? string.Empty).Trim();
+        if (raw.Length == 0)
+        {
+            return null;
+        }
+
+        var normalized = Regex.Replace(raw, @"\s+", " ").Trim();
+
+        // off 동사가 한 번 이상 등장해야 한다.
+        var hasOffVerb = Regex.IsMatch(
+            normalized,
+            @"(꺼|끄|off|비활성|해제|중지|그만|disable|deactivate|stop)",
+            RegexOptions.IgnoreCase
+        );
+        if (!hasOffVerb)
+        {
+            return null;
+        }
+
+        // 명시적인 on 동사가 동시에 있으면 의도 불명확 → fast-path 포기.
+        var hasOnVerb = Regex.IsMatch(
+            normalized,
+            @"(켜|on|활성화|시작|enable|activate)",
+            RegexOptions.IgnoreCase
+        );
+        if (hasOnVerb)
+        {
+            return null;
+        }
+
+        var hasThink = Regex.IsMatch(normalized, @"(추론(\s*모드)?|think\+?|thinking)", RegexOptions.IgnoreCase);
+        var hasSkill = Regex.IsMatch(normalized, @"(스킬|skill)", RegexOptions.IgnoreCase);
+        var hasWeb = Regex.IsMatch(normalized, @"웹(\s*(검색|컨텍스트|context))?", RegexOptions.IgnoreCase);
+
+        var subjectCount = (hasThink ? 1 : 0) + (hasSkill ? 1 : 0) + (hasWeb ? 1 : 0);
+        if (subjectCount < 2)
+        {
+            return null;
+        }
+
+        // "다/모두/싹/전부" 같이 일괄 의도가 있거나, 두 토글 대상 사이에 연결어("와/과/랑/이랑/하고/및/and")가
+        // 있어야 복합으로 판단. 제3의 행위어가 끼어 있으면 (예: "스킬 사용해서 추론 꺼") 매치하지 않게 보수적으로 판단.
+        var hasGroupModifier = Regex.IsMatch(normalized, @"(다|모두|싹|전부|both|all)\s*(꺼|끄|off|해제|중지|그만)", RegexOptions.IgnoreCase);
+        var hasConnector = Regex.IsMatch(normalized, @"(와|과|랑|이랑|하고|및|·|,| and )", RegexOptions.IgnoreCase);
+        if (!hasGroupModifier && !hasConnector)
+        {
+            return null;
+        }
+
+        // 스킬 활성화/사용 의도가 함께 들어 있으면 복합 off 가 아닐 가능성이 높음 (예: "X 스킬 사용해서 추론 꺼").
+        if (Regex.IsMatch(normalized, @"(사용해|사용해서|적용해|활성화|켜줘|적용)", RegexOptions.IgnoreCase))
+        {
+            return null;
+        }
+
+        var commands = new List<string>(3);
+        if (hasThink) commands.Add("/think off");
+        if (hasSkill) commands.Add("/skill off");
+        if (hasWeb) commands.Add("/web off");
+        return commands;
     }
 
     // 자주 쓰는 한국어 자연어를 LLM 호출 없이 슬래시 명령으로 즉시 변환.
