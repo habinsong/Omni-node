@@ -491,7 +491,10 @@ public sealed class LlmRouter : IDisposable
         var model = string.IsNullOrWhiteSpace(modelOverride) ? GetSelectedGroqModel() : modelOverride.Trim();
         var endpoint = $"{_config.GroqBaseUrl.TrimEnd('/')}/chat/completions";
         var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
-            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them.";
+            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them. "
+            + "If conversation history is provided above, treat the user's short follow-up messages (e.g., '그니까 잘 돌아가?', '이 환경에서?', '24GB 구성임') as continuations of the prior turns. Never reply '이전 대화 맥락이 제공되지 않아' when [최근 대화] is in the prompt — use it. "
+            + "When the user asks for your judgment or opinion (어때, 어떻게 생각해, 잘 돌아갈까, 검토해봐, 추천해, 너 생각, 네 의견 등), give a concrete, decisive answer based on the conversation history and your knowledge. Do not deflect with generic disclaimers like '정확도/정밀도/재현율/F1-score 같은 객관적 지표가 필요하다' or '구체적인 평가 지표와 데이터셋이 필요하다'. State your best assessment with a 1-2 sentence rationale, then optionally note any uncertainty. "
+            + "Do not repeat the same paragraphs across multiple turns. If the user asks the same thing again, dig deeper or take a clearer stance instead of repeating prior wording.";
         var requestedMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
         var effectiveMaxOutputTokens = ClampGroqMaxOutputTokensForModel(model, requestedMaxOutputTokens);
         var promptBudgetChars = ResolveGroqPromptBudgetChars(model);
@@ -607,7 +610,10 @@ public sealed class LlmRouter : IDisposable
         var model = string.IsNullOrWhiteSpace(modelOverride) ? GetSelectedGroqModel() : modelOverride.Trim();
         var endpoint = $"{_config.GroqBaseUrl.TrimEnd('/')}/chat/completions";
         var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
-            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them.";
+            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them. "
+            + "If conversation history is provided above, treat the user's short follow-up messages (e.g., '그니까 잘 돌아가?', '이 환경에서?', '24GB 구성임') as continuations of the prior turns. Never reply '이전 대화 맥락이 제공되지 않아' when [최근 대화] is in the prompt — use it. "
+            + "When the user asks for your judgment or opinion (어때, 어떻게 생각해, 잘 돌아갈까, 검토해봐, 추천해, 너 생각, 네 의견 등), give a concrete, decisive answer based on the conversation history and your knowledge. Do not deflect with generic disclaimers like '정확도/정밀도/재현율/F1-score 같은 객관적 지표가 필요하다' or '구체적인 평가 지표와 데이터셋이 필요하다'. State your best assessment with a 1-2 sentence rationale, then optionally note any uncertainty. "
+            + "Do not repeat the same paragraphs across multiple turns. If the user asks the same thing again, dig deeper or take a clearer stance instead of repeating prior wording.";
         var requestedMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
         var effectiveMaxOutputTokens = ClampGroqMaxOutputTokensForModel(model, requestedMaxOutputTokens);
         var promptForRequest = TruncatePromptForGroq(userInput, ResolveGroqPromptBudgetChars(model));
@@ -1727,7 +1733,10 @@ public sealed class LlmRouter : IDisposable
         var fallbackRetried = false;
         var endpoint = $"{_config.CerebrasBaseUrl.TrimEnd('/')}/chat/completions";
         var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
-            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them.";
+            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them. "
+            + "If conversation history is provided above, treat the user's short follow-up messages (e.g., '그니까 잘 돌아가?', '이 환경에서?', '24GB 구성임') as continuations of the prior turns. Never reply '이전 대화 맥락이 제공되지 않아' when [최근 대화] is in the prompt — use it. "
+            + "When the user asks for your judgment or opinion (어때, 어떻게 생각해, 잘 돌아갈까, 검토해봐, 추천해, 너 생각, 네 의견 등), give a concrete, decisive answer based on the conversation history and your knowledge. Do not deflect with generic disclaimers like '정확도/정밀도/재현율/F1-score 같은 객관적 지표가 필요하다' or '구체적인 평가 지표와 데이터셋이 필요하다'. State your best assessment with a 1-2 sentence rationale, then optionally note any uncertainty. "
+            + "Do not repeat the same paragraphs across multiple turns. If the user asks the same thing again, dig deeper or take a clearer stance instead of repeating prior wording.";
         var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
         var promptForTurn = userInput;
         var mergedBuilder = new StringBuilder();
@@ -1834,7 +1843,10 @@ public sealed class LlmRouter : IDisposable
         }
         var endpoint = $"{_config.CerebrasBaseUrl.TrimEnd('/')}/chat/completions";
         var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
-            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them.";
+            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them. "
+            + "If conversation history is provided above, treat the user's short follow-up messages (e.g., '그니까 잘 돌아가?', '이 환경에서?', '24GB 구성임') as continuations of the prior turns. Never reply '이전 대화 맥락이 제공되지 않아' when [최근 대화] is in the prompt — use it. "
+            + "When the user asks for your judgment or opinion (어때, 어떻게 생각해, 잘 돌아갈까, 검토해봐, 추천해, 너 생각, 네 의견 등), give a concrete, decisive answer based on the conversation history and your knowledge. Do not deflect with generic disclaimers like '정확도/정밀도/재현율/F1-score 같은 객관적 지표가 필요하다' or '구체적인 평가 지표와 데이터셋이 필요하다'. State your best assessment with a 1-2 sentence rationale, then optionally note any uncertainty. "
+            + "Do not repeat the same paragraphs across multiple turns. If the user asks the same thing again, dig deeper or take a clearer stance instead of repeating prior wording.";
         var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
 
         var firstResult = await GenerateOpenAiCompatibleChatStreamingAsync(
@@ -1893,7 +1905,10 @@ public sealed class LlmRouter : IDisposable
         var model = string.IsNullOrWhiteSpace(modelOverride) ? _config.NvidiaModel : modelOverride.Trim();
         var endpoint = $"{_config.NvidiaBaseUrl.TrimEnd('/')}/chat/completions";
         var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
-            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them.";
+            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them. "
+            + "If conversation history is provided above, treat the user's short follow-up messages (e.g., '그니까 잘 돌아가?', '이 환경에서?', '24GB 구성임') as continuations of the prior turns. Never reply '이전 대화 맥락이 제공되지 않아' when [최근 대화] is in the prompt — use it. "
+            + "When the user asks for your judgment or opinion (어때, 어떻게 생각해, 잘 돌아갈까, 검토해봐, 추천해, 너 생각, 네 의견 등), give a concrete, decisive answer based on the conversation history and your knowledge. Do not deflect with generic disclaimers like '정확도/정밀도/재현율/F1-score 같은 객관적 지표가 필요하다' or '구체적인 평가 지표와 데이터셋이 필요하다'. State your best assessment with a 1-2 sentence rationale, then optionally note any uncertainty. "
+            + "Do not repeat the same paragraphs across multiple turns. If the user asks the same thing again, dig deeper or take a clearer stance instead of repeating prior wording.";
         var effectiveMaxOutputTokens = NormalizeNvidiaMaxOutputTokens(maxOutputTokens);
         var promptForTurn = userInput;
         var mergedBuilder = new StringBuilder();
@@ -1978,7 +1993,10 @@ public sealed class LlmRouter : IDisposable
         var model = string.IsNullOrWhiteSpace(modelOverride) ? _config.NvidiaModel : modelOverride.Trim();
         var endpoint = $"{_config.NvidiaBaseUrl.TrimEnd('/')}/chat/completions";
         var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
-            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them.";
+            + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them. "
+            + "If conversation history is provided above, treat the user's short follow-up messages (e.g., '그니까 잘 돌아가?', '이 환경에서?', '24GB 구성임') as continuations of the prior turns. Never reply '이전 대화 맥락이 제공되지 않아' when [최근 대화] is in the prompt — use it. "
+            + "When the user asks for your judgment or opinion (어때, 어떻게 생각해, 잘 돌아갈까, 검토해봐, 추천해, 너 생각, 네 의견 등), give a concrete, decisive answer based on the conversation history and your knowledge. Do not deflect with generic disclaimers like '정확도/정밀도/재현율/F1-score 같은 객관적 지표가 필요하다' or '구체적인 평가 지표와 데이터셋이 필요하다'. State your best assessment with a 1-2 sentence rationale, then optionally note any uncertainty. "
+            + "Do not repeat the same paragraphs across multiple turns. If the user asks the same thing again, dig deeper or take a clearer stance instead of repeating prior wording.";
         return await GenerateOpenAiCompatibleChatStreamingAsync(
             "nvidia",
             endpoint,

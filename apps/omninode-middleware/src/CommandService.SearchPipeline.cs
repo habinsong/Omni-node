@@ -3738,6 +3738,64 @@ public sealed partial class CommandService
             );
     }
 
+    // 직전 답변에 대한 follow-up/판단 요청처럼 보이는 입력 — 웹 검색이 아니라 conversational LLM 흐름이어야 함.
+    // 짧은 anaphoric ("그니까/그래서/이거"), 의견/판단 요청, 비교/추천, 검토 같은 신호를 잡아낸다.
+    private static bool LooksLikeConversationalFollowUp(string input)
+    {
+        var normalized = (input ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalized.Length == 0 || normalized.Length > 120)
+        {
+            return false;
+        }
+
+        if (ContainsAny(
+                normalized,
+                "그니까",
+                "그러니까",
+                "그래서",
+                "그럼",
+                "그러면",
+                "그래도",
+                "잘 돌아",
+                "잘 작동",
+                "잘 동작",
+                "잘 되",
+                "잘 될",
+                "잘 굴러",
+                "쓸만",
+                "쓸 만",
+                "괜찮",
+                "어때",
+                "어떨",
+                "어떤지",
+                "어떻게 생각",
+                "어떻게 봐",
+                "네 생각",
+                "네 의견",
+                "너 생각",
+                "너의 생각",
+                "당신 생각",
+                "당신의 생각",
+                "검토해",
+                "판단해",
+                "추천해",
+                "비교해",
+                "what do you think",
+                "would it work"))
+        {
+            return true;
+        }
+
+        // anaphoric markers + 짧은 길이.
+        if (normalized.Length <= 60
+            && ContainsAny(normalized, "이거", "이건", "이게", "이걸", "그거", "그건", "그게", "그걸", "저거", "이 환경", "이 모델", "이 상황"))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     private static bool LooksLikeClearlyNonWebQuestion(string input)
     {
         var normalized = (input ?? string.Empty).Trim().ToLowerInvariant();
@@ -3747,6 +3805,12 @@ public sealed partial class CommandService
         }
 
         if (LooksLikeLocalDateTimeQuestion(normalized))
+        {
+            return true;
+        }
+
+        // 직전 답변에 대한 후속/판단 요청은 무조건 LLM 흐름.
+        if (LooksLikeConversationalFollowUp(normalized))
         {
             return true;
         }

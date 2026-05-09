@@ -744,24 +744,68 @@ public sealed partial class CommandService
     private string ResolveContextualWebLookupInput(string conversationId, string input)
     {
         var normalized = (input ?? string.Empty).Trim();
-        if (!LooksLikeVagueWebLookupRequest(normalized))
+        // 모호한 lookup ("찾아봐") 외에도 짧은 follow-up 입력에는 직전 user/assistant turn 을 함께 묶어 보낸다.
+        // 그래야 grounded web 모델이 "잘 돌아가나?" "이 환경에서?" 같은 anaphoric 질문의 대상을 알 수 있다.
+        var needsContextEnrichment = LooksLikeVagueWebLookupRequest(normalized)
+                                     || (normalized.Length <= 60);
+        if (!needsContextEnrichment)
         {
             return normalized;
         }
 
-        var previousUser = _conversationStore.Get(conversationId)?.Messages
+        var thread = _conversationStore.Get(conversationId);
+        if (thread == null || thread.Messages == null || thread.Messages.Count == 0)
+        {
+            return normalized;
+        }
+
+        // 직전 user 1건 + 직전 assistant 1건을 함께 prepend (각각 길이 제한).
+        var recentMessages = thread.Messages
             .OrderByDescending(item => item.CreatedUtc)
-            .FirstOrDefault(item =>
-                item.Role.Equals("user", StringComparison.OrdinalIgnoreCase)
-                && !item.Text.Trim().Equals(normalized, StringComparison.OrdinalIgnoreCase))
-            ?.Text
-            .Trim();
-        if (string.IsNullOrWhiteSpace(previousUser))
+            .Take(8)
+            .ToArray();
+
+        string? previousUser = null;
+        string? previousAssistant = null;
+        foreach (var msg in recentMessages)
+        {
+            if (previousUser == null
+                && msg.Role.Equals("user", StringComparison.OrdinalIgnoreCase)
+                && !msg.Text.Trim().Equals(normalized, StringComparison.OrdinalIgnoreCase))
+            {
+                previousUser = msg.Text.Trim();
+            }
+            else if (previousAssistant == null
+                     && msg.Role.Equals("assistant", StringComparison.OrdinalIgnoreCase))
+            {
+                previousAssistant = msg.Text.Trim();
+            }
+            if (previousUser != null && previousAssistant != null) break;
+        }
+
+        if (string.IsNullOrWhiteSpace(previousUser) && string.IsNullOrWhiteSpace(previousAssistant))
         {
             return normalized;
         }
 
-        return $"{previousUser}\n\n추가 요청: {normalized}";
+        var sb = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(previousUser))
+        {
+            var capped = previousUser!.Length > 600 ? previousUser[..600] + "…" : previousUser;
+            sb.AppendLine("[직전 사용자 메시지]");
+            sb.AppendLine(capped);
+            sb.AppendLine();
+        }
+        if (!string.IsNullOrWhiteSpace(previousAssistant))
+        {
+            var capped = previousAssistant!.Length > 800 ? previousAssistant[..800] + "…" : previousAssistant;
+            sb.AppendLine("[직전 어시스턴트 답변]");
+            sb.AppendLine(capped);
+            sb.AppendLine();
+        }
+        sb.AppendLine("[새 사용자 메시지]");
+        sb.Append(normalized);
+        return sb.ToString();
     }
 
     private static bool LooksLikeVagueWebLookupRequest(string input)

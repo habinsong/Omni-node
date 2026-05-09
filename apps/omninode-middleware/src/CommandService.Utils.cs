@@ -390,13 +390,64 @@ public sealed partial class CommandService
                 "찾아봐",
                 "검색해봐",
                 "search it",
-                "look it up"))
+                "look it up",
+                // 후속 질문 마커 (anaphoric follow-up). 명시적인 anaphor가 없어도
+                // "그니까/그래서/그럼" 등 직전 답변에 대한 반응형 질문임을 시사.
+                "그니까",
+                "그러니까",
+                "그래서",
+                "그럼",
+                "그러면",
+                "그래도",
+                "결국",
+                // 판단/의견 요청 — 회피하지 말고 history 기반으로 답해야 함.
+                "잘 돌아",
+                "잘 작동",
+                "잘 동작",
+                "잘 되",
+                "잘 될",
+                "잘 굴러",
+                "쓸만",
+                "쓸 만",
+                "괜찮",
+                "어때",
+                "어떨",
+                "어떤지",
+                "어떻게 생각",
+                "어떻게 봐",
+                "네 생각",
+                "네 의견",
+                "너 생각",
+                "너의 생각",
+                "당신 생각",
+                "당신의 생각",
+                "검토해",
+                "판단해",
+                "추천해",
+                "비교해",
+                "rec recommend",
+                "what do you think",
+                "would it work"))
         {
             return true;
         }
 
-        return normalized.Length <= 80
-            && ContainsAny(normalized, "그 ", "이 ", "저 ", "위 ", "앞 ", "방금", "아까", "이거", "저거");
+        // 짧은 후속 발화는 거의 항상 직전 turn 의 맥락이 필요함.
+        // 길이 60 이하이면서 이름·구성 정보·숫자 같은 단편 정보만 담은 경우에도 history를 함께 본다.
+        if (normalized.Length <= 60)
+        {
+            if (ContainsAny(normalized, "그 ", "이 ", "저 ", "위 ", "앞 ", "방금", "아까", "이거", "저거", "이건", "그건", "이게", "이걸", "그걸"))
+            {
+                return true;
+            }
+            // 숫자/단위 위주(스펙 추가 정보)에 한국어 토큰 1~2개만 붙은 경우 — 직전 turn 보충.
+            if (Regex.IsMatch(normalized, @"\d") && normalized.Length <= 30)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool HasTopicalOverlapWithRecentConversation(string conversationId, string input)
