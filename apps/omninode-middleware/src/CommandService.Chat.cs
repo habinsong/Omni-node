@@ -368,13 +368,25 @@ public sealed partial class CommandService
             }
         }
 
-        using var singleRequestCts = requestedProvider.Equals("copilot", StringComparison.OrdinalIgnoreCase)
+        // Provider별로 응답 특성이 달라 일률적인 17초 타임아웃은 부적절하다.
+        // - Copilot: 자체 흐름 → 외부 timeout 없음
+        // - NVIDIA NIM: 큐잉/콜드스타트로 첫 청크까지 수십 초가 걸릴 수 있음 → 설정값 (기본 180s)
+        // - Cerebras: 빠르지만 free-tier 시 변동 → 설정값 (기본 20s)
+        // - 그 외(groq/gemini/codex 등): 빠른 제공자 → 17초 유지
+        TimeSpan? singleRequestTimeout = requestedProvider.ToLowerInvariant() switch
+        {
+            "copilot" => null,
+            "nvidia" => TimeSpan.FromSeconds(Math.Max(30, _config.NvidiaTimeoutSec)),
+            "cerebras" => TimeSpan.FromSeconds(Math.Max(40, _config.CerebrasTimeoutSec)),
+            _ => TimeSpan.FromSeconds(34),
+        };
+        using var singleRequestCts = singleRequestTimeout == null
             ? null
             : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var singleRequestToken = cancellationToken;
-        if (singleRequestCts != null)
+        if (singleRequestCts != null && singleRequestTimeout != null)
         {
-            singleRequestCts.CancelAfter(TimeSpan.FromSeconds(17));
+            singleRequestCts.CancelAfter(singleRequestTimeout.Value);
             singleRequestToken = singleRequestCts.Token;
         }
 
@@ -480,7 +492,13 @@ public sealed partial class CommandService
         // Think+ 모드 prepend (chat-single 단독 모드만)
         if (request.ThinkPlusEnabled && request.Mode == "single")
         {
-            var thinkPlusContext = await BuildThinkPlusContextAsync(rawInput, request.Source, effectiveSingleToken).ConfigureAwait(false);
+            var effectiveSkillForThinkPlus = ResolveEffectiveSkillNameForThread(requestedSkillName, session.SessionId);
+            var thinkPlusContext = await BuildThinkPlusContextAsync(
+                rawInput,
+                request.Source,
+                effectiveSingleToken,
+                effectiveSkillForThinkPlus
+            ).ConfigureAwait(false);
             if (!string.IsNullOrEmpty(thinkPlusContext))
             {
                 skillPreparedText = thinkPlusContext + skillPreparedText;
@@ -845,12 +863,100 @@ public sealed partial class CommandService
                 """;
     }
 
+    // 이번 턴에 실제로 적용될 스킬 이름. UI/인라인 지정이 있으면 그것, 아니면 thread sticky.
+    // Think+ 컨텍스트가 활성 스킬 톤을 인지하도록 활용된다.
+    private string? ResolveEffectiveSkillNameForThread(string? requestedSkillName, string? threadKey)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedSkillName))
+        {
+            return requestedSkillName.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(threadKey))
+        {
+            return null;
+        }
+
+        return _activeSkillByThread.TryGetValue(threadKey, out var name)
+               && !string.IsNullOrWhiteSpace(name)
+            ? name
+            : null;
+    }
+
+    // 프롬프트 안에서 언급된 모든 스킬을 길이순으로 탐지.
+    // 매칭된 부분은 마스킹해 한 스킬 이름이 다른 스킬 이름의 부분 문자열일 때 중복 카운트되지 않게 한다.
+    private List<SkillManifest> DetectMentionedSkillsInPrompt(string input)
+    {
+        var result = new List<SkillManifest>();
+        var trimmed = (input ?? string.Empty).Trim();
+        if (trimmed.Length == 0)
+        {
+            return result;
+        }
+
+        try
+        {
+            var snapshot = _projectContextLoader.LoadSnapshot();
+            var working = new StringBuilder(trimmed);
+            foreach (var skill in snapshot.Skills.OrderByDescending(s => s.Name.Length))
+            {
+                if (string.IsNullOrWhiteSpace(skill.Name))
+                {
+                    continue;
+                }
+
+                var idx = working.ToString().IndexOf(skill.Name, StringComparison.OrdinalIgnoreCase);
+                if (idx < 0)
+                {
+                    continue;
+                }
+
+                result.Add(skill);
+                for (var i = 0; i < skill.Name.Length; i++)
+                {
+                    working[idx + i] = '\0';
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _auditLogger.Log("local", "skill_detect_mentions", "failed", ex.Message);
+        }
+
+        return result;
+    }
+
+    // 프롬프트에 두 개 이상의 스킬 이름이 들어 있으면 거부 메시지 반환. 한 번에 한 스킬만 허용.
+    private string? TryBuildMultiSkillRejectionResponse(string input)
+    {
+        var mentioned = DetectMentionedSkillsInPrompt(input);
+        if (mentioned.Count < 2)
+        {
+            return null;
+        }
+
+        var names = string.Join(", ", mentioned.Select(s => $"`{s.Name}`"));
+        return $"""
+                한 번에 한 개의 스킬만 사용할 수 있어요.
+                지금 입력에서 스킬 이름이 {mentioned.Count}개 발견됐습니다: {names}
+                사용할 스킬 하나만 남기고 다시 보내 주세요.
+                """;
+    }
+
     private string? TryBuildLocalAssistantInfoResponse(
         string input,
         string? threadKey = null,
         string source = "local"
     )
     {
+        // 다중 스킬 언급은 가장 우선순위로 거부. 활성화/인벤토리 검사 모두 건너뛴다.
+        var multiSkillRejection = TryBuildMultiSkillRejectionResponse(input ?? string.Empty);
+        if (!string.IsNullOrWhiteSpace(multiSkillRejection))
+        {
+            _auditLogger.Log(source, "skill_multi_mention", "blocked", "");
+            return multiSkillRejection;
+        }
+
         var normalized = Regex.Replace((input ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
         if (normalized.Length == 0 || normalized.Length > 180)
         {
@@ -858,11 +964,9 @@ public sealed partial class CommandService
         }
 
         var compact = Regex.Replace(normalized, @"[\p{P}\p{S}\s]+", string.Empty);
-        if (LooksLikeLocalSkillInventoryQuestion(normalized, compact))
-        {
-            return BuildLocalSkillInventoryResponse();
-        }
 
+        // 스킬 활성화/비활성화 의도를 먼저 처리한다. "X 스킬을 사용해서 Y 해줘" 같이
+        // 명시적으로 특정 스킬을 호출하는 입력이 인벤토리/식별 응답으로 잘못 라우팅되는 것을 막는다.
         var skillDeactivationReply = TryBuildLocalSkillDeactivationResponse(normalized, threadKey, source);
         if (!string.IsNullOrWhiteSpace(skillDeactivationReply))
         {
@@ -880,6 +984,11 @@ public sealed partial class CommandService
         if (hasActiveSkill)
         {
             return null;
+        }
+
+        if (LooksLikeLocalSkillInventoryQuestion(normalized, compact))
+        {
+            return BuildLocalSkillInventoryResponse();
         }
 
         if (LooksLikeLocalLimitationQuestion(normalized, compact))
@@ -1027,22 +1136,44 @@ public sealed partial class CommandService
             return false;
         }
 
-        return ContainsAny(
-            normalized,
-            "뭐",
-            "무엇",
-            "어떤",
-            "목록",
-            "리스트",
-            "보여",
-            "알려",
-            "있어",
-            "있니",
-            "가능",
-            "가지고",
-            "사용 가능한",
-            "available",
-            "list");
+        // 인벤토리 질문은 "스킬"과 의문/목록 표지어가 가까이 붙어 있어야 한다.
+        // 예) "어떤 스킬 있어?", "스킬 목록 보여줘", "스킬이 뭐 있어"
+        // "eli5 스킬을 사용해서 디지털 카메라 원리 말해줘" 처럼 다른 단어로 분리되면 인벤토리가 아니다.
+        var inventoryMarker = @"(뭐|무엇|무슨|어떤|어떠한|어떻|종류|목록|리스트|보여|알려|available|list)";
+        var skillToken = @"(스킬|skill|skills|skill\.md)";
+        var particle = @"(을|를|이|가|은|는|에|의|에는|들|들이|들은|들을)?";
+
+        if (Regex.IsMatch(normalized, $@"(?i){skillToken}\s*{particle}\s*{inventoryMarker}"))
+        {
+            return true;
+        }
+        if (Regex.IsMatch(normalized, $@"(?i){inventoryMarker}\s*{skillToken}"))
+        {
+            return true;
+        }
+        if (Regex.IsMatch(normalized, $@"(?i){skillToken}\s*{particle}\s*(있|가지고|사용\s*가능)"))
+        {
+            return true;
+        }
+
+        // 띄어쓰기가 없는 합성형 (e.g. "스킬뭐있어", "어떤스킬")
+        var compactPatterns = new[]
+        {
+            "스킬뭐", "스킬어떤", "스킬어떠", "스킬어떻", "스킬무슨", "스킬무엇",
+            "스킬목록", "스킬리스트", "스킬종류", "스킬보여", "스킬알려",
+            "스킬있", "스킬가지고", "스킬사용가능",
+            "어떤스킬", "어떠한스킬", "어떻스킬", "무슨스킬", "무엇스킬",
+            "skill뭐", "skill어떤", "skill목록", "skill리스트",
+        };
+        foreach (var pattern in compactPatterns)
+        {
+            if (compact.Contains(pattern, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool LooksLikeLocalLimitationQuestion(string normalized, string compact)
@@ -1523,7 +1654,13 @@ public sealed partial class CommandService
         );
         if (request.ThinkPlusEnabled)
         {
-            var thinkPlusContext = await BuildThinkPlusContextAsync(rawInput, request.Source, cancellationToken).ConfigureAwait(false);
+            var effectiveSkillForThinkPlus = ResolveEffectiveSkillNameForThread(requestedSkillName, session.SessionId);
+            var thinkPlusContext = await BuildThinkPlusContextAsync(
+                rawInput,
+                request.Source,
+                cancellationToken,
+                effectiveSkillForThinkPlus
+            ).ConfigureAwait(false);
             if (!string.IsNullOrEmpty(thinkPlusContext))
             {
                 thinkPlusPreText = thinkPlusContext + thinkPlusPreText;
@@ -1775,7 +1912,13 @@ public sealed partial class CommandService
         );
         if (request.ThinkPlusEnabled)
         {
-            var thinkPlusContext = await BuildThinkPlusContextAsync(rawInput, request.Source, cancellationToken).ConfigureAwait(false);
+            var effectiveSkillForThinkPlus = ResolveEffectiveSkillNameForThread(requestedSkillName, session.SessionId);
+            var thinkPlusContext = await BuildThinkPlusContextAsync(
+                rawInput,
+                request.Source,
+                cancellationToken,
+                effectiveSkillForThinkPlus
+            ).ConfigureAwait(false);
             if (!string.IsNullOrEmpty(thinkPlusContext))
             {
                 thinkPlusPreText = thinkPlusContext + thinkPlusPreText;

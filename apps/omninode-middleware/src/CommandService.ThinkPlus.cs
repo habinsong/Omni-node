@@ -77,8 +77,14 @@ public sealed partial class CommandService
     /// <summary>
     /// Gemini grounded web search 결과를 fetched 한 뒤 prepend용 컨텍스트 블록을 만든다.
     /// 키 없거나 실패 시 빈 문자열 반환.
+    /// activeSkillName이 비어있지 않으면 출력 형식·말투 규칙은 활성 스킬 지침에 양보한다.
     /// </summary>
-    private async Task<string> BuildThinkPlusContextAsync(string input, string source, CancellationToken cancellationToken)
+    private async Task<string> BuildThinkPlusContextAsync(
+        string input,
+        string source,
+        CancellationToken cancellationToken,
+        string? activeSkillName = null
+    )
     {
         var trimmed = (input ?? string.Empty).Trim();
         if (trimmed.Length == 0) return string.Empty;
@@ -133,6 +139,12 @@ public sealed partial class CommandService
                 $"chars={capped.Length}"
             );
 
+            // 활성 스킬이 있으면 출력 톤·형식 규칙은 스킬에 양보한다.
+            // 사실 정확성 규칙(1~5,7)은 유지하되, 형식 관련 8번은 스킬 우선으로 대체.
+            var styleRule = string.IsNullOrWhiteSpace(activeSkillName)
+                ? "8. 답변은 한국어, 결론 먼저, 군더더기 없이. 출처는 핵심만 짧게(또는 생략)."
+                : $"8. 출력 형식·말투·길이·구성은 활성 스킬(`{activeSkillName}`) 지침을 최우선으로 따르세요. 위 참고 자료는 사실 근거로만 사용하며, Think+ 자체의 톤 규칙은 적용하지 마세요.";
+
             return $@"[Think+ 참고 자료 — 시작]
 다음은 사용자의 질문에 도움이 될 수 있는 최근 웹 검색 결과입니다.
 이 내용은 참고용 자료이며, 사용자에게 보일 답변이 아닙니다.
@@ -148,7 +160,7 @@ public sealed partial class CommandService
 5. 사용자가 특정 사이트나 매체(AccuWeather, 인베스팅닷컴, 연합뉴스 등)를 언급했는데 자료에 그 출처 정보가 없으면 ""해당 사이트의 데이터를 직접 가져오지 못했다""고 명시하세요.
 6. 답변에 ""확인.""·""확인했습니다.""·""준비되었습니다."" 같은 거짓 진행 보고나 빈 인사를 넣지 마세요. 결론·핵심부터 작성하세요.
 7. 미래 시점(수개월~수년 뒤) 예측은 부정확함을 명시하고, 자료에 공식 예보가 있을 때만 그 값을 인용하세요.
-8. 답변은 한국어, 결론 먼저, 군더더기 없이. 출처는 핵심만 짧게(또는 생략).
+{styleRule}
 --------------------------------------------------
 
 ";

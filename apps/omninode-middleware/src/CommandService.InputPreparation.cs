@@ -57,7 +57,16 @@ public sealed partial class CommandService
         var builder = new StringBuilder();
 
         var skipProjectContext = Regex.IsMatch(normalizedInput, @"(?i)(agent\.md|agents\.md)\s*(사용\s*안\s*함|쓰지\s*마|사용하지\s*마|제외|빼|무시)");
-        var isSkillListRequested = Regex.IsMatch(normalizedInput, @"(?i)(스킬|skill|skills|skill\.md).*(목록|리스트|뭐|보여|알려|어떤|종류|있어|있니|돼)");
+        // 인벤토리/리스트 의도는 "스킬"과 의문/목록 표지어가 인접해 있을 때만 인정한다.
+        // "X 스킬 사용해서 ... 어떻게/어떤지" 같이 단어가 멀리 떨어진 경우는 활성화 요청이지 리스트 요청이 아니다.
+        var isSkillListRequested = Regex.IsMatch(
+                                       normalizedInput,
+                                       @"(?i)(스킬|skill|skills|skill\.md)\s*(을|를|이|가|은|는|에|의|들)?\s*(목록|리스트|뭐|무엇|무슨|보여|알려|어떤|어떠한|종류|있어|있니|있나|가지고)"
+                                   )
+                                   || Regex.IsMatch(
+                                       normalizedInput,
+                                       @"(?i)(목록|리스트|뭐|무엇|무슨|보여|알려|어떤|어떠한|종류).{0,8}(스킬|skill|skills|skill\.md)"
+                                   );
         var isSkillCreationRequested = LooksLikeSkillCreationRequest(normalizedInput);
         var isSkillDeactivationRequested = LooksLikeSkillDeactivationRequest(normalizedInput);
         var threadKeyForActiveSkill = string.IsNullOrWhiteSpace(threadBindingKey) ? sessionKey : threadBindingKey;

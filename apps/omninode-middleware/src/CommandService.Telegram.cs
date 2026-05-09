@@ -1979,7 +1979,13 @@ public sealed partial class CommandService
         // Think+ 활성이면 sharedPrepared 앞에 web context prepend
         if (thinkPlusActiveForTelegram)
         {
-            var thinkPlusContext = await BuildThinkPlusContextAsync(requestText, "telegram", cancellationToken).ConfigureAwait(false);
+            var effectiveSkillForThinkPlus = ResolveEffectiveSkillNameForThread(requestedSkillName, session.SessionId);
+            var thinkPlusContext = await BuildThinkPlusContextAsync(
+                requestText,
+                "telegram",
+                cancellationToken,
+                effectiveSkillForThinkPlus
+            ).ConfigureAwait(false);
             if (!string.IsNullOrEmpty(thinkPlusContext))
             {
                 preparedInput = thinkPlusContext + preparedInput;

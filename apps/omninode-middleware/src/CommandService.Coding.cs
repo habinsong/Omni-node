@@ -32,6 +32,55 @@ public sealed partial class CommandService
         return RunCodingMultiCoreAsync(request, cancellationToken, progressCallback);
     }
 
+    // 프롬프트에 두 개 이상의 스킬 이름이 있으면 코딩 흐름에서도 거부 결과 반환.
+    private CodingRunResult? TryBuildCodingMultiSkillRejectionResult(
+        string mode,
+        ConversationThreadView thread,
+        string rawInput,
+        string provider,
+        string model,
+        string codingRunRoot,
+        string language,
+        string source
+    )
+    {
+        var rejection = TryBuildMultiSkillRejectionResponse(rawInput);
+        if (string.IsNullOrWhiteSpace(rejection))
+        {
+            return null;
+        }
+
+        _auditLogger.Log(source, "skill_multi_mention", "blocked", $"mode=coding-{mode}");
+        var execution = new CodeExecutionResult(
+            language,
+            codingRunRoot,
+            "-",
+            "(none)",
+            0,
+            string.Empty,
+            rejection,
+            "skipped"
+        );
+        var assistantMeta = $"coding-{mode}:multi_skill_rejected";
+        _conversationStore.AppendMessage(thread.Id, "user", rawInput, $"coding-{mode}");
+        _conversationStore.AppendMessage(thread.Id, "assistant", rejection, assistantMeta);
+        var view = _conversationStore.Get(thread.Id) ?? thread;
+        return PersistLatestCodingResult(new CodingRunResult(
+            mode,
+            view.Id,
+            provider,
+            model,
+            language,
+            string.Empty,
+            execution,
+            Array.Empty<CodingWorkerResult>(),
+            Array.Empty<string>(),
+            rejection,
+            view,
+            null
+        ));
+    }
+
     private async Task<CodingRunResult> RunCodingSingleCoreAsync(
         CodingRunRequest request,
         CancellationToken cancellationToken,
@@ -53,6 +102,21 @@ public sealed partial class CommandService
         var rawInput = (request.Input ?? string.Empty).Trim();
         var codingRunRoot = CreateCodingRunWorkspaceRoot("single");
         var routingCategory = ResolveCodingTaskCategory(request.Category, rawInput);
+
+        var multiSkillRejectionSingle = TryBuildCodingMultiSkillRejectionResult(
+            "single",
+            thread,
+            rawInput,
+            "-",
+            "-",
+            codingRunRoot,
+            request.Language,
+            request.Source
+        );
+        if (multiSkillRejectionSingle != null)
+        {
+            return multiSkillRejectionSingle;
+        }
 
         var provider = NormalizeProvider(request.Provider, allowAuto: true);
         if (provider == "auto")
@@ -152,7 +216,13 @@ public sealed partial class CommandService
         );
         if (request.ThinkPlusEnabled && request.Mode == "single")
         {
-            var thinkPlusContext = await BuildThinkPlusContextAsync(rawInput, request.Source, cancellationToken).ConfigureAwait(false);
+            var effectiveSkillForThinkPlus = ResolveEffectiveSkillNameForThread(requestedSkillName, session.SessionId);
+            var thinkPlusContext = await BuildThinkPlusContextAsync(
+                rawInput,
+                request.Source,
+                cancellationToken,
+                effectiveSkillForThinkPlus
+            ).ConfigureAwait(false);
             if (!string.IsNullOrEmpty(thinkPlusContext))
             {
                 thinkPlusPreText = thinkPlusContext + thinkPlusPreText;
@@ -347,6 +417,22 @@ public sealed partial class CommandService
         var thread = session.Thread;
         var rawInput = (request.Input ?? string.Empty).Trim();
         var codingRunRoot = CreateCodingRunWorkspaceRoot("orchestration");
+
+        var multiSkillRejectionOrch = TryBuildCodingMultiSkillRejectionResult(
+            "orchestration",
+            thread,
+            rawInput,
+            "-",
+            "-",
+            codingRunRoot,
+            request.Language,
+            request.Source
+        );
+        if (multiSkillRejectionOrch != null)
+        {
+            return multiSkillRejectionOrch;
+        }
+
         var autoRoleMode = string.IsNullOrWhiteSpace(rawInput);
         var effectiveInput = autoRoleMode
             ? BuildAutoOrchestrationCodingInput(request.Language)
@@ -415,7 +501,13 @@ public sealed partial class CommandService
         );
         if (request.ThinkPlusEnabled)
         {
-            var thinkPlusContext = await BuildThinkPlusContextAsync(effectiveInput, request.Source, cancellationToken).ConfigureAwait(false);
+            var effectiveSkillForThinkPlus = ResolveEffectiveSkillNameForThread(requestedSkillName, session.SessionId);
+            var thinkPlusContext = await BuildThinkPlusContextAsync(
+                effectiveInput,
+                request.Source,
+                cancellationToken,
+                effectiveSkillForThinkPlus
+            ).ConfigureAwait(false);
             if (!string.IsNullOrEmpty(thinkPlusContext))
             {
                 thinkPlusPreText = thinkPlusContext + thinkPlusPreText;
@@ -767,6 +859,22 @@ public sealed partial class CommandService
         var thread = session.Thread;
         var rawInput = (request.Input ?? string.Empty).Trim();
         var codingRunRoot = CreateCodingRunWorkspaceRoot("multi");
+
+        var multiSkillRejectionMulti = TryBuildCodingMultiSkillRejectionResult(
+            "multi",
+            thread,
+            rawInput,
+            "-",
+            "-",
+            codingRunRoot,
+            request.Language,
+            request.Source
+        );
+        if (multiSkillRejectionMulti != null)
+        {
+            return multiSkillRejectionMulti;
+        }
+
         var sharedPrepared = await PrepareSharedInputAsync(
             rawInput,
             request.Attachments,
@@ -828,7 +936,13 @@ public sealed partial class CommandService
         );
         if (request.ThinkPlusEnabled)
         {
-            var thinkPlusContext = await BuildThinkPlusContextAsync(rawInput, request.Source, cancellationToken).ConfigureAwait(false);
+            var effectiveSkillForThinkPlus = ResolveEffectiveSkillNameForThread(requestedSkillName, session.SessionId);
+            var thinkPlusContext = await BuildThinkPlusContextAsync(
+                rawInput,
+                request.Source,
+                cancellationToken,
+                effectiveSkillForThinkPlus
+            ).ConfigureAwait(false);
             if (!string.IsNullOrEmpty(thinkPlusContext))
             {
                 thinkPlusPreText = thinkPlusContext + thinkPlusPreText;

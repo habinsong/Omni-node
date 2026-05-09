@@ -97,6 +97,15 @@ public sealed partial class CommandService
     private Task<string?> TryHandleTelegramNaturalSkillCommandAsync(string text, CancellationToken cancellationToken)
     {
         _ = cancellationToken;
+
+        // 다중 스킬 언급은 활성화/인벤토리 검사보다 먼저 거부.
+        var multiSkillRejection = TryBuildMultiSkillRejectionResponse(text ?? string.Empty);
+        if (!string.IsNullOrWhiteSpace(multiSkillRejection))
+        {
+            _auditLogger.Log("telegram", "skill_multi_mention", "blocked", "");
+            return Task.FromResult<string?>(multiSkillRejection);
+        }
+
         var normalized = Regex.Replace((text ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
         if (normalized.Length == 0 || normalized.Length > 220)
         {
@@ -104,40 +113,41 @@ public sealed partial class CommandService
         }
 
         var compact = Regex.Replace(normalized, @"[\p{P}\p{S}\s]+", string.Empty);
-        if (LooksLikeLocalSkillInventoryQuestion(normalized, compact))
-        {
-            return Task.FromResult<string?>(BuildLocalSkillInventoryResponse());
-        }
 
-        var matched = FindMentionedSkill(normalized);
+        // 비활성화/활성화 의도를 인벤토리 검사보다 먼저 처리해
+        // "<스킬명> 스킬 사용해서 ... 해줘" 같은 명시적 호출이 인벤토리로 잘못 빠지지 않게 한다.
         if (LooksLikeSkillDeactivationRequest(normalized))
         {
             return Task.FromResult<string?>(DeactivateTelegramSkill());
         }
 
+        var matched = FindMentionedSkill(normalized);
         var activationRequested = LooksLikeTelegramSkillActivationRequest(normalized, compact, matched != null);
-        if (!activationRequested)
+        if (activationRequested)
         {
-            return Task.FromResult<string?>(null);
-        }
-
-        if (LooksLikeInlineSkillTask(normalized))
-        {
-            if (matched == null)
+            if (LooksLikeInlineSkillTask(normalized))
             {
+                if (matched == null)
+                {
+                    return Task.FromResult<string?>(null);
+                }
+
+                _ = ActivateTelegramSkill(matched.Name, matched.Scope, returnAck: false);
                 return Task.FromResult<string?>(null);
             }
 
-            _ = ActivateTelegramSkill(matched.Name, matched.Scope, returnAck: false);
-            return Task.FromResult<string?>(null);
+            if (matched != null)
+            {
+                return Task.FromResult<string?>(ActivateTelegramSkill(matched.Name, matched.Scope, returnAck: true));
+            }
         }
 
-        if (matched == null)
+        if (LooksLikeLocalSkillInventoryQuestion(normalized, compact))
         {
-            return Task.FromResult<string?>(null);
+            return Task.FromResult<string?>(BuildLocalSkillInventoryResponse());
         }
 
-        return Task.FromResult<string?>(ActivateTelegramSkill(matched.Name, matched.Scope, returnAck: true));
+        return Task.FromResult<string?>(null);
     }
 
     private string ActivateTelegramSkill(string name, string? scope, bool returnAck)
