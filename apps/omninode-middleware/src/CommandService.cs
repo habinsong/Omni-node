@@ -330,7 +330,47 @@ public sealed partial class CommandService :
         };
         EnsureRoutinePromptFiles();
         LoadRoutineState();
+        RestoreActiveSkillBindingsFromStore();
         _routineSchedulerTask = Task.Run(() => RoutineSchedulerLoopAsync(_routineSchedulerCts.Token));
+    }
+
+    // 시작 시 ConversationStore에 영구 저장된 활성 스킬을 메모리 dictionary로 복원.
+    private void RestoreActiveSkillBindingsFromStore()
+    {
+        try
+        {
+            var bindings = _conversationStore.ListActiveSkillBindings();
+            foreach (var (conversationId, skillName) in bindings)
+            {
+                if (string.IsNullOrWhiteSpace(conversationId) || string.IsNullOrWhiteSpace(skillName))
+                {
+                    continue;
+                }
+                _activeSkillByThread[conversationId.Trim().ToLowerInvariant()] = skillName.Trim();
+            }
+            _auditLogger.Log("local", "skill_active_restore", "ok", $"count={bindings.Count}");
+        }
+        catch (Exception ex)
+        {
+            _auditLogger.Log("local", "skill_active_restore", "failed", ex.Message);
+        }
+    }
+
+    // 활성 스킬 변경/해제를 ConversationStore에도 영구 저장. 키가 비어있으면 no-op.
+    private void PersistActiveSkillForThread(string? threadKey, string? skillName)
+    {
+        if (string.IsNullOrWhiteSpace(threadKey))
+        {
+            return;
+        }
+        try
+        {
+            _conversationStore.SetActiveSkillName(threadKey, skillName);
+        }
+        catch (Exception ex)
+        {
+            _auditLogger.Log("local", "skill_active_persist", "failed", ex.Message);
+        }
     }
 
 }

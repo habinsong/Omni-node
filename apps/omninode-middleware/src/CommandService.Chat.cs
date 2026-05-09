@@ -376,9 +376,9 @@ public sealed partial class CommandService
         TimeSpan? singleRequestTimeout = requestedProvider.ToLowerInvariant() switch
         {
             "copilot" => null,
-            "nvidia" => TimeSpan.FromSeconds(Math.Max(30, _config.NvidiaTimeoutSec)),
-            "cerebras" => TimeSpan.FromSeconds(Math.Max(40, _config.CerebrasTimeoutSec)),
-            _ => TimeSpan.FromSeconds(34),
+            "nvidia" => TimeSpan.FromSeconds(Math.Max(_config.NvidiaMinSingleChatTimeoutSec, _config.NvidiaTimeoutSec)),
+            "cerebras" => TimeSpan.FromSeconds(Math.Max(_config.CerebrasMinSingleChatTimeoutSec, _config.CerebrasTimeoutSec)),
+            _ => TimeSpan.FromSeconds(_config.SingleChatDefaultTimeoutSec),
         };
         using var singleRequestCts = singleRequestTimeout == null
             ? null
@@ -483,7 +483,7 @@ public sealed partial class CommandService
                 );
         }
 
-        var requestedSkillName = FirstNonEmptyLocal(request.SkillName, TryExtractInlineSkillName(rawInput));
+        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, rawInput);
         var skillPreparedText = ApplySelectedSkillToPrompt(
             preparedInput.Text,
             requestedSkillName,
@@ -883,8 +883,54 @@ public sealed partial class CommandService
             : null;
     }
 
+    // 단어 경계 기반으로 한 스킬 이름이 텍스트 안에 등장하는 첫 인덱스를 찾는다. 매칭은 영문/숫자/_/- 외 문자(공백·구두점·CJK)에 둘러싸여야 한다.
+    // 짧은 이름(예: "ai")이 일반 영단어("aim")의 부분 문자열로 매칭되는 false-positive를 막는다.
+    private static int IndexOfSkillNameWithBoundary(string text, string skillName)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrWhiteSpace(skillName))
+        {
+            return -1;
+        }
+
+        var startSearch = 0;
+        while (startSearch <= text.Length - skillName.Length)
+        {
+            var idx = text.IndexOf(skillName, startSearch, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0)
+            {
+                return -1;
+            }
+
+            var leftOk = idx == 0 || !IsSkillNameBoundaryInside(text[idx - 1]);
+            var rightIdx = idx + skillName.Length;
+            var rightOk = rightIdx >= text.Length || !IsSkillNameBoundaryInside(text[rightIdx]);
+            if (leftOk && rightOk)
+            {
+                return idx;
+            }
+
+            startSearch = idx + 1;
+        }
+
+        return -1;
+    }
+
+    private static bool IsSkillNameBoundaryInside(char c)
+    {
+        // 스킬 이름 토큰 내부 문자로 간주하는 집합. ASCII 영숫자, '-', '_'.
+        if (c == '-' || c == '_')
+        {
+            return true;
+        }
+
+        return (c >= 'a' && c <= 'z')
+               || (c >= 'A' && c <= 'Z')
+               || (c >= '0' && c <= '9');
+    }
+
     // 프롬프트 안에서 언급된 모든 스킬을 길이순으로 탐지.
     // 매칭된 부분은 마스킹해 한 스킬 이름이 다른 스킬 이름의 부분 문자열일 때 중복 카운트되지 않게 한다.
+    // 단어 경계 검사로 짧은 스킬 이름이 일반 텍스트에 묻어 들어가는 false-positive를 차단.
     private List<SkillManifest> DetectMentionedSkillsInPrompt(string input)
     {
         var result = new List<SkillManifest>();
@@ -905,7 +951,7 @@ public sealed partial class CommandService
                     continue;
                 }
 
-                var idx = working.ToString().IndexOf(skill.Name, StringComparison.OrdinalIgnoreCase);
+                var idx = IndexOfSkillNameWithBoundary(working.ToString(), skill.Name);
                 if (idx < 0)
                 {
                     continue;
@@ -924,6 +970,31 @@ public sealed partial class CommandService
         }
 
         return result;
+    }
+
+    // 한 스킬만 매칭됐을 때 그 스킬을 반환. 0개면 null, 2개 이상이면 거부 케이스이므로 null. 단어 경계 검사 사용.
+    private SkillManifest? FindSingleMentionedSkillInPrompt(string input)
+    {
+        var mentioned = DetectMentionedSkillsInPrompt(input);
+        return mentioned.Count == 1 ? mentioned[0] : null;
+    }
+
+    // 프롬프트 안에서 스킬 이름이 명시되면 그 스킬을, 그렇지 않으면 UI 드롭다운 선택을 사용.
+    // 다중 스킬은 상위 흐름에서 이미 거부되므로 여기선 단일 매칭만 처리한다.
+    // UI 선택과 프롬프트 명시가 다르면 프롬프트가 우선 — 사용자가 직접 입력한 의도가 더 명시적.
+    private string? ResolvePromptOrUiSkillName(string? uiSkillName, string rawInput)
+    {
+        var inlineByActivation = TryExtractInlineSkillName(rawInput);
+        if (!string.IsNullOrWhiteSpace(inlineByActivation))
+        {
+            return inlineByActivation.Trim();
+        }
+        var inlineMention = FindSingleMentionedSkillInPrompt(rawInput);
+        if (inlineMention != null)
+        {
+            return inlineMention.Name;
+        }
+        return string.IsNullOrWhiteSpace(uiSkillName) ? null : uiSkillName.Trim();
     }
 
     // 프롬프트에 두 개 이상의 스킬 이름이 들어 있으면 거부 메시지 반환. 한 번에 한 스킬만 허용.
@@ -1044,9 +1115,8 @@ public sealed partial class CommandService
             return null;
         }
 
-        var matchedSkill = snapshot.Skills
-            .OrderByDescending(skill => skill.Name.Length)
-            .FirstOrDefault(skill => normalized.Contains(skill.Name, StringComparison.OrdinalIgnoreCase));
+        // 단어 경계 검사 helper 사용. 다중 스킬은 상위에서 거부됨.
+        var matchedSkill = DetectMentionedSkillsInPrompt(normalized).FirstOrDefault();
         if (matchedSkill == null)
         {
             return null;
@@ -1054,8 +1124,15 @@ public sealed partial class CommandService
 
         if (!string.IsNullOrWhiteSpace(threadKey))
         {
+            // 활성 스킬 교체 시 이전 이름과 함께 audit log.
+            _activeSkillByThread.TryGetValue(threadKey, out var previousSkill);
             _activeSkillByThread[threadKey] = matchedSkill.Name;
-            _auditLogger.Log(source, "skill_activate", "ok", $"name={matchedSkill.Name} scope={matchedSkill.Scope}");
+            PersistActiveSkillForThread(threadKey, matchedSkill.Name);
+            var auditDetail = string.IsNullOrWhiteSpace(previousSkill)
+                              || string.Equals(previousSkill, matchedSkill.Name, StringComparison.OrdinalIgnoreCase)
+                ? $"name={matchedSkill.Name} scope={matchedSkill.Scope}"
+                : $"name={matchedSkill.Name} scope={matchedSkill.Scope} replaced={previousSkill}";
+            _auditLogger.Log(source, "skill_activate", "ok", auditDetail);
         }
 
         // 사용자가 같은 메시지에 task까지 같이 줬으면 안내문 대신 바로 LLM에 넘긴다.
@@ -1119,6 +1196,7 @@ public sealed partial class CommandService
 
         if (_activeSkillByThread.TryRemove(threadKey, out var skillName))
         {
+            PersistActiveSkillForThread(threadKey, null);
             _auditLogger.Log(source, "skill_deactivate", "ok", $"name={skillName}");
             return $"`{skillName}` 스킬을 해제했습니다.";
         }
@@ -1469,10 +1547,11 @@ public sealed partial class CommandService
         try
         {
             var snapshot = _projectContextLoader.LoadSnapshot();
+            // 단어 경계 검사로 후보를 좁힌 뒤, 활성화 동사 패턴이 함께 있는 첫 매칭만 채택.
             return snapshot.Skills
                 .OrderByDescending(skill => skill.Name.Length)
                 .FirstOrDefault(skill =>
-                    normalized.Contains(skill.Name, StringComparison.OrdinalIgnoreCase)
+                    IndexOfSkillNameWithBoundary(normalized, skill.Name) >= 0
                     && Regex.IsMatch(
                         normalized,
                         $@"(?i){Regex.Escape(skill.Name)}\s*(스킬|skill)?\s*(을|를)?\s*(사용|적용|활성|켜|on)"
@@ -1646,7 +1725,7 @@ public sealed partial class CommandService
                 basePrepared.RetryStopReason
             );
         }
-        var requestedSkillName = FirstNonEmptyLocal(request.SkillName, TryExtractInlineSkillName(rawInput));
+        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, rawInput);
         var thinkPlusPreText = ApplySelectedSkillToPrompt(
             basePrepared.Text,
             requestedSkillName,
@@ -1904,7 +1983,7 @@ public sealed partial class CommandService
                 localNvidiaModel
             );
         }
-        var requestedSkillName = FirstNonEmptyLocal(request.SkillName, TryExtractInlineSkillName(rawInput));
+        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, rawInput);
         var thinkPlusPreText = ApplySelectedSkillToPrompt(
             basePrepared.Text,
             requestedSkillName,

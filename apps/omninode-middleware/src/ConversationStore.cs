@@ -325,6 +325,40 @@ public sealed class ConversationStore : IConversationStore
         }
     }
 
+    // 활성 스킬 이름을 thread에 영구 저장. null/empty 전달 시 해제.
+    public void SetActiveSkillName(string conversationId, string? skillName)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId)) return;
+        lock (_lock)
+        {
+            if (!_state.Conversations.Any(t => string.Equals(t.Id, conversationId, StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+            var thread = RequireThreadLocked(conversationId);
+            var normalized = string.IsNullOrWhiteSpace(skillName) ? null : skillName.Trim();
+            if (string.Equals(thread.ActiveSkillName, normalized, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+            thread.ActiveSkillName = normalized;
+            thread.UpdatedUtc = DateTimeOffset.UtcNow;
+            SaveLocked();
+        }
+    }
+
+    // 영구 저장된 활성 스킬을 모두 읽어 (conversationId, skillName) 쌍을 반환. 시작 시 메모리 dictionary 복원에 사용.
+    public IReadOnlyList<(string ConversationId, string SkillName)> ListActiveSkillBindings()
+    {
+        lock (_lock)
+        {
+            return _state.Conversations
+                .Where(t => !string.IsNullOrWhiteSpace(t.ActiveSkillName))
+                .Select(t => (t.Id, t.ActiveSkillName!))
+                .ToArray();
+        }
+    }
+
     public ConversationThreadView SetLinkedMemoryNotes(string conversationId, IReadOnlyList<string> names)
     {
         lock (_lock)
@@ -827,6 +861,8 @@ public sealed class ConversationThread
     public List<ConversationMessage> Messages { get; set; } = new();
     public List<string> LinkedMemoryNotes { get; set; } = new();
     public ConversationCodingResultSnapshot? LatestCodingResult { get; set; }
+    // 사용자가 마지막으로 활성화한 스킬 이름 (재시작 후에도 유지). 비활성/해제 시 null.
+    public string? ActiveSkillName { get; set; }
 }
 
 public sealed class ConversationMessage

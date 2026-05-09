@@ -162,6 +162,7 @@ public sealed partial class CommandService
         if (!string.IsNullOrWhiteSpace(session.SessionId))
         {
             _activeSkillByThread[session.SessionId] = skill.Name;
+            PersistActiveSkillForThread(session.SessionId, skill.Name);
         }
 
         _auditLogger.Log("telegram", "skill_activate", "ok", $"name={skill.Name} scope={skill.Scope}");
@@ -186,6 +187,7 @@ public sealed partial class CommandService
         if (!string.IsNullOrWhiteSpace(session.SessionId)
             && _activeSkillByThread.TryRemove(session.SessionId, out var skillName))
         {
+            PersistActiveSkillForThread(session.SessionId, null);
             _auditLogger.Log("telegram", "skill_deactivate", "ok", $"name={skillName}");
             return $"`{skillName}` 스킬을 해제했습니다.";
         }
@@ -221,18 +223,8 @@ public sealed partial class CommandService
 
     private SkillManifest? FindMentionedSkill(string normalizedText)
     {
-        try
-        {
-            return _projectContextLoader.LoadSnapshot()
-                .Skills
-                .OrderByDescending(skill => skill.Name.Length)
-                .FirstOrDefault(skill => normalizedText.Contains(skill.Name, StringComparison.OrdinalIgnoreCase));
-        }
-        catch (Exception ex)
-        {
-            _auditLogger.Log("telegram", "skill_find", "failed", ex.Message);
-            return null;
-        }
+        // 공통 단어 경계 검사 helper 사용. 다중 스킬은 상위에서 거부되므로 첫 매칭만 사용.
+        return DetectMentionedSkillsInPrompt(normalizedText).FirstOrDefault();
     }
 
     private SkillManifest? FindSkill(string name, string? scope)

@@ -28,6 +28,8 @@ public interface IConversationStore
     int DeleteByScope(string scope, string? mode = null);
     ConversationThreadView AppendMessage(string conversationId, string role, string text, string meta);
     ConversationThreadView SetLatestCodingResult(string conversationId, ConversationCodingResultSnapshot? result);
+    void SetActiveSkillName(string conversationId, string? skillName);
+    IReadOnlyList<(string ConversationId, string SkillName)> ListActiveSkillBindings();
     ConversationThreadView SetLinkedMemoryNotes(string conversationId, IReadOnlyList<string> names);
     ConversationThreadView AddLinkedMemoryNote(string conversationId, string name);
     int RemoveLinkedMemoryNotes(IReadOnlyList<string> names);

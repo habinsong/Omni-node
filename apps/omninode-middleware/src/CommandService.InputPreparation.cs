@@ -110,21 +110,16 @@ public sealed partial class CommandService
                     : threadBindingKey;
                 var deactivationDetected = LooksLikeSkillDeactivationRequest(normalizedInput);
 
-                SkillManifest? explicitlyMentionedSkill = null;
-                foreach (var skill in snapshot.Skills.OrderByDescending(s => s.Name.Length))
-                {
-                    if (normalizedInput.Contains(skill.Name, StringComparison.OrdinalIgnoreCase))
-                    {
-                        explicitlyMentionedSkill = skill;
-                        break;
-                    }
-                }
+                // 단어 경계 검사 helper로 이름 부분문자열 false-positive를 차단.
+                // 다중 스킬 입력은 상위 흐름에서 이미 거부되므로 여기선 첫 매칭(가장 긴 이름)만 채택.
+                var explicitlyMentionedSkill = DetectMentionedSkillsInPrompt(normalizedInput).FirstOrDefault();
 
                 if (deactivationDetected && explicitlyMentionedSkill == null)
                 {
                     if (!string.IsNullOrWhiteSpace(threadKey)
                         && _activeSkillByThread.TryRemove(threadKey, out var clearedSkillName))
                     {
+                        PersistActiveSkillForThread(threadKey, null);
                         contextBuilder.AppendLine($"[Skill Deactivated: {clearedSkillName}]");
                         contextBuilder.AppendLine("사용자가 활성 스킬을 해제했습니다. 이번 응답부터는 일반 대화 톤으로 답하세요.");
                         contextBuilder.AppendLine();
@@ -147,6 +142,7 @@ public sealed partial class CommandService
                     if (!string.IsNullOrWhiteSpace(threadKey))
                     {
                         _activeSkillByThread[threadKey] = explicitlyMentionedSkill.Name;
+                        PersistActiveSkillForThread(threadKey, explicitlyMentionedSkill.Name);
                     }
                 }
                 else if (!deactivationDetected
@@ -158,6 +154,7 @@ public sealed partial class CommandService
                     if (skillToActivate == null)
                     {
                         _activeSkillByThread.TryRemove(threadKey, out _);
+                        PersistActiveSkillForThread(threadKey, null);
                     }
                 }
 

@@ -6,7 +6,11 @@ namespace OmniNode.Middleware;
 public sealed partial class CommandService
 {
     private const int ThinkPlusContextMaxChars = 1500;
+    private const int ThinkPlusCacheTtlSeconds = 60;
     private readonly ConcurrentDictionary<string, bool> _thinkPlusByThread = new(StringComparer.Ordinal);
+    // Think+ 의 grounded web search 결과를 짧은 시간 캐시. 동일 입력 retry/이중 호출 시 Gemini 비용·지연을 줄인다.
+    // 키: 입력 hash, 값: (capped 결과, 만료시각).
+    private readonly ConcurrentDictionary<string, (string Capped, DateTime ExpiresAtUtc)> _thinkPlusContextCache = new(StringComparer.Ordinal);
 
     private static readonly Regex ThinkPlusActivationRegex = new(
         @"(?i)(추론\s*모드\s*(켜|시작|활성|on)|think\s*plus\s*(on|start)|추론\s*모드\s*로\s*답)",
@@ -99,53 +103,85 @@ public sealed partial class CommandService
             return string.Empty;
         }
 
-        try
+        var cacheKey = ComputeThinkPlusCacheKey(trimmed);
+        string capped;
+        var hitCache = false;
+        if (TryGetThinkPlusCached(cacheKey, out var cachedCapped))
         {
-            var web = await ComposeGroundedWebAnswerWithFallbackAsync(
-                trimmed,
-                string.Empty,
-                false,
-                allowMarkdownTable: false,
-                enforceTelegramOutputStyle: false,
-                streamCallback: null,
-                scope: "chat",
-                mode: "single",
-                conversationId: string.Empty,
-                decisionPath: "think_plus",
-                decisionMs: 0,
-                source: source,
-                cancellationToken: cancellationToken
-            ).ConfigureAwait(false);
-            var raw = web?.Response?.Text ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(raw) || IsGroundedWebAnswerFailureText(raw))
+            capped = cachedCapped;
+            hitCache = true;
+            _auditLogger.Log(
+                NormalizeAuditToken(source, "web"),
+                "think_plus_context",
+                "cache_hit",
+                $"chars={capped.Length}"
+            );
+        }
+        else
+        {
+            try
+            {
+                var web = await ComposeGroundedWebAnswerWithFallbackAsync(
+                    trimmed,
+                    string.Empty,
+                    false,
+                    allowMarkdownTable: false,
+                    enforceTelegramOutputStyle: false,
+                    streamCallback: null,
+                    scope: "chat",
+                    mode: "single",
+                    conversationId: string.Empty,
+                    decisionPath: "think_plus",
+                    decisionMs: 0,
+                    source: source,
+                    cancellationToken: cancellationToken
+                ).ConfigureAwait(false);
+                var raw = web?.Response?.Text ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(raw) || IsGroundedWebAnswerFailureText(raw))
+                {
+                    _auditLogger.Log(
+                        NormalizeAuditToken(source, "web"),
+                        "think_plus_context",
+                        "fallback",
+                        "reason=web_answer_failure"
+                    );
+                    return string.Empty;
+                }
+
+                capped = raw.Length > ThinkPlusContextMaxChars
+                    ? raw[..ThinkPlusContextMaxChars] + "\n...(이하 요약 생략)"
+                    : raw;
+
+                StoreThinkPlusCache(cacheKey, capped);
+
+                _auditLogger.Log(
+                    NormalizeAuditToken(source, "web"),
+                    "think_plus_context",
+                    "ok",
+                    $"chars={capped.Length}"
+                );
+            }
+            catch (Exception ex)
             {
                 _auditLogger.Log(
                     NormalizeAuditToken(source, "web"),
                     "think_plus_context",
-                    "fallback",
-                    "reason=web_answer_failure"
+                    "error",
+                    $"detail={ex.Message}"
                 );
                 return string.Empty;
             }
+        }
 
-            var capped = raw.Length > ThinkPlusContextMaxChars
-                ? raw[..ThinkPlusContextMaxChars] + "\n...(이하 요약 생략)"
-                : raw;
+        _ = hitCache;
 
-            _auditLogger.Log(
-                NormalizeAuditToken(source, "web"),
-                "think_plus_context",
-                "ok",
-                $"chars={capped.Length}"
-            );
+        // 활성 스킬이 있으면 출력 톤·형식 규칙은 스킬에 양보한다.
+        // 사실 정확성 규칙(1~5,7)은 유지하되, 형식 관련 8번은 스킬 우선으로 대체.
+        var styleRule = string.IsNullOrWhiteSpace(activeSkillName)
+            ? "8. 답변은 한국어, 결론 먼저, 군더더기 없이. 출처는 핵심만 짧게(또는 생략)."
+            : $"8. 출력 형식·말투·길이·구성은 활성 스킬(`{activeSkillName}`) 지침을 최우선으로 따르세요. 위 참고 자료는 사실 근거로만 사용하며, Think+ 자체의 톤 규칙은 적용하지 마세요.";
 
-            // 활성 스킬이 있으면 출력 톤·형식 규칙은 스킬에 양보한다.
-            // 사실 정확성 규칙(1~5,7)은 유지하되, 형식 관련 8번은 스킬 우선으로 대체.
-            var styleRule = string.IsNullOrWhiteSpace(activeSkillName)
-                ? "8. 답변은 한국어, 결론 먼저, 군더더기 없이. 출처는 핵심만 짧게(또는 생략)."
-                : $"8. 출력 형식·말투·길이·구성은 활성 스킬(`{activeSkillName}`) 지침을 최우선으로 따르세요. 위 참고 자료는 사실 근거로만 사용하며, Think+ 자체의 톤 규칙은 적용하지 마세요.";
-
-            return $@"[Think+ 참고 자료 — 시작]
+        return $@"[Think+ 참고 자료 — 시작]
 다음은 사용자의 질문에 도움이 될 수 있는 최근 웹 검색 결과입니다.
 이 내용은 참고용 자료이며, 사용자에게 보일 답변이 아닙니다.
 
@@ -164,16 +200,38 @@ public sealed partial class CommandService
 --------------------------------------------------
 
 ";
-        }
-        catch (Exception ex)
+    }
+
+    private static string ComputeThinkPlusCacheKey(string trimmedInput)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(trimmedInput);
+        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+        return Convert.ToHexString(hash);
+    }
+
+    private bool TryGetThinkPlusCached(string cacheKey, out string capped)
+    {
+        capped = string.Empty;
+        if (!_thinkPlusContextCache.TryGetValue(cacheKey, out var entry))
         {
-            _auditLogger.Log(
-                NormalizeAuditToken(source, "web"),
-                "think_plus_context",
-                "error",
-                $"detail={ex.Message}"
-            );
-            return string.Empty;
+            return false;
         }
+        if (entry.ExpiresAtUtc <= DateTime.UtcNow)
+        {
+            _thinkPlusContextCache.TryRemove(cacheKey, out _);
+            return false;
+        }
+        capped = entry.Capped;
+        return true;
+    }
+
+    private void StoreThinkPlusCache(string cacheKey, string capped)
+    {
+        if (string.IsNullOrEmpty(cacheKey) || string.IsNullOrEmpty(capped))
+        {
+            return;
+        }
+        var expiresAt = DateTime.UtcNow.AddSeconds(ThinkPlusCacheTtlSeconds);
+        _thinkPlusContextCache[cacheKey] = (capped, expiresAt);
     }
 }

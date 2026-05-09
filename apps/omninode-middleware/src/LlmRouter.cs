@@ -2724,7 +2724,7 @@ public sealed class LlmRouter : IDisposable
                 {
                     var failureBody = await response.Content.ReadAsStringAsync(cancellationToken);
                     Console.Error.WriteLine($"[{provider}] chat stream failed ({(int)response.StatusCode}): {failureBody}");
-                    return $"{ProviderDisplayName(provider)} 요청 실패: {(int)response.StatusCode}";
+                    return BuildOpenAiCompatibleFailureMessage(provider, response.StatusCode, failureBody);
                 }
 
                 if (provider.Equals("groq", StringComparison.OrdinalIgnoreCase))
@@ -2811,18 +2811,84 @@ public sealed class LlmRouter : IDisposable
         {
             Console.Error.WriteLine($"[{provider}] chat stream timeout (model={model})");
             var partial = mergedBuilder.ToString().Trim();
-            return string.IsNullOrWhiteSpace(partial)
-                ? $"{ProviderDisplayName(provider)} 응답 시간이 초과되었습니다."
-                : partial;
+            if (string.IsNullOrWhiteSpace(partial))
+            {
+                return BuildOpenAiCompatibleTimeoutMessage(provider);
+            }
+            return partial + "\n\n" + BuildPartialTruncationSuffix(provider, "timeout");
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[{provider}] chat stream error: {ex.Message}");
             var partial = mergedBuilder.ToString().Trim();
-            return string.IsNullOrWhiteSpace(partial)
-                ? $"{ProviderDisplayName(provider)} 호출 오류: {ex.Message}"
-                : partial;
+            if (string.IsNullOrWhiteSpace(partial))
+            {
+                return $"{ProviderDisplayName(provider)} 호출 오류: {ex.Message}";
+            }
+            return partial + "\n\n" + BuildPartialTruncationSuffix(provider, ex.Message);
         }
+    }
+
+    // 부분 스트림이 끊겼을 때 사용자가 즉시 인식할 수 있도록 한 줄 안내를 본문 끝에 덧붙인다.
+    private static string BuildPartialTruncationSuffix(string provider, string reasonHint)
+    {
+        var name = ProviderDisplayName(provider);
+        var safeReason = string.IsNullOrWhiteSpace(reasonHint) ? "stream interrupted" : reasonHint.Trim();
+        if (safeReason.Length > 80)
+        {
+            safeReason = safeReason[..80] + "…";
+        }
+        return $"⚠️ [{name} 응답이 도중에 끊겼습니다 — {safeReason}. 다시 시도해 주세요.]";
+    }
+
+    // NVIDIA NIM에서 자주 보이는 quota/rate 응답을 사용자 친화 메시지로 변환.
+    private static string BuildOpenAiCompatibleTimeoutMessage(string provider)
+    {
+        if (string.Equals(provider, "nvidia", StringComparison.OrdinalIgnoreCase))
+        {
+            return "NVIDIA NIM 응답 시간이 초과되었습니다. 무료 할당량 한계나 큐잉 지연일 수 있습니다. 잠시 후 다시 시도하거나 다른 provider로 바꿔 보세요.";
+        }
+        return $"{ProviderDisplayName(provider)} 응답 시간이 초과되었습니다.";
+    }
+
+    // OpenAI 호환 응답이 비정상 상태일 때 provider별로 알기 쉬운 메시지를 만든다. NVIDIA의 quota/rate-limit 본문을 식별해 안내.
+    private static string BuildOpenAiCompatibleFailureMessage(
+        string provider,
+        System.Net.HttpStatusCode statusCode,
+        string failureBody
+    )
+    {
+        var name = ProviderDisplayName(provider);
+        var statusInt = (int)statusCode;
+        var lowered = (failureBody ?? string.Empty).ToLowerInvariant();
+        var looksLikeQuota = lowered.Contains("quota")
+                             || lowered.Contains("rate limit")
+                             || lowered.Contains("rate_limit")
+                             || lowered.Contains("too many requests")
+                             || lowered.Contains("credits");
+
+        if (string.Equals(provider, "nvidia", StringComparison.OrdinalIgnoreCase))
+        {
+            if (statusCode == System.Net.HttpStatusCode.TooManyRequests || looksLikeQuota)
+            {
+                return $"{name} 무료 할당량(또는 rate limit)에 도달했습니다 ({statusInt}). 잠시 후 다시 시도하거나 다른 provider(예: Cerebras·Groq·Gemini)로 바꿔 보세요.";
+            }
+            if (statusCode == System.Net.HttpStatusCode.Unauthorized || statusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                return $"{name} 인증 실패 ({statusInt}). API 키를 확인해 주세요.";
+            }
+            if (statusCode == System.Net.HttpStatusCode.ServiceUnavailable || statusCode == System.Net.HttpStatusCode.BadGateway)
+            {
+                return $"{name} 서버가 일시적으로 불안정합니다 ({statusInt}). 잠시 후 다시 시도해 주세요.";
+            }
+        }
+
+        if (statusCode == System.Net.HttpStatusCode.TooManyRequests)
+        {
+            return $"{name} rate limit ({statusInt}). 잠시 후 다시 시도해 주세요.";
+        }
+
+        return $"{name} 요청 실패: {statusInt}";
     }
 
     private static void SafeEmitDelta(Action<string>? deltaCallback, string delta)

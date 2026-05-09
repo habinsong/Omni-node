@@ -208,7 +208,7 @@ public sealed partial class CommandService
             ));
         }
 
-        var requestedSkillName = FirstNonEmptyLocal(request.SkillName, TryExtractInlineSkillName(rawInput));
+        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, rawInput);
         var thinkPlusPreText = ApplySelectedSkillToPrompt(
             preparedInput.Text,
             requestedSkillName,
@@ -493,7 +493,7 @@ public sealed partial class CommandService
                 sharedPrepared.RetryStopReason
             ));
         }
-        var requestedSkillName = FirstNonEmptyLocal(request.SkillName, TryExtractInlineSkillName(effectiveInput));
+        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, effectiveInput);
         var thinkPlusPreText = ApplySelectedSkillToPrompt(
             sharedPrepared.Text,
             requestedSkillName,
@@ -928,7 +928,7 @@ public sealed partial class CommandService
                 sharedPrepared.RetryStopReason
             ));
         }
-        var requestedSkillName = FirstNonEmptyLocal(request.SkillName, TryExtractInlineSkillName(rawInput));
+        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, rawInput);
         var thinkPlusPreText = ApplySelectedSkillToPrompt(
             sharedPrepared.Text,
             requestedSkillName,

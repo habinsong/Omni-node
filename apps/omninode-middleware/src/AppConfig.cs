@@ -75,6 +75,12 @@ public sealed class AppConfig
     public int ChatMaxOutputTokens { get; init; } = 8192;
     public int CodingMaxOutputTokens { get; init; } = 16384;
     public int LlmTimeoutSec { get; init; } = 20;
+    // Single-chat 흐름의 fallback timeout (provider별 분기에서 NVIDIA/Cerebras/copilot 외 일반 provider에 적용).
+    public int SingleChatDefaultTimeoutSec { get; init; } = 34;
+    // Cerebras single-chat의 최소 보장 timeout. 설정값보다 작아지지 않도록 floor로 사용.
+    public int CerebrasMinSingleChatTimeoutSec { get; init; } = 40;
+    // NVIDIA NIM single-chat의 최소 보장 timeout (콜드 스타트/큐잉 대비 floor).
+    public int NvidiaMinSingleChatTimeoutSec { get; init; } = 30;
     public bool EnableFastWebPipeline { get; init; } = true;
     public int WebDecisionTimeoutMs { get; init; } = 700;
     public int GeminiWebTimeoutMs { get; init; } = 30000;
@@ -243,6 +249,9 @@ public sealed class AppConfig
             ChatMaxOutputTokens = GetIntEnv("OMNINODE_CHAT_MAX_OUTPUT_TOKENS", 8192),
             CodingMaxOutputTokens = GetIntEnv("OMNINODE_CODING_MAX_OUTPUT_TOKENS", 16384),
             LlmTimeoutSec = GetIntEnv("OMNINODE_LLM_TIMEOUT_SEC", 20),
+            SingleChatDefaultTimeoutSec = Math.Clamp(GetIntEnv("OMNINODE_SINGLE_CHAT_DEFAULT_TIMEOUT_SEC", 34), 5, 600),
+            CerebrasMinSingleChatTimeoutSec = Math.Clamp(GetIntEnv("OMNINODE_CEREBRAS_MIN_SINGLE_CHAT_TIMEOUT_SEC", 40), 5, 600),
+            NvidiaMinSingleChatTimeoutSec = Math.Clamp(GetIntEnv("OMNINODE_NVIDIA_MIN_SINGLE_CHAT_TIMEOUT_SEC", 30), 5, 600),
             EnableFastWebPipeline = GetBoolEnv("OMNINODE_FAST_WEB_PIPELINE", true),
             WebDecisionTimeoutMs = Math.Clamp(GetIntEnv("OMNINODE_WEB_DECISION_TIMEOUT_MS", 700), 200, 5000),
             GeminiWebTimeoutMs = Math.Clamp(GetIntEnv("OMNINODE_GEMINI_WEB_TIMEOUT_MS", 30000), 5000, 60000),
