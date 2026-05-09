@@ -189,6 +189,18 @@ public sealed partial class CommandService
                 {
                     return memoryCommandResult;
                 }
+
+                var thinkToggleResult = TryHandleTelegramThinkSlashCommand(text);
+                if (thinkToggleResult != null)
+                {
+                    return thinkToggleResult;
+                }
+
+                var webToggleResult = TryHandleTelegramWebSlashCommand(text);
+                if (webToggleResult != null)
+                {
+                    return webToggleResult;
+                }
             }
 
             var unifiedSlashResult = await TryHandleUnifiedSlashCommandAsync(text, source, cancellationToken);

@@ -55,6 +55,10 @@ public sealed class TelegramClient : IDisposable
         return await SendMessageAsync($"[Omni-node] OTP: {otp}", cancellationToken);
     }
 
+    // 응답 본문이 텔레그램 한 메시지로 보내기에 너무 길거나 청크가 5개 이상으로 잘리면 .txt 첨부로 보낸다.
+    private const int LongMessageDocumentThreshold = 9000;
+    private const int LongMessageChunkLimit = 5;
+
     public async Task<bool> SendMessageAsync(string text, CancellationToken cancellationToken)
     {
         if (!TryGetConfiguredRoute(out var botToken, out var chatId))
@@ -65,6 +69,27 @@ public sealed class TelegramClient : IDisposable
 
         var endpoint = $"https://api.telegram.org/bot{botToken}/sendMessage";
         var normalized = NormalizeTelegramText(text);
+
+        // 너무 긴 응답은 .txt 첨부로 한 번에 보내고, 짧은 미리보기를 본문으로.
+        var preChunkProbe = SplitTelegramHtmlMessageSafely(normalized, 3900);
+        if (normalized.Length >= LongMessageDocumentThreshold
+            || preChunkProbe.Count > LongMessageChunkLimit
+            || preChunkProbe.Count == 0)
+        {
+            var preview = BuildLongMessagePreview(normalized);
+            var docOk = await SendDocumentAsync(
+                Encoding.UTF8.GetBytes(normalized),
+                BuildLongMessageFilename(),
+                preview,
+                cancellationToken
+            );
+            if (docOk)
+            {
+                return true;
+            }
+            // 첨부 전송 실패 시 기존 chunk 흐름으로 fallback.
+        }
+
         var sourceLinkHtml = TryBuildSingleSourceLinkHtml(normalized);
         var sourcePreviewUrl = ExtractFirstUrlFromText(sourceLinkHtml);
         var enableSourcePreview = !string.IsNullOrWhiteSpace(sourceLinkHtml);
@@ -345,6 +370,88 @@ public sealed class TelegramClient : IDisposable
         }
 
         return false;
+    }
+
+    // 텍스트를 .txt 첨부로 업로드. 본문 미리보기는 caption으로 함께 전달.
+    public async Task<bool> SendDocumentAsync(
+        byte[] content,
+        string filename,
+        string? caption,
+        CancellationToken cancellationToken
+    )
+    {
+        if (content == null || content.Length == 0)
+        {
+            return false;
+        }
+
+        if (!TryGetConfiguredRoute(out var botToken, out var chatId))
+        {
+            return false;
+        }
+
+        var endpoint = $"https://api.telegram.org/bot{botToken}/sendDocument";
+        var safeFilename = string.IsNullOrWhiteSpace(filename) ? "response.txt" : filename.Trim();
+
+        for (var attempt = 1; attempt <= TelegramApiMaxAttempts; attempt += 1)
+        {
+            try
+            {
+                using var form = new MultipartFormDataContent();
+                form.Add(new StringContent(chatId), "chat_id");
+                if (!string.IsNullOrWhiteSpace(caption))
+                {
+                    var trimmedCaption = caption!.Length > 1024 ? caption[..1020] + "…" : caption;
+                    form.Add(new StringContent(trimmedCaption), "caption");
+                }
+                var bytes = new ByteArrayContent(content);
+                bytes.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/plain");
+                form.Add(bytes, "document", safeFilename);
+
+                using var response = await _httpClient.PostAsync(endpoint, form, cancellationToken);
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                if (response.IsSuccessStatusCode)
+                {
+                    return true;
+                }
+
+                if (attempt >= TelegramApiMaxAttempts || !ShouldRetryTelegramRequest(response.StatusCode, body))
+                {
+                    if (ShouldLogSendError())
+                    {
+                        Console.Error.WriteLine($"[telegram] sendDocument failed ({(int)response.StatusCode}): {body}");
+                    }
+                    return false;
+                }
+
+                await DelayTelegramRetryAsync(attempt, response.StatusCode, body, cancellationToken);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && attempt < TelegramApiMaxAttempts)
+            {
+                await DelayTelegramRetryAsync(attempt, null, string.Empty, cancellationToken);
+            }
+            catch (HttpRequestException) when (attempt < TelegramApiMaxAttempts)
+            {
+                await DelayTelegramRetryAsync(attempt, null, string.Empty, cancellationToken);
+            }
+        }
+
+        return false;
+    }
+
+    private static string BuildLongMessageFilename()
+    {
+        var now = DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
+        return $"omninode-response-{now}.txt";
+    }
+
+    // 첨부로 보내는 긴 응답의 caption — 첫 600자를 미리보기로 노출.
+    private static string BuildLongMessagePreview(string fullText)
+    {
+        var safe = (fullText ?? string.Empty).Trim();
+        if (safe.Length == 0) return "(긴 응답 — 첨부 .txt 참고)";
+        var preview = safe.Length > 600 ? safe[..600] + "…" : safe;
+        return $"📎 응답이 길어 .txt 파일로 첨부합니다 ({safe.Length:N0}자).\n\n— 미리보기 —\n{preview}";
     }
 
     private async Task<(bool Success, int SentCount, int FailedIndex, int StatusCode, string ErrorBody)> SendChunksAsync(
@@ -1689,7 +1796,9 @@ public sealed class TelegramClient : IDisposable
 
         while (remaining.Length > maxChars)
         {
-            var cut = remaining.LastIndexOf('\n', maxChars);
+            // 코드 펜스(```) 한가운데에서 자르지 않도록 우선 탐색.
+            var fenceCut = FindNearestSafeFenceBoundary(remaining, maxChars);
+            var cut = fenceCut > 0 ? fenceCut : remaining.LastIndexOf('\n', maxChars);
             if (cut < maxChars / 2)
             {
                 cut = remaining.LastIndexOf(' ', maxChars);
@@ -1713,6 +1822,49 @@ public sealed class TelegramClient : IDisposable
         {
             yield return remaining;
         }
+    }
+
+    // maxChars 이내에서 ``` 펜스 바로 앞·뒤 줄바꿈 위치를 찾아 반환. 못 찾으면 -1.
+    // 펜스 한가운데에서 자르면 코드블록이 깨지므로, 앞에서 끊거나 닫힘 직후에서 끊도록 한다.
+    private static int FindNearestSafeFenceBoundary(string text, int maxChars)
+    {
+        if (string.IsNullOrEmpty(text) || maxChars <= 0)
+        {
+            return -1;
+        }
+
+        var window = text.Length > maxChars ? text[..maxChars] : text;
+        var fenceCount = 0;
+        var lastSafeNewline = -1;
+        var inFence = false;
+        for (var i = 0; i < window.Length - 2; i += 1)
+        {
+            if (window[i] == '`' && window[i + 1] == '`' && window[i + 2] == '`')
+            {
+                fenceCount += 1;
+                inFence = !inFence;
+                // 펜스 닫힘 직후의 줄바꿈을 안전 경계로 기록.
+                var afterFence = i + 3;
+                while (afterFence < window.Length && window[afterFence] != '\n')
+                {
+                    afterFence += 1;
+                }
+                if (afterFence < window.Length)
+                {
+                    lastSafeNewline = afterFence;
+                }
+                i = afterFence;
+                continue;
+            }
+
+            if (!inFence && window[i] == '\n')
+            {
+                lastSafeNewline = i;
+            }
+        }
+
+        // 윈도 끝에서 펜스 안이라면 직전 안전 경계까지 역추적해 잘라낸다.
+        return lastSafeNewline;
     }
 
     private static bool TryExtractMarkdownTables(string text, out IReadOnlyList<TelegramMarkdownTableBlock> tables)

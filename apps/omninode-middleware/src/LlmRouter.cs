@@ -1167,7 +1167,7 @@ public sealed class LlmRouter : IDisposable
             if (streamedTextStarted && !string.IsNullOrWhiteSpace(partialContent))
             {
                 return new GeminiGroundedChatResponse(
-                    partialContent,
+                    partialContent + "\n\n" + BuildPartialTruncationSuffix("gemini", $"timeout_{timeoutKind}"),
                     firstChunkMs,
                     Math.Max(0L, stopwatch.ElapsedMilliseconds)
                 );
@@ -1186,7 +1186,7 @@ public sealed class LlmRouter : IDisposable
             if (streamedTextStarted && !string.IsNullOrWhiteSpace(partialContent))
             {
                 return new GeminiGroundedChatResponse(
-                    partialContent,
+                    partialContent + "\n\n" + BuildPartialTruncationSuffix("gemini", ex.Message),
                     firstChunkMs,
                     Math.Max(0L, stopwatch.ElapsedMilliseconds)
                 );
@@ -1498,7 +1498,7 @@ public sealed class LlmRouter : IDisposable
             if (streamedTextStarted && !string.IsNullOrWhiteSpace(partialContent))
             {
                 return new GeminiUrlContextChatResponse(
-                    partialContent,
+                    partialContent + "\n\n" + BuildPartialTruncationSuffix("gemini", $"timeout_{timeoutKind}"),
                     firstChunkMs,
                     Math.Max(0L, stopwatch.ElapsedMilliseconds),
                     citationByUrl.Values.ToArray()
@@ -1519,7 +1519,7 @@ public sealed class LlmRouter : IDisposable
             if (streamedTextStarted && !string.IsNullOrWhiteSpace(partialContent))
             {
                 return new GeminiUrlContextChatResponse(
-                    partialContent,
+                    partialContent + "\n\n" + BuildPartialTruncationSuffix("gemini", ex.Message),
                     firstChunkMs,
                     Math.Max(0L, stopwatch.ElapsedMilliseconds),
                     citationByUrl.Values.ToArray()

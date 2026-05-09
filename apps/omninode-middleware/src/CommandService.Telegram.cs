@@ -1841,7 +1841,13 @@ public sealed partial class CommandService
                 decisionMs: 0,
                 cancellationToken
             );
-            var urlResponseText = $"[Single {urlSingle.Response.Provider}:{urlSingle.Response.Model}]\n{FormatTelegramResponse(urlSingle.Response.Text, TelegramMaxResponseChars)}";
+            var urlResponseText = AppendTelegramResponseFooter(
+                FormatTelegramResponse(urlSingle.Response.Text, TelegramMaxResponseChars),
+                urlSingle.Response.Provider,
+                urlSingle.Response.Model,
+                session.SessionId,
+                "url"
+            );
             var urlAssistantMeta = $"telegram-single:{urlSingle.Response.Provider}:{urlSingle.Response.Model}:gemini-url-single";
             _conversationStore.AppendMessage(session.Thread.Id, "user", requestText, "telegram:user");
             _conversationStore.AppendMessage(session.Thread.Id, "assistant", urlResponseText, urlAssistantMeta);
@@ -1915,7 +1921,13 @@ public sealed partial class CommandService
                     "telegram",
                     cancellationToken
                 );
-                var webResponseText = $"[Single {webSingle.Response.Provider}:{webSingle.Response.Model}]\n{FormatTelegramResponse(webSingle.Response.Text, TelegramMaxResponseChars)}";
+                var webResponseText = AppendTelegramResponseFooter(
+                    FormatTelegramResponse(webSingle.Response.Text, TelegramMaxResponseChars),
+                    webSingle.Response.Provider,
+                    webSingle.Response.Model,
+                    session.SessionId,
+                    "web"
+                );
                 var webAssistantMeta = $"telegram-single:{webSingle.Response.Provider}:{webSingle.Response.Model}:{webSingle.Route}";
                 _conversationStore.AppendMessage(session.Thread.Id, "user", requestText, "telegram:user");
                 _conversationStore.AppendMessage(session.Thread.Id, "assistant", webResponseText, webAssistantMeta);
@@ -2051,7 +2063,12 @@ public sealed partial class CommandService
             var orchestratedValidated = ApplyListCountFallback(requestText, orchestrated.Text, sharedPrepared.Citations);
             orchestratedValidated = ApplySkillCreateDirective(orchestratedValidated, "telegram");
             orchestratedValidated = CleanLeakedSystemMarkers(orchestratedValidated);
-            responseText = $"[{orchestrated.Route}]\n{FormatTelegramResponse(orchestratedValidated, TelegramMaxResponseChars)}";
+            responseText = AppendTelegramResponseFooter(
+                FormatTelegramResponse(orchestratedValidated, TelegramMaxResponseChars),
+                "orchestration",
+                orchestrated.Route,
+                session.SessionId
+            );
             providerForMemory = NormalizeProvider(snapshot.OrchestrationProvider, allowAuto: true);
             if (providerForMemory is "auto" or "none")
             {
@@ -2101,10 +2118,12 @@ public sealed partial class CommandService
             var multiSummaryValidated = ApplyListCountFallback(requestText, multi.Summary, sharedPrepared.Citations);
             multiSummaryValidated = ApplySkillCreateDirective(multiSummaryValidated, "telegram");
             multiSummaryValidated = CleanLeakedSystemMarkers(multiSummaryValidated);
-            responseText = $"""
-                           [Multi 요약]
-                           {FormatTelegramResponse(multiSummaryValidated, TelegramMaxResponseChars)}
-                           """;
+            responseText = AppendTelegramResponseFooter(
+                FormatTelegramResponse(multiSummaryValidated, TelegramMaxResponseChars),
+                "multi",
+                "summary",
+                session.SessionId
+            );
             providerForMemory = NormalizeProvider(multi.ResolvedSummaryProvider, allowAuto: true);
             if (providerForMemory is "auto" or "none")
             {
@@ -2149,7 +2168,12 @@ public sealed partial class CommandService
             );
             if (!string.IsNullOrWhiteSpace(providerPrepared.UnsupportedMessage))
             {
-                responseText = $"[Single groq:{preferredModel}]\n{providerPrepared.UnsupportedMessage}";
+                responseText = AppendTelegramResponseFooter(
+                    providerPrepared.UnsupportedMessage,
+                    "groq",
+                    preferredModel,
+                    session.SessionId
+                );
                 responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
                 providerForMemory = "groq";
                 modelForMemory = preferredModel;
@@ -2212,7 +2236,12 @@ public sealed partial class CommandService
             effectiveGuardFailure = sharedPrepared.GuardFailure;
             var singleGroqText = ApplySkillCreateDirective(singleGroq.Text, "telegram");
             singleGroqText = CleanLeakedSystemMarkers(singleGroqText);
-            responseText = $"[Single {singleGroq.Provider}:{singleGroq.Model}]\n{FormatTelegramResponse(singleGroqText, TelegramMaxResponseChars)}";
+            responseText = AppendTelegramResponseFooter(
+                FormatTelegramResponse(singleGroqText, TelegramMaxResponseChars),
+                singleGroq.Provider,
+                singleGroq.Model,
+                session.SessionId
+            );
             responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
             providerForMemory = singleGroq.Provider;
             modelForMemory = singleGroq.Model;
@@ -2239,7 +2268,12 @@ public sealed partial class CommandService
         );
         if (!string.IsNullOrWhiteSpace(providerInput.UnsupportedMessage))
         {
-            responseText = $"[Single {snapshot.SingleProvider}:{singleModel}]\n{providerInput.UnsupportedMessage}";
+            responseText = AppendTelegramResponseFooter(
+                providerInput.UnsupportedMessage,
+                snapshot.SingleProvider,
+                singleModel,
+                session.SessionId
+            );
             responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
             providerForMemory = snapshot.SingleProvider;
             modelForMemory = singleModel;
@@ -2305,7 +2339,12 @@ public sealed partial class CommandService
         effectiveGuardFailure = sharedPrepared.GuardFailure;
         var singleText = ApplySkillCreateDirective(single.Text, "telegram");
         singleText = CleanLeakedSystemMarkers(singleText);
-        responseText = $"[Single {single.Provider}:{single.Model}]\n{FormatTelegramResponse(singleText, TelegramMaxResponseChars)}";
+        responseText = AppendTelegramResponseFooter(
+            FormatTelegramResponse(singleText, TelegramMaxResponseChars),
+            single.Provider,
+            single.Model,
+            session.SessionId
+        );
         responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
         providerForMemory = single.Provider;
         modelForMemory = single.Model;
@@ -2937,6 +2976,34 @@ public sealed partial class CommandService
                 질문:
                 {input}
                 """;
+    }
+
+    // 응답 본문 끝에 provider·model·active skill 정보를 짧은 footer로 붙인다.
+    // 기존의 `[Single groq:gpt-...]` 헤더 대신 본문이 먼저 보이도록 하단으로 이동.
+    private string AppendTelegramResponseFooter(
+        string body,
+        string? provider,
+        string? model,
+        string? sessionId,
+        string? extraLabel = null
+    )
+    {
+        var bodyTrim = (body ?? string.Empty).TrimEnd();
+        var parts = new List<string>(4);
+        var providerLabel = string.IsNullOrWhiteSpace(provider) ? "—" : provider!.Trim();
+        var modelLabel = string.IsNullOrWhiteSpace(model) ? "—" : model!.Trim();
+        parts.Add($"{providerLabel}·{modelLabel}");
+        if (!string.IsNullOrWhiteSpace(extraLabel))
+        {
+            parts.Add(extraLabel!.Trim());
+        }
+        if (!string.IsNullOrWhiteSpace(sessionId)
+            && _activeSkillByThread.TryGetValue(sessionId!, out var activeSkill)
+            && !string.IsNullOrWhiteSpace(activeSkill))
+        {
+            parts.Add($"🎯 {activeSkill}");
+        }
+        return bodyTrim + "\n\n— " + string.Join(" · ", parts);
     }
 
     private static string FormatTelegramResponse(string text, int maxChars)
@@ -4106,6 +4173,7 @@ public sealed partial class CommandService
                    - "공감하는 일상 대화 스킬 만들어줘"
 
                    정확히 제어할 때:
+                   - /skill status — 현재 활성 스킬 확인
                    - /skill list
                    - /skill use <name> [project|global]
                    - /skill get <name> [project|global]

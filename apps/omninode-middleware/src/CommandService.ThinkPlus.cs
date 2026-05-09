@@ -202,6 +202,78 @@ public sealed partial class CommandService
 ";
     }
 
+    // /think on|off|status — 텔레그램 thread의 추론(Think+) 모드를 즉시 토글.
+    private string? TryHandleTelegramThinkSlashCommand(string? text)
+    {
+        var normalized = (text ?? string.Empty).Trim();
+        if (!normalized.StartsWith("/think", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var firstLine = normalized.Split('\n', 2)[0];
+        var tokens = firstLine.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var session = SessionContext.Create(EnsureTelegramLinkedConversation(), "telegram");
+        var key = session.SessionId;
+
+        if (tokens.Length < 2 || tokens[1].Equals("status", StringComparison.OrdinalIgnoreCase) || tokens[1].Equals("?", StringComparison.Ordinal))
+        {
+            var active = IsThinkPlusActiveForThread(key);
+            return active
+                ? "🧠 추론 모드: ON. 끄려면 /think off 또는 \"추론 모드 꺼\""
+                : "🧠 추론 모드: OFF. 켜려면 /think on 또는 \"추론 모드 켜\"";
+        }
+
+        var arg = tokens[1].Trim().ToLowerInvariant();
+        if (arg is "on" or "켜" or "활성" or "start")
+        {
+            SetThinkPlusForThread(key, true);
+            return "🧠 추론 모드 ON. 다음 메시지부터 최신 웹검색 결과를 참고해 답변합니다.";
+        }
+        if (arg is "off" or "꺼" or "끄" or "stop" or "중지" or "해제")
+        {
+            SetThinkPlusForThread(key, false);
+            return "🧠 추론 모드 OFF. 일반 모드로 돌아갑니다.";
+        }
+        return "사용법: /think on | /think off | /think status";
+    }
+
+    // /web on|off — 텔레그램에서 단발성 웹검색 enable. 현재 turn 기준 토글이 아닌 thread sticky.
+    private string? TryHandleTelegramWebSlashCommand(string? text)
+    {
+        var normalized = (text ?? string.Empty).Trim();
+        if (!normalized.StartsWith("/web", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var firstLine = normalized.Split('\n', 2)[0];
+        var tokens = firstLine.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var session = SessionContext.Create(EnsureTelegramLinkedConversation(), "telegram");
+        var key = session.SessionId;
+
+        if (tokens.Length < 2 || tokens[1].Equals("status", StringComparison.OrdinalIgnoreCase))
+        {
+            var active = IsThinkPlusActiveForThread(key);
+            return active
+                ? "🌐 웹검색 컨텍스트: ON (Think+ 모드와 공유). /web off 로 끔."
+                : "🌐 웹검색 컨텍스트: OFF. /web on 으로 켬.";
+        }
+
+        var arg = tokens[1].Trim().ToLowerInvariant();
+        if (arg is "on" or "켜" or "start" or "활성")
+        {
+            SetThinkPlusForThread(key, true);
+            return "🌐 웹검색 컨텍스트 ON. 다음 메시지부터 최신 웹 자료를 참고합니다.";
+        }
+        if (arg is "off" or "꺼" or "끄" or "stop" or "중지" or "해제")
+        {
+            SetThinkPlusForThread(key, false);
+            return "🌐 웹검색 컨텍스트 OFF.";
+        }
+        return "사용법: /web on | /web off | /web status";
+    }
+
     private static string ComputeThinkPlusCacheKey(string trimmedInput)
     {
         var bytes = System.Text.Encoding.UTF8.GetBytes(trimmedInput);

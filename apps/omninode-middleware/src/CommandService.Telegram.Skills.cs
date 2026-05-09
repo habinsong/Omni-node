@@ -9,6 +9,13 @@ public sealed partial class CommandService
     {
         _ = cancellationToken;
         var normalized = (text ?? string.Empty).Replace("\r\n", "\n").Trim();
+
+        // 단축 명령: /off → 활성 스킬 즉시 해제.
+        if (normalized.Equals("/off", StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult<string?>(DeactivateTelegramSkill());
+        }
+
         if (!normalized.StartsWith("/skill", StringComparison.OrdinalIgnoreCase)
             && !normalized.StartsWith("/skills", StringComparison.OrdinalIgnoreCase))
         {
@@ -33,6 +40,11 @@ public sealed partial class CommandService
         if (action is "list" or "ls" or "목록")
         {
             return Task.FromResult<string?>(BuildLocalSkillInventoryResponse());
+        }
+
+        if (action is "status" or "현재" or "상태")
+        {
+            return Task.FromResult<string?>(BuildTelegramSkillStatusResponse());
         }
 
         if (action is "off" or "stop" or "disable" or "deactivate" or "해제" or "끄기" or "중지" or "종료" or "그만")
@@ -178,6 +190,36 @@ public sealed partial class CommandService
                - 범위: {skill.Scope}
                - 설명: {TrimLocalAssistantInfoText(skill.Description, 120)}
                - 해제: /skill off
+               """;
+    }
+
+    // 현재 텔레그램 thread에 활성화된 스킬 정보를 반환. 없으면 안내.
+    private string BuildTelegramSkillStatusResponse()
+    {
+        var session = SessionContext.Create(EnsureTelegramLinkedConversation(), "telegram");
+        if (string.IsNullOrWhiteSpace(session.SessionId)
+            || !_activeSkillByThread.TryGetValue(session.SessionId, out var active)
+            || string.IsNullOrWhiteSpace(active))
+        {
+            return """
+                   현재 텔레그램 대화에 활성화된 스킬이 없습니다.
+                   - 활성화: /skill use <name>
+                   - 목록: /skill list
+                   """;
+        }
+
+        var skill = FindSkill(active, null);
+        if (skill == null)
+        {
+            return $"활성 스킬: `{active}` (스냅샷에서 본문을 찾지 못함 — 재로드 권장)";
+        }
+
+        return $"""
+               🎯 활성 스킬: `{skill.Name}`
+               - 범위: {skill.Scope}
+               - 설명: {TrimLocalAssistantInfoText(skill.Description, 160)}
+               - 해제: /skill off
+               - 다른 스킬로 전환: /skill use <name>
                """;
     }
 
