@@ -69,13 +69,47 @@ public sealed class TelegramUpdateLoop
                 {
                     var hasText = !string.IsNullOrWhiteSpace(update.Text);
                     var hasAttachments = update.Attachments != null && update.Attachments.Count > 0;
-                    if (!hasText && !hasAttachments)
+                    var hasCallback = !string.IsNullOrWhiteSpace(update.CallbackQueryId)
+                                      && !string.IsNullOrWhiteSpace(update.CallbackData);
+                    if (!hasText && !hasAttachments && !hasCallback)
                     {
                         continue;
                     }
 
                     if (!IsAuthorizedUpdate(update))
                     {
+                        if (hasCallback)
+                        {
+                            // 비허용 사용자라도 dangling spinner 방지를 위해 ack만 보낸다.
+                            await _telegramClient.AnswerCallbackQueryAsync(update.CallbackQueryId!, null, cancellationToken);
+                        }
+                        continue;
+                    }
+
+                    if (hasCallback)
+                    {
+                        // callback_data 자체를 사용자 입력처럼 취급해 명령 흐름으로 흘려보낸다.
+                        await _telegramClient.AnswerCallbackQueryAsync(update.CallbackQueryId!, "처리 중…", cancellationToken);
+                        var callbackInput = update.CallbackData!.Trim();
+                        try
+                        {
+                            var callbackResult = await _commandService.ExecuteAsync(
+                                callbackInput,
+                                "telegram",
+                                cancellationToken,
+                                Array.Empty<InputAttachment>(),
+                                null,
+                                true,
+                                null
+                            );
+                            await SendTelegramReplyAsync(null, callbackResult, cancellationToken);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine($"[telegram] callback handle error: {ex.Message}");
+                            await TrySendOrQueueStandaloneMessageAsync($"버튼 처리 오류: {ex.Message}", "callback_error_failed", cancellationToken);
+                        }
+                        TryPersistOffset();
                         continue;
                     }
 
@@ -152,20 +186,85 @@ public sealed class TelegramUpdateLoop
 
     private async Task SendTelegramReplyAsync(int? progressMessageId, string text, CancellationToken cancellationToken)
     {
+        // 응답 끝에 inline keyboard 마커가 붙어 있으면 떼어내서 별도로 전송.
+        var (cleanedText, buttonRows) = ExtractInlineButtonsFromText(text);
+
         if (progressMessageId.HasValue && progressMessageId.Value > 0)
         {
-            var replaceResult = await _telegramClient.ReplaceMessageAsync(progressMessageId.Value, text, cancellationToken);
+            var replaceResult = await _telegramClient.ReplaceMessageAsync(progressMessageId.Value, cleanedText, cancellationToken);
             if (replaceResult.Success)
             {
+                if (buttonRows != null && buttonRows.Count > 0)
+                {
+                    // 본문은 이미 progress 메시지를 통해 갱신됐으므로 버튼만 짧은 후속 메시지로 전송.
+                    await _telegramClient.SendMessageWithButtonsAsync("⤵ 빠른 작업", buttonRows, cancellationToken);
+                }
                 return;
             }
         }
 
-        var sent = await _telegramClient.SendMessageAsync(text, cancellationToken);
+        bool sent;
+        if (buttonRows != null && buttonRows.Count > 0)
+        {
+            sent = await _telegramClient.SendMessageWithButtonsAsync(cleanedText, buttonRows, cancellationToken);
+        }
+        else
+        {
+            sent = await _telegramClient.SendMessageAsync(cleanedText, cancellationToken);
+        }
         if (!sent)
         {
-            QueueReplyForRetry(text, progressMessageId.HasValue ? "reply_replace_and_send_failed" : "reply_send_failed");
+            QueueReplyForRetry(cleanedText, progressMessageId.HasValue ? "reply_replace_and_send_failed" : "reply_send_failed");
         }
+    }
+
+    // 본문 끝의 __TG_BUTTONS__/__/TG_BUTTONS__ 블록을 파싱해 버튼 행으로 변환. 본문에서 마커는 제거.
+    private static (string CleanedText, IReadOnlyList<IReadOnlyList<TelegramInlineButton>>? Buttons) ExtractInlineButtonsFromText(string text)
+    {
+        const string Open = CommandService.TelegramButtonsMarkerOpen;
+        const string Close = CommandService.TelegramButtonsMarkerClose;
+        if (string.IsNullOrEmpty(text))
+        {
+            return (text, null);
+        }
+        var openIdx = text.LastIndexOf(Open, StringComparison.Ordinal);
+        if (openIdx < 0)
+        {
+            return (text, null);
+        }
+        var closeIdx = text.IndexOf(Close, openIdx + Open.Length, StringComparison.Ordinal);
+        if (closeIdx < 0)
+        {
+            return (text, null);
+        }
+
+        var blockStart = openIdx + Open.Length;
+        var blockBody = text.Substring(blockStart, closeIdx - blockStart);
+        var lines = blockBody
+            .Replace("\r", "", StringComparison.Ordinal)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var row = new List<TelegramInlineButton>();
+        foreach (var line in lines)
+        {
+            var pipeIdx = line.IndexOf('|');
+            if (pipeIdx <= 0 || pipeIdx >= line.Length - 1)
+            {
+                continue;
+            }
+            var cmd = line[..pipeIdx].Trim();
+            var label = line[(pipeIdx + 1)..].Trim();
+            if (string.IsNullOrWhiteSpace(cmd) || string.IsNullOrWhiteSpace(label))
+            {
+                continue;
+            }
+            row.Add(new TelegramInlineButton(label, cmd));
+        }
+
+        var cleaned = text[..openIdx].TrimEnd();
+        var rows = row.Count == 0
+            ? null
+            : (IReadOnlyList<IReadOnlyList<TelegramInlineButton>>)new[] { (IReadOnlyList<TelegramInlineButton>)row.ToArray() };
+        return (cleaned, rows);
     }
 
     private async Task TrySendOrQueueStandaloneMessageAsync(string text, string failureReason, CancellationToken cancellationToken)
@@ -351,21 +450,40 @@ public sealed class TelegramUpdateLoop
             var incomingChatId = (update.ChatId ?? string.Empty).Trim();
             if (!string.Equals(expectedChatId, incomingChatId, StringComparison.Ordinal))
             {
+                LogUnauthorizedUpdate(update, "chat_id_mismatch");
                 return false;
             }
         }
 
-        var expectedUserId = _config.TelegramAllowedUserId?.Trim();
-        if (!string.IsNullOrWhiteSpace(expectedUserId))
+        // CSV 다중 허용: "12345,67890" 같이 콤마로 여러 user_id 등록 가능.
+        var rawAllowed = _config.TelegramAllowedUserId ?? string.Empty;
+        var allowedIds = rawAllowed
+            .Split(new[] { ',', ';', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToArray();
+        if (allowedIds.Length > 0)
         {
             var incomingUserId = (update.FromUserId ?? string.Empty).Trim();
-            if (!string.Equals(expectedUserId, incomingUserId, StringComparison.Ordinal))
+            if (string.IsNullOrWhiteSpace(incomingUserId)
+                || !allowedIds.Any(id => string.Equals(id, incomingUserId, StringComparison.Ordinal)))
             {
+                LogUnauthorizedUpdate(update, "user_id_not_in_allowlist");
                 return false;
             }
         }
 
         return true;
+    }
+
+    private static void LogUnauthorizedUpdate(TelegramUpdate update, string reason)
+    {
+        // 비허용 호출은 모니터링용으로 한 줄 로그만 남기고 응답은 보내지 않는다 (스팸 방지).
+        var preview = string.IsNullOrWhiteSpace(update.Text) ? "(no-text)" : update.Text!.Trim();
+        if (preview.Length > 40)
+        {
+            preview = preview[..40] + "…";
+        }
+        Console.Error.WriteLine($"[telegram] unauthorized update reason={reason} chat={update.ChatId} from={update.FromUserId} text={preview}");
     }
 
     private static string ResolveCommandBucket(string text)

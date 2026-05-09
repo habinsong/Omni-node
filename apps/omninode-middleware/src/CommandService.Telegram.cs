@@ -2358,6 +2358,115 @@ public sealed partial class CommandService
         return responseText;
     }
 
+    // 응답 텍스트 끝에 inline keyboard 버튼 마커를 첨부. TelegramUpdateLoop이 이 마커를 파싱해
+    // 본문에서 떼어낸 뒤 callback_data 버튼으로 변환해 전송한다. 마커가 없으면 일반 sendMessage.
+    // 형식:
+    //   __TG_BUTTONS__
+    //   /skill off|🚫 끄기
+    //   /skill list|📋 목록
+    //   __/TG_BUTTONS__
+    internal const string TelegramButtonsMarkerOpen = "__TG_BUTTONS__";
+    internal const string TelegramButtonsMarkerClose = "__/TG_BUTTONS__";
+
+    private static string AppendTelegramInlineButtons(string body, params (string Command, string Label)[] buttons)
+    {
+        if (buttons == null || buttons.Length == 0)
+        {
+            return body;
+        }
+        var sb = new StringBuilder();
+        sb.Append(body?.TrimEnd() ?? string.Empty);
+        sb.Append("\n\n");
+        sb.Append(TelegramButtonsMarkerOpen);
+        sb.Append('\n');
+        foreach (var (cmd, label) in buttons)
+        {
+            if (string.IsNullOrWhiteSpace(cmd) || string.IsNullOrWhiteSpace(label))
+            {
+                continue;
+            }
+            sb.Append(cmd.Trim());
+            sb.Append('|');
+            sb.Append(label.Trim());
+            sb.Append('\n');
+        }
+        sb.Append(TelegramButtonsMarkerClose);
+        return sb.ToString();
+    }
+
+    // /history [N] — 텔레그램 thread의 최근 N개 user/assistant 쌍을 압축 요약으로 반환.
+    private string? TryHandleTelegramHistorySlashCommand(string text)
+    {
+        var normalized = (text ?? string.Empty).Trim();
+        if (!normalized.StartsWith("/history", StringComparison.OrdinalIgnoreCase)
+            && !normalized.StartsWith("/log", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var firstLine = normalized.Split('\n', 2)[0];
+        var tokens = firstLine.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var n = 5;
+        if (tokens.Length >= 2 && int.TryParse(tokens[1], out var requested))
+        {
+            n = Math.Clamp(requested, 1, 20);
+        }
+
+        var thread = EnsureTelegramLinkedConversation();
+        if (thread.Messages == null || thread.Messages.Count == 0)
+        {
+            return "대화 기록이 비어 있습니다.";
+        }
+
+        // user/assistant 쌍을 뒤에서 모은다.
+        var pairs = new List<(string User, string Assistant, DateTimeOffset Stamp)>();
+        ConversationMessageView? pendingUser = null;
+        for (var i = thread.Messages.Count - 1; i >= 0; i -= 1)
+        {
+            var msg = thread.Messages[i];
+            if (string.Equals(msg.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+            {
+                pendingUser = msg;
+                continue;
+            }
+            if (string.Equals(msg.Role, "user", StringComparison.OrdinalIgnoreCase) && pendingUser != null)
+            {
+                pairs.Add((msg.Text, pendingUser.Text, pendingUser.CreatedUtc));
+                pendingUser = null;
+                if (pairs.Count >= n)
+                {
+                    break;
+                }
+            }
+        }
+
+        if (pairs.Count == 0)
+        {
+            return "최근 user/assistant 쌍이 없습니다.";
+        }
+
+        var builder = new StringBuilder();
+        builder.AppendLine($"📜 최근 대화 {pairs.Count}개:");
+        for (var i = pairs.Count - 1; i >= 0; i -= 1)
+        {
+            var (u, a, stamp) = pairs[i];
+            var idx = pairs.Count - i;
+            var localStamp = stamp.ToLocalTime().ToString("MM-dd HH:mm");
+            builder.AppendLine();
+            builder.AppendLine($"#{idx} · {localStamp}");
+            builder.AppendLine($"🙂 {TrimHistoryPreview(u, 220)}");
+            builder.AppendLine($"🤖 {TrimHistoryPreview(a, 360)}");
+        }
+        return builder.ToString().TrimEnd();
+    }
+
+    private static string TrimHistoryPreview(string text, int maxChars)
+    {
+        var safe = (text ?? string.Empty).Replace("\r\n", " ").Replace("\n", " ").Trim();
+        if (safe.Length <= maxChars) return safe;
+        return safe[..maxChars] + "…";
+    }
+
     private ConversationThreadView EnsureTelegramLinkedConversation()
     {
         var existing = _conversationStore
@@ -4380,6 +4489,10 @@ public sealed partial class CommandService
                - /llm status
                - /skill list
                - /skill use <name>
+               - /skill status (또는 /off)
+               - /think on|off|status
+               - /web on|off|status
+               - /history [N]
                - /doctor
                - /routine list
                - /plan list

@@ -327,6 +327,192 @@ public sealed class TelegramClient : IDisposable
         return (plainResult.Success, plainResult.FirstChunkDelivered);
     }
 
+    // inline keyboard 버튼 (1행~다행) 을 붙여 텍스트 메시지를 보낸다. 본문은 plain text 모드로 전송.
+    // buttonRows: 각 row는 한 행에 들어갈 버튼 목록.
+    public async Task<bool> SendMessageWithButtonsAsync(
+        string text,
+        IReadOnlyList<IReadOnlyList<TelegramInlineButton>> buttonRows,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!TryGetConfiguredRoute(out var botToken, out var chatId))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var replyMarkup = BuildInlineKeyboardJson(buttonRows);
+        if (string.IsNullOrWhiteSpace(replyMarkup))
+        {
+            return await SendMessageAsync(text, cancellationToken);
+        }
+
+        var endpoint = $"https://api.telegram.org/bot{botToken}/sendMessage";
+        // 길이 제한: 4096자 이상이면 일반 sendMessage 흐름을 사용 (.txt 첨부 fallback 등 적용).
+        // 버튼은 본문에 attachment 없는 경우만 의미가 있으므로 짧은 응답에 한해 사용.
+        if (text.Length > 3500)
+        {
+            var sent = await SendMessageAsync(text, cancellationToken);
+            if (sent)
+            {
+                // 별도로 빈 상태 메시지에 키보드만 부착해 보낸다.
+                return await SendStandaloneInlineKeyboardAsync(endpoint, chatId, replyMarkup, cancellationToken);
+            }
+            return false;
+        }
+
+        var body = new StringBuilder();
+        body.Append("{");
+        body.Append($"\"chat_id\":\"{EscapeJson(chatId)}\",");
+        body.Append($"\"text\":{JsonStringQuote(text)},");
+        body.Append("\"disable_web_page_preview\":true,");
+        body.Append($"\"reply_markup\":{replyMarkup}");
+        body.Append("}");
+
+        for (var attempt = 1; attempt <= TelegramApiMaxAttempts; attempt += 1)
+        {
+            try
+            {
+                using var content = new StringContent(body.ToString(), Encoding.UTF8, "application/json");
+                using var response = await _httpClient.PostAsync(endpoint, content, cancellationToken);
+                if (response.IsSuccessStatusCode)
+                {
+                    return true;
+                }
+                var failureBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                if (attempt >= TelegramApiMaxAttempts || !ShouldRetryTelegramRequest(response.StatusCode, failureBody))
+                {
+                    if (ShouldLogSendError())
+                    {
+                        Console.Error.WriteLine($"[telegram] sendMessage(buttons) failed ({(int)response.StatusCode}): {failureBody}");
+                    }
+                    return false;
+                }
+                await DelayTelegramRetryAsync(attempt, response.StatusCode, failureBody, cancellationToken);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && attempt < TelegramApiMaxAttempts)
+            {
+                await DelayTelegramRetryAsync(attempt, null, string.Empty, cancellationToken);
+            }
+            catch (HttpRequestException) when (attempt < TelegramApiMaxAttempts)
+            {
+                await DelayTelegramRetryAsync(attempt, null, string.Empty, cancellationToken);
+            }
+        }
+
+        return false;
+    }
+
+    private async Task<bool> SendStandaloneInlineKeyboardAsync(
+        string endpoint,
+        string chatId,
+        string replyMarkup,
+        CancellationToken cancellationToken
+    )
+    {
+        var body = new StringBuilder();
+        body.Append("{");
+        body.Append($"\"chat_id\":\"{EscapeJson(chatId)}\",");
+        body.Append($"\"text\":{JsonStringQuote("⤵ 빠른 작업")},");
+        body.Append($"\"reply_markup\":{replyMarkup}");
+        body.Append("}");
+        try
+        {
+            using var content = new StringContent(body.ToString(), Encoding.UTF8, "application/json");
+            using var response = await _httpClient.PostAsync(endpoint, content, cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string BuildInlineKeyboardJson(IReadOnlyList<IReadOnlyList<TelegramInlineButton>> buttonRows)
+    {
+        if (buttonRows == null || buttonRows.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var sb = new StringBuilder();
+        sb.Append("{\"inline_keyboard\":[");
+        var firstRow = true;
+        foreach (var row in buttonRows)
+        {
+            if (row == null || row.Count == 0)
+            {
+                continue;
+            }
+            if (!firstRow) sb.Append(',');
+            firstRow = false;
+            sb.Append('[');
+            var firstBtn = true;
+            foreach (var btn in row)
+            {
+                if (btn == null || string.IsNullOrWhiteSpace(btn.Text))
+                {
+                    continue;
+                }
+                if (!firstBtn) sb.Append(',');
+                firstBtn = false;
+                var data = string.IsNullOrWhiteSpace(btn.CallbackData) ? btn.Text : btn.CallbackData;
+                sb.Append('{');
+                sb.Append($"\"text\":{JsonStringQuote(btn.Text)},");
+                sb.Append($"\"callback_data\":{JsonStringQuote(data)}");
+                sb.Append('}');
+            }
+            sb.Append(']');
+        }
+        sb.Append("]}");
+        return sb.ToString();
+    }
+
+    private static string JsonStringQuote(string value)
+    {
+        // EscapeJson은 따옴표 없이 raw 이스케이프 문자열만 만든다. JSON value로 쓰려면 따옴표 둘러주기.
+        return "\"" + EscapeJson(value ?? string.Empty) + "\"";
+    }
+
+    // callback_query 처리 후 ack — 안 하면 사용자 화면에서 spinner 가 계속 돈다.
+    public async Task<bool> AnswerCallbackQueryAsync(string callbackQueryId, string? toastText, CancellationToken cancellationToken)
+    {
+        if (!TryGetConfiguredRoute(out var botToken, out _))
+        {
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(callbackQueryId))
+        {
+            return false;
+        }
+
+        var endpoint = $"https://api.telegram.org/bot{botToken}/answerCallbackQuery";
+        var body = new StringBuilder();
+        body.Append("{");
+        body.Append($"\"callback_query_id\":\"{EscapeJson(callbackQueryId)}\"");
+        if (!string.IsNullOrWhiteSpace(toastText))
+        {
+            var trimmed = toastText!.Length > 200 ? toastText[..200] : toastText;
+            body.Append($",\"text\":{JsonStringQuote(trimmed)}");
+        }
+        body.Append("}");
+
+        try
+        {
+            using var content = new StringContent(body.ToString(), Encoding.UTF8, "application/json");
+            using var response = await _httpClient.PostAsync(endpoint, content, cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public async Task<bool> SendTypingAsync(CancellationToken cancellationToken)
     {
         if (!TryGetConfiguredRoute(out var botToken, out var chatId))
@@ -536,7 +722,8 @@ public sealed class TelegramClient : IDisposable
             return Array.Empty<TelegramUpdate>();
         }
 
-        var endpoint = $"https://api.telegram.org/bot{botToken}/getUpdates?timeout=15&offset={offset}";
+        // allowed_updates에 callback_query 명시. 명시 안 하면 일부 클라이언트에서 누락될 수 있다.
+        var endpoint = $"https://api.telegram.org/bot{botToken}/getUpdates?timeout=15&offset={offset}&allowed_updates=%5B%22message%22%2C%22callback_query%22%5D";
         using var response = await GetWithRetryAsync(endpoint, cancellationToken);
         if (response == null || !response.IsSuccessStatusCode)
         {
@@ -746,12 +933,56 @@ public sealed class TelegramClient : IDisposable
                 }
             }
 
+            string? callbackQueryId = null;
+            string? callbackData = null;
+            if (updateElement.TryGetProperty("callback_query", out var cbElement)
+                && cbElement.ValueKind == JsonValueKind.Object)
+            {
+                if (cbElement.TryGetProperty("id", out var cbIdElement)
+                    && cbIdElement.ValueKind == JsonValueKind.String)
+                {
+                    callbackQueryId = cbIdElement.GetString();
+                }
+                if (cbElement.TryGetProperty("data", out var cbDataElement)
+                    && cbDataElement.ValueKind == JsonValueKind.String)
+                {
+                    callbackData = cbDataElement.GetString();
+                }
+                // callback_query에는 message가 nested이고 from은 별도. chat/from 추출.
+                if (cbElement.TryGetProperty("message", out var cbMessageElement)
+                    && cbMessageElement.ValueKind == JsonValueKind.Object
+                    && cbMessageElement.TryGetProperty("chat", out var cbChatElement)
+                    && cbChatElement.ValueKind == JsonValueKind.Object
+                    && cbChatElement.TryGetProperty("id", out var cbChatIdElement))
+                {
+                    chatId ??= cbChatIdElement.ValueKind switch
+                    {
+                        JsonValueKind.Number => cbChatIdElement.GetInt64().ToString(),
+                        JsonValueKind.String => cbChatIdElement.GetString(),
+                        _ => null
+                    };
+                }
+                if (cbElement.TryGetProperty("from", out var cbFromElement)
+                    && cbFromElement.ValueKind == JsonValueKind.Object
+                    && cbFromElement.TryGetProperty("id", out var cbFromIdElement))
+                {
+                    fromUserId ??= cbFromIdElement.ValueKind switch
+                    {
+                        JsonValueKind.Number => cbFromIdElement.GetInt64().ToString(),
+                        JsonValueKind.String => cbFromIdElement.GetString(),
+                        _ => null
+                    };
+                }
+            }
+
             updates.Add(new TelegramUpdate(
                 updateId,
                 text,
                 chatId,
                 fromUserId,
-                attachments.Count == 0 ? Array.Empty<InputAttachment>() : attachments.ToArray()
+                attachments.Count == 0 ? Array.Empty<InputAttachment>() : attachments.ToArray(),
+                callbackQueryId,
+                callbackData
             ));
         }
 
@@ -2605,5 +2836,10 @@ public sealed record TelegramUpdate(
     string? Text,
     string? ChatId,
     string? FromUserId,
-    IReadOnlyList<InputAttachment>? Attachments
+    IReadOnlyList<InputAttachment>? Attachments,
+    string? CallbackQueryId = null,
+    string? CallbackData = null
 );
+
+// inline keyboard 한 버튼: 표시 텍스트 + tap 시 보낼 callback_data (보통 슬래시 명령 문자열).
+public sealed record TelegramInlineButton(string Text, string CallbackData);

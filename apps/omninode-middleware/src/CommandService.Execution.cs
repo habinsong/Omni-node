@@ -41,6 +41,20 @@ public sealed partial class CommandService
             }
 
             text = transcribed.Trim();
+
+            // 사용자가 자기 음성이 어떻게 들렸는지 즉시 확인할 수 있게 transcript를 별도 메시지로 echo.
+            // 잘못 들렸을 때 다시 말하도록 유도한다. 메시지 전송 실패는 무시.
+            try
+            {
+                var preview = text.Length > 360 ? text[..360] + "…" : text;
+                await _telegramClient.SendMessageAsync(
+                    $"🎙️ 들은 내용:\n\"{preview}\"\n(분석을 시작합니다.)",
+                    cancellationToken
+                );
+            }
+            catch
+            {
+            }
         }
 
         if (string.IsNullOrWhiteSpace(text))
@@ -188,6 +202,12 @@ public sealed partial class CommandService
                 if (memoryCommandResult != null)
                 {
                     return memoryCommandResult;
+                }
+
+                var historySlashResult = TryHandleTelegramHistorySlashCommand(text);
+                if (historySlashResult != null)
+                {
+                    return historySlashResult;
                 }
 
                 var thinkToggleResult = TryHandleTelegramThinkSlashCommand(text);

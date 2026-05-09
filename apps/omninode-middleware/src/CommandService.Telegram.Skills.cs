@@ -201,26 +201,38 @@ public sealed partial class CommandService
             || !_activeSkillByThread.TryGetValue(session.SessionId, out var active)
             || string.IsNullOrWhiteSpace(active))
         {
-            return """
-                   현재 텔레그램 대화에 활성화된 스킬이 없습니다.
-                   - 활성화: /skill use <name>
-                   - 목록: /skill list
-                   """;
+            return AppendTelegramInlineButtons(
+                """
+                현재 텔레그램 대화에 활성화된 스킬이 없습니다.
+                - 활성화: /skill use <name>
+                - 목록: /skill list
+                """,
+                ("/skill list", "📋 목록"),
+                ("/help skill", "ℹ️ 도움말")
+            );
         }
 
         var skill = FindSkill(active, null);
         if (skill == null)
         {
-            return $"활성 스킬: `{active}` (스냅샷에서 본문을 찾지 못함 — 재로드 권장)";
+            return AppendTelegramInlineButtons(
+                $"활성 스킬: `{active}` (스냅샷에서 본문을 찾지 못함 — 재로드 권장)",
+                ("/skill off", "🚫 끄기"),
+                ("/skill list", "📋 목록")
+            );
         }
 
-        return $"""
-               🎯 활성 스킬: `{skill.Name}`
-               - 범위: {skill.Scope}
-               - 설명: {TrimLocalAssistantInfoText(skill.Description, 160)}
-               - 해제: /skill off
-               - 다른 스킬로 전환: /skill use <name>
-               """;
+        return AppendTelegramInlineButtons(
+            $"""
+            🎯 활성 스킬: `{skill.Name}`
+            - 범위: {skill.Scope}
+            - 설명: {TrimLocalAssistantInfoText(skill.Description, 160)}
+            - 해제: /skill off
+            - 다른 스킬로 전환: /skill use <name>
+            """,
+            ("/skill off", "🚫 끄기"),
+            ("/skill list", "📋 목록")
+        );
     }
 
     private string DeactivateTelegramSkill()

@@ -16,6 +16,7 @@ public sealed class AppConfig
     public string CoreSocketPath { get; init; } = ResolveDefaultCoreSocketPath();
     public string? TelegramBotToken { get; init; }
     public string? TelegramChatId { get; init; }
+    // 단일 user_id 또는 CSV(여러 user_id)를 받는다. 비어 있으면 user 단위 검사 생략.
     public string? TelegramAllowedUserId { get; init; }
     public string CopilotCliBinary { get; init; } = "gh";
     public string CopilotDirectBinary { get; init; } = "copilot";

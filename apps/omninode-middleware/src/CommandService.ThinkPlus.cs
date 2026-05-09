@@ -219,9 +219,10 @@ public sealed partial class CommandService
         if (tokens.Length < 2 || tokens[1].Equals("status", StringComparison.OrdinalIgnoreCase) || tokens[1].Equals("?", StringComparison.Ordinal))
         {
             var active = IsThinkPlusActiveForThread(key);
-            return active
-                ? "🧠 추론 모드: ON. 끄려면 /think off 또는 \"추론 모드 꺼\""
-                : "🧠 추론 모드: OFF. 켜려면 /think on 또는 \"추론 모드 켜\"";
+            var (body, toggleCmd, toggleLabel) = active
+                ? ("🧠 추론 모드: ON", "/think off", "🚫 끄기")
+                : ("🧠 추론 모드: OFF", "/think on", "✅ 켜기");
+            return AppendTelegramInlineButtons(body, (toggleCmd, toggleLabel));
         }
 
         var arg = tokens[1].Trim().ToLowerInvariant();
@@ -255,9 +256,10 @@ public sealed partial class CommandService
         if (tokens.Length < 2 || tokens[1].Equals("status", StringComparison.OrdinalIgnoreCase))
         {
             var active = IsThinkPlusActiveForThread(key);
-            return active
-                ? "🌐 웹검색 컨텍스트: ON (Think+ 모드와 공유). /web off 로 끔."
-                : "🌐 웹검색 컨텍스트: OFF. /web on 으로 켬.";
+            var (body, toggleCmd, toggleLabel) = active
+                ? ("🌐 웹검색 컨텍스트: ON (Think+ 모드와 공유)", "/web off", "🚫 끄기")
+                : ("🌐 웹검색 컨텍스트: OFF", "/web on", "✅ 켜기");
+            return AppendTelegramInlineButtons(body, (toggleCmd, toggleLabel));
         }
 
         var arg = tokens[1].Trim().ToLowerInvariant();
