@@ -11,6 +11,12 @@ bin/
 obj/
 publish/
 
+.claude/
+.github/workflows/
+.playwright-mcp/
+.sisyphus/
+Library/
+
 *.log
 *.tmp
 *.swp
