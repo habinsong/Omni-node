@@ -973,6 +973,7 @@ import {
     const [routineCreateForm, setRoutineCreateForm] = useState(() => createRoutineFormState());
     const [routineEditForm, setRoutineEditForm] = useState(() => createRoutineFormState());
     const [routineSelectedId, setRoutineSelectedId] = useState(ROUTINE_STATE_DEFAULTS.routineSelectedId);
+    const [routineDetailSubPane, setRoutineDetailSubPane] = useState("history");
     const [routineProgress, setRoutineProgress] = useState(() => createRoutineProgressState(ROUTINE_STATE_DEFAULTS.progress));
     const [logicGraphs, setLogicGraphs] = useState(() => [...LOGIC_STATE_DEFAULTS.graphs]);
     const [logicSelectedGraphId, setLogicSelectedGraphId] = useState(LOGIC_STATE_DEFAULTS.selectedGraphId);
@@ -7828,7 +7829,9 @@ import {
         openRoutineRunDetail,
         resendRoutineRunTelegram,
         setRoutineOutputPreview,
-        renderResponsiveSectionTabs
+        renderResponsiveSectionTabs,
+        routineDetailSubPane,
+        setRoutineDetailSubPane
       });
     }
 

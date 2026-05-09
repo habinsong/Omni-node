@@ -175,8 +175,7 @@ export function createRoutineCreateWizard({ React, e }) {
     return e("section", { className: "routine-list-panel routine-create-panel routine-wizard" },
       e("div", { className: "routine-head" },
         e("div", null,
-          e("div", { className: "routine-head-kicker" }, "새 루틴"),
-          e("h2", null, "루틴 만들기")
+          e("div", { className: "routine-head-kicker" }, "새 루틴")
         )
       ),
       e("p", { className: "hint routine-panel-hint" }, "단계별로 입력하면 누락 위험을 줄입니다. 텔레그램 응답과 알림은 마지막 단계에서 조정합니다."),

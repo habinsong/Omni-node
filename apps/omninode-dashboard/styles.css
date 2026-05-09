@@ -2314,7 +2314,7 @@ body,
 
 .routine-layout {
   display: grid;
-  grid-template-columns: minmax(240px, 0.72fr) minmax(360px, 1.08fr) minmax(0, 2.05fr);
+  grid-template-columns: minmax(300px, 1fr) minmax(360px, 1.5fr);
   gap: 16px;
   align-items: stretch;
   width: 100%;
@@ -2323,10 +2323,11 @@ body,
 .routine-left-column {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
   min-width: 0;
   min-height: 0;
-  align-self: start;
+  align-self: stretch;
+  overflow: hidden;
 }
 
 .routine-list-panel,
@@ -2341,7 +2342,6 @@ body,
   min-height: 0;
   min-width: 0;
   width: 100%;
-  height: 100%;
 }
 
 .routine-detail-panel {
@@ -2350,11 +2350,49 @@ body,
 
 .routine-create-panel {
   align-self: stretch;
+  flex: 1 1 0%;
+  overflow-y: auto;
 }
 
 .routine-library-panel {
   min-height: 0;
   overflow: hidden;
+  flex: 1 1 0%;
+}
+
+.routine-left-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 0 0 8px;
+}
+
+.routine-left-tab {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid rgba(205, 217, 233, 0.96);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #5c708a;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition), color var(--transition), box-shadow var(--transition);
+}
+
+.routine-left-tab:hover {
+  border-color: rgba(152, 180, 224, 0.98);
+  background: rgba(247, 251, 255, 0.98);
+  color: #26456c;
+}
+
+.routine-left-tab.active {
+  border-color: rgba(103, 146, 221, 0.94);
+  background: rgba(228, 238, 255, 0.98);
+  color: #275bb0;
+  box-shadow: none;
 }
 
 .routine-head {
@@ -2446,10 +2484,49 @@ body,
 .routine-primary-column,
 .routine-secondary-column {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
   height: 100%;
   align-self: stretch;
+}
+
+.routine-detail-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.routine-detail-tab {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid rgba(205, 217, 233, 0.96);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #5c708a;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition), color var(--transition), box-shadow var(--transition);
+}
+
+.routine-detail-tab:hover {
+  border-color: rgba(152, 180, 224, 0.98);
+  background: rgba(247, 251, 255, 0.98);
+  color: #26456c;
+}
+
+.routine-detail-tab.active {
+  border-color: rgba(103, 146, 221, 0.94);
+  background: rgba(228, 238, 255, 0.98);
+  color: #275bb0;
+  box-shadow: none;
+}
+
+.routine-detail-tab-panel {
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .routine-section-head {
@@ -2746,22 +2823,47 @@ body,
 .routine-stats-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 10px;
+  gap: 6px;
+}
+
+.routine-stats-grid .routine-overview-card {
+  padding: 6px 8px;
+  gap: 2px;
+  border-radius: 10px;
+}
+
+.routine-stats-grid .routine-overview-label {
+  font-size: 9px;
+}
+
+.routine-stats-grid .routine-overview-value {
+  font-size: 14px;
+}
+
+.routine-stats-grid .routine-overview-value-lg {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.routine-stats-grid .routine-overview-note {
+  font-size: 10px;
+  line-height: 1.3;
 }
 
 .routine-stat-card {
   border: 1px solid rgba(214, 224, 236, 0.94);
-  border-radius: 14px;
+  border-radius: 8px;
   background: rgba(248, 251, 255, 0.98);
-  padding: 14px 15px;
+  padding: 4px 6px;
   display: grid;
-  gap: 6px;
+  gap: 1px;
 }
 
 .routine-stat-label {
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--muted);
+  line-height: 1.2;
 }
 
 .routine-kv {
@@ -4257,6 +4359,10 @@ body,
 
   .routine-layout {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .routine-left-column {
+    flex-direction: column;
   }
 
   .routine-list-panel,
@@ -8914,7 +9020,7 @@ video {
 }
 
 .routine-layout {
-  grid-template-columns: minmax(230px, 0.7fr) minmax(340px, 0.98fr) minmax(0, 1.72fr);
+  grid-template-columns: minmax(380px, 1fr) minmax(280px, 1.3fr);
 }
 
 .routine-detail-grid {
@@ -9675,6 +9781,10 @@ video {
 
   .routine-layout {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .routine-left-column {
+    flex-direction: column;
   }
 
   .routine-list-panel,
@@ -13578,10 +13688,10 @@ video {
    Cascade-last so it wins over earlier rules
    ───────────────────────────────────────────── */
 
-/* 1) Wizard panel: do NOT stretch to match detail-panel height in 3-col layout */
+/* 1) Wizard panel: flex-based sizing in 3-col layout */
 .routine-layout .routine-create-panel.routine-wizard {
-  align-self: start;
-  height: auto;
+  align-self: stretch;
+  overflow-y: auto;
 }
 
 /* 2) Retry/notify: ALWAYS 2x2 (no orphan, fits in cramped wizard column) */
@@ -13732,23 +13842,29 @@ video {
 }
 
 .routine-layout {
-  grid-template-columns: minmax(300px, 0.58fr) minmax(0, 1.9fr) !important;
+  grid-template-columns: minmax(420px, 1fr) minmax(300px, 1.6fr) !important;
   gap: 14px !important;
-  align-items: start !important;
+  align-items: stretch !important;
 }
 
 .routine-left-column {
-  display: grid !important;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
-  align-self: start;
+  display: flex !important;
+  flex-direction: column;
+  gap: 0;
+  align-self: stretch;
 }
 
-.routine-left-column>.routine-create-panel,
+.routine-left-column>.routine-create-panel {
+  flex: 1 1 0% !important;
+  height: auto !important;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .routine-left-column>.routine-library-panel,
 .routine-detail-panel {
   height: auto !important;
-  align-self: start !important;
+  align-self: stretch !important;
 }
 
 .routine-left-column .routine-list {
@@ -13829,12 +13945,15 @@ video {
 }
 
 .routine-stat-card {
-  padding: 10px 11px !important;
-  border-radius: 12px !important;
+  padding: 4px 6px !important;
+  gap: 1px !important;
+  border-radius: 8px !important;
 }
 
 .routine-stat-card strong {
   overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 1.2;
 }
 
 .routine-kv {
@@ -13870,7 +13989,7 @@ video {
 
 @media (max-width: 1360px) {
   .routine-layout {
-    grid-template-columns: minmax(280px, 0.62fr) minmax(0, 1.72fr) !important;
+    grid-template-columns: minmax(360px, 0.8fr) minmax(0, 1.5fr) !important;
   }
 
   .routine-detail-grid {
@@ -13881,6 +14000,10 @@ video {
 @media (max-width: 1260px) {
   .routine-layout {
     grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .routine-left-column {
+    flex-direction: column !important;
   }
 
   .routine-left-column .routine-list {
@@ -13953,23 +14076,26 @@ video {
   }
 
   .routine-left-column {
-    grid-template-rows: auto minmax(0, 1fr);
+    display: flex !important;
+    flex-direction: column;
     height: 100%;
     min-height: 0;
     align-self: stretch;
     overflow: hidden;
+    gap: 0;
   }
 
   .routine-left-column>.routine-create-panel {
+    flex: 1 1 0%;
     max-height: none;
     min-height: 0;
-    overflow: visible;
+    overflow-y: auto;
   }
 
   .routine-left-column>.routine-library-panel {
+    flex: 1 1 0%;
     display: flex;
     flex-direction: column;
-    height: 100% !important;
     min-height: 0;
     overflow: hidden;
   }
@@ -14038,65 +14164,123 @@ video {
 
 /* Compact create wizard so list/create/detail fit in one viewport. */
 .routine-left-column .routine-wizard {
-  gap: 7px !important;
+  gap: 5px !important;
 }
 
 .routine-left-column .routine-create-panel.routine-wizard {
-  height: auto !important;
-  overflow: visible !important;
+  height: auto;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .routine-left-column .routine-wizard .routine-panel-hint {
   display: none;
 }
 
+.routine-left-column .routine-wizard .routine-head {
+  gap: 4px;
+  margin-bottom: 0;
+}
+
+.routine-left-column .routine-wizard .routine-head-kicker {
+  font-size: 11px;
+}
+
 .routine-left-column .routine-wizard-stepnav {
-  gap: 5px;
-  padding: 6px;
-  border-radius: 10px;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 8px;
 }
 
 .routine-left-column .routine-wizard-step {
-  min-height: 30px;
-  gap: 5px;
-  padding: 5px 6px;
+  min-height: 26px;
+  gap: 4px;
+  padding: 4px 6px;
+  font-size: 11px;
 }
 
 .routine-left-column .routine-wizard-step-index {
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  font-size: 10px;
+}
+
+.routine-left-column .routine-wizard-step-label {
+  font-size: 11px;
 }
 
 .routine-left-column .routine-wizard-stepheader {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .routine-left-column .routine-wizard-stephint {
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: 11px;
+  line-height: 1.3;
 }
 
 .routine-left-column .routine-wizard .routine-section-card {
-  padding: 10px !important;
-  overflow: visible;
+  padding: 8px !important;
+  gap: 6px !important;
+  overflow: hidden;
+}
+
+.routine-left-column .routine-wizard .routine-form-grid {
+  gap: 6px;
+}
+
+.routine-left-column .routine-wizard .routine-form-grid-primary {
+  gap: 6px;
+}
+
+.routine-left-column .routine-wizard .routine-field {
+  gap: 3px;
+}
+
+.routine-left-column .routine-wizard .routine-field-label {
+  font-size: 11px;
 }
 
 .routine-left-column .routine-wizard .routine-input {
-  min-height: 56px;
+  min-height: 48px;
+}
+
+.routine-left-column .routine-wizard .input {
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.routine-left-column .routine-wizard .textarea {
+  padding: 6px 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.routine-left-column .routine-wizard .routine-segmented-control {
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.routine-left-column .routine-wizard .routine-segment-btn {
+  min-height: 28px;
+  font-size: 11px;
+  padding: 4px 6px;
 }
 
 .routine-left-column .routine-wizard-navrow {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  gap: 5px;
 }
 
 .routine-left-column .routine-wizard-navrow .btn {
   min-width: 0;
+  min-height: 30px;
+  font-size: 12px;
+  padding: 5px 8px;
 }
 
 .routine-left-column .routine-wizard-navrow .btn:last-child:nth-child(3) {

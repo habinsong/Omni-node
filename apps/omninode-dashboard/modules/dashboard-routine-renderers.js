@@ -324,7 +324,9 @@ export function renderRoutineTab(props) {
     openRoutineRunDetail,
     resendRoutineRunTelegram,
     setRoutineOutputPreview,
-    renderResponsiveSectionTabs
+    renderResponsiveSectionTabs,
+    routineDetailSubPane,
+    setRoutineDetailSubPane
   } = props;
 
   const selected = routines.find((item) => item.id === routineSelectedId) || null;
@@ -610,52 +612,59 @@ export function renderRoutineTab(props) {
             )
           ),
           e("div", { className: "routine-secondary-column" },
-            // Run history — kept open (most actionable info)
-            e("details", { className: "routine-section-card routine-detail-disclosure", open: true },
-              e("summary", { className: "routine-section-head" },
-                e("div", { className: "routine-editor-title" }, "실행 이력"),
-                e("div", { className: "routine-editor-subtitle" }, `${selectedRuns.length}건`)
-              ),
-              renderRoutineRunHistory({
-                e,
-                routineId: selected.id,
-                runs: selectedRuns,
-                openRoutineRunDetail,
-                resendRoutineRunTelegram
-              })
-            ),
-            // Recent output — collapsed by default (P1: verbose KV + pre block)
-            e("details", { className: "routine-section-card routine-detail-disclosure" },
-              e("summary", { className: "routine-section-head" },
-                e("div", { className: "routine-editor-title" }, "최근 실행 출력"),
-                e("div", { className: "routine-editor-subtitle" }, selected.lastStatus || "-")
-              ),
-              e("div", { className: "routine-kv" },
-                e("div", null, `ID: ${selected.id}`),
-                e("div", null, `실행 모드: ${formatRoutineExecutionModeLabel(selected.resolvedExecutionMode || selected.executionMode || "script")}`),
-                e("div", null, `언어: ${selected.language || "-"}`),
-                e("div", null, `시간대: ${selected.timezoneId || "-"}`),
-                e("div", null, `재시도: ${Math.max(0, Number(selected.maxRetries || 0))}회 / ${Math.max(0, Number(selected.retryDelaySeconds || 0))}초`),
-                e("div", null, `텔레그램 응답: ${selectedNotifyTelegram ? "켜짐" : "꺼짐"}`),
-                e("div", null, `알림: ${normalizeRoutineNotifyPolicy(selected.notifyPolicy, "always")}`),
-                e("div", null, `에이전트: ${(selected.agentProvider || "-")} / ${(selected.agentModel || "-")}`),
-                e("div", null, `시작 URL: ${selected.agentStartUrl || "-"}`),
-                e("div", null, `스크립트: ${selected.scriptPath || "-"}`)
-              ),
+            e("div", { className: "routine-detail-tabs" },
               e("button", {
-                type: "button",
-                className: "routine-output-button",
-                onClick: () => setRoutineOutputPreview({
-                  open: true,
-                  title: `${selected.title || selected.id} · 최근 실행 출력`,
-                  content: selected.lastOutput || "출력 없음",
-                  imagePath: "",
-                  imageAlt: ""
-                })
-              },
-                e("pre", { className: "routine-output" }, selected.lastOutput || "출력 없음")
-              )
-            )
+                className: `routine-detail-tab ${routineDetailSubPane !== "output" ? "active" : ""}`,
+                onClick: () => setRoutineDetailSubPane("history")
+              }, "실행 이력"),
+              e("button", {
+                className: `routine-detail-tab ${routineDetailSubPane === "output" ? "active" : ""}`,
+                onClick: () => setRoutineDetailSubPane("output")
+              }, "최근 실행 출력")
+            ),
+            routineDetailSubPane !== "output"
+              ? e("div", { className: "routine-section-card routine-detail-tab-panel" },
+                  e("div", { className: "routine-section-head" },
+                    e("div", { className: "routine-editor-title" }, `${selectedRuns.length}건`)
+                  ),
+                  renderRoutineRunHistory({
+                    e,
+                    routineId: selected.id,
+                    runs: selectedRuns,
+                    openRoutineRunDetail,
+                    resendRoutineRunTelegram
+                  })
+                )
+              : e("div", { className: "routine-section-card routine-detail-tab-panel" },
+                  e("div", { className: "routine-section-head" },
+                    e("div", { className: "routine-editor-title" }, selected.lastStatus || "-")
+                  ),
+                  e("div", { className: "routine-kv" },
+                    e("div", null, `ID: ${selected.id}`),
+                    e("div", null, `실행 모드: ${formatRoutineExecutionModeLabel(selected.resolvedExecutionMode || selected.executionMode || "script")}`),
+                    e("div", null, `언어: ${selected.language || "-"}`),
+                    e("div", null, `시간대: ${selected.timezoneId || "-"}`),
+                    e("div", null, `재시도: ${Math.max(0, Number(selected.maxRetries || 0))}회 / ${Math.max(0, Number(selected.retryDelaySeconds || 0))}초`),
+                    e("div", null, `텔레그램 응답: ${selectedNotifyTelegram ? "켜짐" : "꺼짐"}`),
+                    e("div", null, `알림: ${normalizeRoutineNotifyPolicy(selected.notifyPolicy, "always")}`),
+                    e("div", null, `에이전트: ${(selected.agentProvider || "-")} / ${(selected.agentModel || "-")}`),
+                    e("div", null, `시작 URL: ${selected.agentStartUrl || "-"}`),
+                    e("div", null, `스크립트: ${selected.scriptPath || "-"}`)
+                  ),
+                  e("button", {
+                    type: "button",
+                    className: "routine-output-button",
+                    onClick: () => setRoutineOutputPreview({
+                      open: true,
+                      title: `${selected.title || selected.id} · 최근 실행 출력`,
+                      content: selected.lastOutput || "출력 없음",
+                      imagePath: "",
+                      imageAlt: ""
+                    })
+                  },
+                    e("pre", { className: "routine-output" }, selected.lastOutput || "출력 없음")
+                  )
+                )
           )
         )
       )
@@ -683,10 +692,17 @@ export function renderRoutineTab(props) {
         overviewCards,
         e("div", { className: "routine-layout" },
           e("div", { className: "routine-left-column" },
-            // 좁은 폭일 때는 list 가 위로 오도록 — createPanel 이 길어도 목록이 안 가려짐.
-            // 단, 위 분기에서 mobile-shell 이 처리하므로 여기는 정상 데스크탑 (>1024px) 흐름.
-            createPanel,
-            listPanel
+            e("div", { className: "routine-left-tabs" },
+              e("button", {
+                className: `routine-left-tab ${currentRoutinePane === "list" ? "active" : ""}`,
+                onClick: () => setResponsivePane("routine", "list")
+              }, "목록"),
+              e("button", {
+                className: `routine-left-tab ${currentRoutinePane === "create" ? "active" : ""}`,
+                onClick: () => setResponsivePane("routine", "create")
+              }, "새 루틴")
+            ),
+            currentRoutinePane === "create" ? createPanel : listPanel
           ),
           detailPanel
         )
