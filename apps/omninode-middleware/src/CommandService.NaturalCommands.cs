@@ -710,7 +710,7 @@ public sealed partial class CommandService
                스키마:
                {
                  "kind": "command|chat",
-                 "command": "mode.set|provider.set|model.set|profile.set|memory.clear|memory.create|doctor.run|plan.list|plan.get|plan.create|plan.review|plan.approve|plan.run|task.list|task.create|task.status|task.run|task.cancel|task.output|notebook.show|notebook.append|handoff.create|routine.list|routine.create|routine.update|routine.run|routine.runs|routine.detail|routine.resend|routine.on|routine.off|routine.delete|coding.status|coding.run|coding.result|coding.files|coding.file|coding.mode.set|coding.language.set|coding.provider.set|coding.model.set|coding.worker.set|refactor.status|refactor.read|refactor.apply|metrics.get|llm.status|llm.usage|llm.models|help.show|kill.request",
+                 "command": "mode.set|provider.set|model.set|profile.set|memory.clear|memory.create|doctor.run|plan.list|plan.get|plan.create|plan.review|plan.approve|plan.run|task.list|task.create|task.status|task.run|task.cancel|task.output|notebook.show|notebook.append|handoff.create|routine.list|routine.create|routine.update|routine.run|routine.runs|routine.detail|routine.resend|routine.on|routine.off|routine.delete|coding.status|coding.run|coding.result|coding.files|coding.file|coding.download|coding.mode.set|coding.language.set|coding.provider.set|coding.model.set|coding.worker.set|refactor.status|refactor.read|refactor.apply|metrics.get|llm.status|llm.usage|llm.models|help.show|kill.request|skill.list|skill.status|skill.use|skill.off|skill.get|skill.quick.add|skill.quick.list|skill.quick.remove|think.on|think.off|think.status|web.on|web.off|web.status|history.show",
                  "args": {"k":"v"},
                  "confidence": 0.0,
                  "reason": "짧은 근거"
@@ -752,6 +752,24 @@ public sealed partial class CommandService
                - refactor.status args 없음
                - refactor.read args: path=<상대경로 또는 절대경로>, start=<선택>, end=<선택>
                - refactor.apply args: preview_id=<선택>
+               - coding.download args: query=<번호 또는 경로>
+               - skill.list / skill.status / skill.off args 없음
+               - skill.use args: name=<스킬이름>, scope=project|global(선택)
+               - skill.get args: name=<스킬이름>, scope=project|global(선택)
+               - skill.quick.add args: alias=<별명>, name=<스킬이름>
+               - skill.quick.list args 없음
+               - skill.quick.remove args: alias=<별명>
+               - think.on / think.off / think.status / web.on / web.off / web.status args 없음
+               - history.show args: count=<숫자, 1~20, 선택, 기본 5>
+               - "추론 모드/Think+/웹검색 모드/웹 컨텍스트" 토글 요청은 think.* / web.* 명령으로 매핑.
+               - "최근 대화/히스토리/지난 대화 N개 보여줘"는 history.show 로 매핑.
+               - "<X> 스킬 별명/단축으로 등록/지정해줘" → skill.quick.add 로 매핑 (alias=<별명>, name=<X>).
+               - "스킬 별명/단축 목록 보여줘" → skill.quick.list.
+               - "스킬 별명/단축 <X> 지워/삭제/제거" → skill.quick.remove (alias=<X>).
+               - "스킬 상태/현재 스킬/활성 스킬" → skill.status.
+               - "스킬 종료/해제/그만/꺼" → skill.off.
+               - "<X> 스킬 사용/적용/켜" 형식이면 skill.use(name=X). 만약 추가 지시문(예: "사용해서 …설명해줘")이 함께 있으면 kind=chat 으로 두어 LLM 본흐름이 직접 처리하게 한다.
+               - "코딩 파일 <N>번 다운/내려/첨부" → coding.download(query=N). "/coding files" 시각화 요청은 coding.files.
                - confidence는 0~1
 
                사용자 입력:
@@ -1600,6 +1618,156 @@ public sealed partial class CommandService
 
                 return new NaturalCommandValidationResult(true, false, new CanonicalCommand(command, "/help"), "ok", string.Empty);
             }
+            case "coding.download":
+            {
+                if (!source.Equals("telegram", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "telegram_only", "coding 다운로드는 텔레그램에서만 지원합니다.");
+                }
+                if (!ContainsExplicitCodingDownloadIntent(rawInput))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "coding_download_keyword_required", "다운로드 키워드가 필요합니다.");
+                }
+                var query = GetArg("query", "path", "file", "index", "value");
+                if (string.IsNullOrWhiteSpace(query))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "missing_coding_download_query", "파일 번호나 경로가 필요합니다.");
+                }
+                return new NaturalCommandValidationResult(true, false, new CanonicalCommand(command, $"/coding download {query}"), "ok", string.Empty);
+            }
+
+            case "skill.list":
+            {
+                if (!ContainsExplicitSkillIntent(rawInput))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "skill_keyword_required", "스킬 키워드가 필요합니다.");
+                }
+                return new NaturalCommandValidationResult(true, false, new CanonicalCommand(command, "/skill list"), "ok", string.Empty);
+            }
+            case "skill.status":
+            {
+                if (!ContainsExplicitSkillIntent(rawInput))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "skill_keyword_required", "스킬 키워드가 필요합니다.");
+                }
+                return new NaturalCommandValidationResult(true, false, new CanonicalCommand(command, "/skill status"), "ok", string.Empty);
+            }
+            case "skill.off":
+            {
+                if (!ContainsExplicitSkillOffIntent(rawInput))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "skill_off_keyword_required", "스킬 종료 키워드가 필요합니다.");
+                }
+                return new NaturalCommandValidationResult(true, false, new CanonicalCommand(command, "/skill off"), "ok", string.Empty);
+            }
+            case "skill.use":
+            {
+                if (!ContainsExplicitSkillIntent(rawInput))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "skill_keyword_required", "스킬 키워드가 필요합니다.");
+                }
+                var name = GetArg("name", "skill", "value");
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "missing_skill_name", "스킬 이름이 필요합니다.");
+                }
+                var scope = GetArg("scope").ToLowerInvariant();
+                var slash = scope is "project" or "global"
+                    ? $"/skill use {name} {scope}"
+                    : $"/skill use {name}";
+                return new NaturalCommandValidationResult(true, false, new CanonicalCommand(command, slash), "ok", string.Empty);
+            }
+            case "skill.get":
+            {
+                if (!ContainsExplicitSkillIntent(rawInput))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "skill_keyword_required", "스킬 키워드가 필요합니다.");
+                }
+                var name = GetArg("name", "skill", "value");
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "missing_skill_name", "스킬 이름이 필요합니다.");
+                }
+                var scope = GetArg("scope").ToLowerInvariant();
+                var slash = scope is "project" or "global"
+                    ? $"/skill get {name} {scope}"
+                    : $"/skill get {name}";
+                return new NaturalCommandValidationResult(true, false, new CanonicalCommand(command, slash), "ok", string.Empty);
+            }
+            case "skill.quick.add":
+            {
+                if (!ContainsExplicitSkillIntent(rawInput))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "skill_keyword_required", "스킬 키워드가 필요합니다.");
+                }
+                var alias = GetArg("alias", "shortcut").TrimStart('/');
+                var name = GetArg("name", "skill", "value");
+                if (string.IsNullOrWhiteSpace(alias) || string.IsNullOrWhiteSpace(name))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "missing_skill_alias_args", "alias 와 스킬 이름이 모두 필요합니다.");
+                }
+                return new NaturalCommandValidationResult(true, false, new CanonicalCommand(command, $"/skill quick {alias} {name}"), "ok", string.Empty);
+            }
+            case "skill.quick.list":
+            {
+                if (!ContainsExplicitSkillIntent(rawInput))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "skill_keyword_required", "스킬 키워드가 필요합니다.");
+                }
+                return new NaturalCommandValidationResult(true, false, new CanonicalCommand(command, "/skill quick list"), "ok", string.Empty);
+            }
+            case "skill.quick.remove":
+            {
+                if (!ContainsExplicitSkillIntent(rawInput))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "skill_keyword_required", "스킬 키워드가 필요합니다.");
+                }
+                var alias = GetArg("alias", "shortcut", "value").TrimStart('/');
+                if (string.IsNullOrWhiteSpace(alias))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "missing_skill_alias", "별명이 필요합니다.");
+                }
+                return new NaturalCommandValidationResult(true, false, new CanonicalCommand(command, $"/skill quick remove {alias}"), "ok", string.Empty);
+            }
+
+            case "think.on":
+            case "think.off":
+            case "think.status":
+            {
+                if (!ContainsExplicitThinkIntent(rawInput))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "think_keyword_required", "추론 모드 키워드가 필요합니다.");
+                }
+                var arg = command.Substring(command.IndexOf('.') + 1);
+                return new NaturalCommandValidationResult(true, false, new CanonicalCommand(command, $"/think {arg}"), "ok", string.Empty);
+            }
+            case "web.on":
+            case "web.off":
+            case "web.status":
+            {
+                if (!ContainsExplicitWebIntent(rawInput))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "web_keyword_required", "웹검색 컨텍스트 키워드가 필요합니다.");
+                }
+                var arg = command.Substring(command.IndexOf('.') + 1);
+                return new NaturalCommandValidationResult(true, false, new CanonicalCommand(command, $"/web {arg}"), "ok", string.Empty);
+            }
+            case "history.show":
+            {
+                if (!ContainsExplicitHistoryIntent(rawInput))
+                {
+                    return new NaturalCommandValidationResult(false, false, null, "history_keyword_required", "대화 이력 키워드가 필요합니다.");
+                }
+                var countArg = GetArg("count", "n", "value");
+                if (!string.IsNullOrWhiteSpace(countArg)
+                    && int.TryParse(countArg, out var n)
+                    && n >= 1 && n <= 20)
+                {
+                    return new NaturalCommandValidationResult(true, false, new CanonicalCommand(command, $"/history {n}"), "ok", string.Empty);
+                }
+                return new NaturalCommandValidationResult(true, false, new CanonicalCommand(command, "/history"), "ok", string.Empty);
+            }
+
             case "kill.request":
                 return new NaturalCommandValidationResult(
                     false,
@@ -1681,6 +1849,7 @@ public sealed partial class CommandService
             || ContainsExplicitCodingResultIntent(normalized)
             || ContainsExplicitCodingFilesIntent(normalized)
             || ContainsExplicitCodingFileIntent(normalized)
+            || ContainsExplicitCodingDownloadIntent(normalized)
             || ContainsExplicitCodingModeControlIntent(normalized)
             || ContainsExplicitCodingLanguageIntent(normalized)
             || ContainsExplicitCodingProviderControlIntent(normalized)
@@ -1691,7 +1860,12 @@ public sealed partial class CommandService
             || ContainsExplicitLlmStatusIntent(normalized)
             || ContainsExplicitLlmUsageIntent(normalized)
             || ContainsExplicitLlmModelsIntent(normalized)
-            || ContainsExplicitHelpIntent(normalized);
+            || ContainsExplicitHelpIntent(normalized)
+            // 신규: 스킬 / 추론(Think+) / 웹검색 컨텍스트 / 대화 이력
+            || ContainsExplicitSkillIntent(normalized)
+            || ContainsExplicitThinkIntent(normalized)
+            || ContainsExplicitWebIntent(normalized)
+            || ContainsExplicitHistoryIntent(normalized);
     }
 
     private static bool ContainsExplicitMemoryKeyword(string text)
@@ -2146,6 +2320,92 @@ public sealed partial class CommandService
 
         return normalized.Contains("루틴", StringComparison.OrdinalIgnoreCase)
             || normalized.Contains("routine", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ContainsExplicitCodingDownloadIntent(string text)
+    {
+        var normalized = (text ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+        return ContainsExplicitCodingKeyword(normalized)
+            && ContainsAny(normalized, "다운", "다운로드", "내려", "내려받", "받아", "첨부", "전송", "보내", "save", "download", "export");
+    }
+
+    private static bool ContainsExplicitSkillIntent(string text)
+    {
+        var normalized = (text ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+        return normalized.Contains("스킬", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("skill", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("별명", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("alias", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("단축", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ContainsExplicitSkillOffIntent(string text)
+    {
+        var normalized = (text ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+        if (!ContainsExplicitSkillIntent(normalized))
+        {
+            return false;
+        }
+        return ContainsAny(normalized, "해제", "꺼", "끄", "그만", "중지", "종료", "off", "stop", "disable", "deactivate");
+    }
+
+    private static bool ContainsExplicitThinkIntent(string text)
+    {
+        var normalized = (text ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+        return normalized.Contains("추론", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("think", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("심층", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ContainsExplicitWebIntent(string text)
+    {
+        var normalized = (text ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+        return normalized.Contains("웹검색", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("웹 검색", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("웹 컨텍스트", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("웹컨텍스트", StringComparison.OrdinalIgnoreCase)
+            || (normalized.Contains("웹", StringComparison.OrdinalIgnoreCase)
+                && ContainsAny(normalized, "켜", "꺼", "끄", "on", "off", "활성", "비활성", "상태"));
+    }
+
+    private static bool ContainsExplicitHistoryIntent(string text)
+    {
+        var normalized = (text ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+        return ContainsAny(
+            normalized,
+            "최근 대화",
+            "지난 대화",
+            "이전 대화",
+            "대화 이력",
+            "대화 기록",
+            "대화 히스토리",
+            "히스토리",
+            "history",
+            "log");
     }
 
     private static string NormalizeCodingNaturalMode(string? mode)
