@@ -510,6 +510,7 @@ public sealed partial class CommandService
             session.LinkedMemoryNotes,
             includeLocalTimeHint: true
         );
+        Console.WriteLine($"[DEBUG:context] rawInput=\"{rawInput}\" includeHistory={contextualInput.Contains("[최근 대화]")} inputLen={contextualInput.Length} preview=\"{contextualInput[..Math.Min(200, contextualInput.Length)]}\"");
         LlmSingleChatResult generated;
         try
         {

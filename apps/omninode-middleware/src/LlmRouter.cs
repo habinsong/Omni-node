@@ -510,6 +510,7 @@ public sealed class LlmRouter : IDisposable
             {
                 var promptForRequest = TruncatePromptForGroq(promptForTurn, promptBudgetChars);
                 var multiTurn = SplitPromptToMultiTurn(promptForRequest);
+                Console.WriteLine($"[DEBUG:groq] multiTurnCount={multiTurn.Count} promptLen={promptForRequest.Length} firstRole={multiTurn[0].Role} historyInPrompt={promptForRequest.Contains("[최근 대화]")}");
                 string messagesJson;
                 if (multiTurn.Count > 1 && multiTurn[0].Role != "user")
                 {
