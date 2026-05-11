@@ -382,15 +382,28 @@ public sealed partial class CommandService
         if (ShouldUsePriorConversationContext(input, out var isAmbiguous))
         {
             // 모호 키워드("어때", "괜찮" 등)는 토픽 오버랩이 있어야 history 로드.
-            // 직접 지시어("그거", "이어서" 등)는 무조건 history 로드.
+            // 단, 초단문(≤15자) 판단/의견 요청("잘 돌아갈까?", "어때?")은
+            // 토큰 오버랩이 거의 없어도 직전 대화가 있으면 무조건 history 로드.
             if (isAmbiguous)
             {
-                return HasTopicalOverlapWithRecentConversation(conversationId, input);
+                var normalized = (input ?? string.Empty).Trim();
+                if (normalized.Length <= 15 && HasAnyRecentAssistantMessage(conversationId))
+                {
+                    return true;
+                }
+                return HasTopicalOverlapWithRecentConversation(conversationId, input ?? string.Empty);
             }
             return true;
         }
 
-        return HasTopicalOverlapWithRecentConversation(conversationId, input);
+        return HasTopicalOverlapWithRecentConversation(conversationId, input ?? string.Empty);
+    }
+
+    private bool HasAnyRecentAssistantMessage(string conversationId)
+    {
+        var thread = _conversationStore.Get(conversationId);
+        return thread != null
+               && thread.Messages.Any(m => m.Role.Equals("assistant", StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool ShouldUsePriorConversationContext(string input, out bool isAmbiguous)
