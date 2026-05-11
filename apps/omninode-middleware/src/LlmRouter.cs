@@ -509,13 +509,33 @@ public sealed class LlmRouter : IDisposable
             for (var turn = 0; turn < ChatContinuationRounds; turn++)
             {
                 var promptForRequest = TruncatePromptForGroq(promptForTurn, promptBudgetChars);
+                var multiTurn = SplitPromptToMultiTurn(promptForRequest);
+                string messagesJson;
+                if (multiTurn.Count > 1 && multiTurn[0].Role != "user")
+                {
+                    // multi-turn 구조: system_prompt + 규칙/메모리는 user로, history는 교대 배치
+                    var mb = new StringBuilder();
+                    mb.Append($"{{\"role\":\"system\",\"content\":\"{EscapeJson(systemPrompt)}\"}}");
+                    foreach (var (role, msgContent) in multiTurn)
+                    {
+                        var apiRole = role == "assistant" ? "assistant" : "user";
+                        mb.Append($",{{\"role\":\"{apiRole}\",\"content\":\"{EscapeJson(msgContent)}\"}}");
+                    }
+                    messagesJson = mb.ToString();
+                }
+                else
+                {
+                    // fallback: 기존 단일 user 메시지
+                    messagesJson = $"{{\"role\":\"system\",\"content\":\"{EscapeJson(systemPrompt)}\"}},"
+                        + $"{{\"role\":\"user\",\"content\":\"{EscapeJson(promptForRequest)}\"}}";
+                }
+
                 var body = "{"
                     + $"\"model\":\"{EscapeJson(model)}\","
                     + "\"temperature\":0.3,"
                     + $"\"max_tokens\":{effectiveMaxOutputTokens},"
                     + "\"messages\":["
-                    + $"{{\"role\":\"system\",\"content\":\"{EscapeJson(systemPrompt)}\"}},"
-                    + $"{{\"role\":\"user\",\"content\":\"{EscapeJson(promptForRequest)}\"}}"
+                    + messagesJson
                     + "]"
                     + "}";
 
@@ -2166,6 +2186,158 @@ public sealed class LlmRouter : IDisposable
     private static int ResolveGroqPromptBudgetChars(string model)
     {
         return IsGroqCompoundModel(model) ? 12000 : 22000;
+    }
+
+    /// <summary>
+    /// 단일 user 프롬프트에서 [최근 대화] 섹션을 파싱해 multi-turn messages로 분리.
+    /// [최근 대화] 안의 [user]/[assistant] 블록을 개별 메시지로, [새 요청]은 마지막 user로.
+    /// 파싱 실패 시 원본 그대로 단일 user 메시지로 폴백.
+    /// </summary>
+    private static List<(string Role, string Content)> SplitPromptToMultiTurn(string prompt)
+    {
+        var fallback = new List<(string, string)> { ("user", prompt) };
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            return fallback;
+        }
+
+        // [새 요청] 마커 위치 찾기
+        var requestIdx = prompt.IndexOf("\n[새 요청]", StringComparison.Ordinal);
+        if (requestIdx < 0)
+        {
+            return fallback;
+        }
+
+        // [최근 대화] 섹션 찾기
+        var historyMarker = "\n[최근 대화]";
+        var historyIdx = prompt.IndexOf(historyMarker, StringComparison.Ordinal);
+        if (historyIdx < 0 || historyIdx > requestIdx)
+        {
+            return fallback;
+        }
+
+        // history 섹션 텍스트 추출 ([최근 대화] 이후 ~ [새 요청] 이전)
+        var historyStart = historyIdx + historyMarker.Length;
+        var historyText = prompt[historyStart..requestIdx].Trim();
+
+        // [새 요청] 이후 텍스트
+        var requestText = prompt[(requestIdx + "\n[새 요청]".Length)..].Trim();
+
+        // [컨텍스트 사용 규칙] 등 헤더 부분 (있으면 system 메시지로)
+        var headerText = prompt[..historyIdx].Trim();
+        var headerClean = headerText
+            .Replace("[컨텍스트 사용 규칙]", "", StringComparison.Ordinal)
+            .Trim();
+
+        var messages = new List<(string, string)>();
+
+        // 규칙/메모리 노트는 system 메시지에 포함 (있으면)
+        var systemContent = headerClean.Length > 0 ? headerClean : "";
+
+        // history 내의 [user]/[assistant] 블록 파싱
+        var historyMessages = ParseHistoryBlocks(historyText);
+
+        if (historyMessages.Count == 0)
+        {
+            return fallback;
+        }
+
+        // system + 규칙
+        if (systemContent.Length > 0)
+        {
+            messages.Add(("system_context", systemContent));
+        }
+
+        // history 메시지들
+        foreach (var (role, content) in historyMessages)
+        {
+            messages.Add((role, content));
+        }
+
+        // 새 요청
+        messages.Add(("user", requestText));
+
+        return messages;
+    }
+
+    /// <summary>
+    /// "[최근 대화]" 안의 [user]/[assistant] 블록을 파싱.
+    /// [이전 대화 압축]은 assistant 메시지로 처리.
+    /// </summary>
+    private static List<(string Role, string Content)> ParseHistoryBlocks(string historyText)
+    {
+        var result = new List<(string, string)>();
+        if (string.IsNullOrWhiteSpace(historyText))
+        {
+            return result;
+        }
+
+        // [이전 대화 압축] 블록 처리
+        var compressionIdx = historyText.IndexOf("[이전 대화 압축]", StringComparison.Ordinal);
+        var recentTurnIdx = historyText.IndexOf("[최근 턴]", StringComparison.Ordinal);
+
+        if (compressionIdx >= 0)
+        {
+            var compressionEnd = recentTurnIdx >= 0 ? recentTurnIdx : historyText.Length;
+            var compressionText = historyText[compressionIdx..compressionEnd]
+                .Replace("[이전 대화 압축]", "", StringComparison.Ordinal).Trim();
+            if (compressionText.Length > 0)
+            {
+                result.Add(("assistant", $"[이전 대화 요약] {compressionText}"));
+            }
+        }
+
+        // [최근 턴] 이후 또는 전체에서 [user]/[assistant] 블록 파싱
+        var parseTarget = recentTurnIdx >= 0
+            ? historyText[recentTurnIdx..]
+            : (compressionIdx >= 0 ? historyText[..compressionIdx] : historyText);
+
+        var lines = parseTarget.Split('\n');
+        string? currentRole = null;
+        var currentContent = new List<string>();
+
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith("[user]", StringComparison.OrdinalIgnoreCase))
+            {
+                if (currentRole != null && currentContent.Count > 0)
+                {
+                    result.Add((currentRole, string.Join('\n', currentContent).Trim()));
+                }
+                currentRole = "user";
+                currentContent = new List<string>();
+                var rest = trimmed["[user]".Length..].Trim();
+                if (rest.Length > 0) currentContent.Add(rest);
+            }
+            else if (trimmed.StartsWith("[assistant]", StringComparison.OrdinalIgnoreCase))
+            {
+                if (currentRole != null && currentContent.Count > 0)
+                {
+                    result.Add((currentRole, string.Join('\n', currentContent).Trim()));
+                }
+                currentRole = "assistant";
+                currentContent = new List<string>();
+                var rest = trimmed["[assistant]".Length..].Trim();
+                if (rest.Length > 0) currentContent.Add(rest);
+            }
+            else if (trimmed.StartsWith("[최근 턴]", StringComparison.OrdinalIgnoreCase))
+            {
+                // 마커 무시
+                continue;
+            }
+            else if (currentRole != null)
+            {
+                currentContent.Add(line);
+            }
+        }
+
+        if (currentRole != null && currentContent.Count > 0)
+        {
+            result.Add((currentRole, string.Join('\n', currentContent).Trim()));
+        }
+
+        return result;
     }
 
     private static string TruncatePromptForGroq(string prompt, int maxChars)

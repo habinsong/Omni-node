@@ -524,7 +524,11 @@ public sealed partial class CommandService
             );
         }
 
-        if (ShouldRetrySingleChatWithoutHistory(rawInput, generated.Text))
+        // history가 포함된 contextual input이었으면 off-topic 재시도 건너뛰기.
+        // 모델이 history 기반으로 정상 follow-up 답변했는데도 off-topic으로 오인해
+        // history 없이 재시도하는 악순환 방지.
+        var hadHistoryContext = contextualInput.Contains("[최근 대화]");
+        if (!hadHistoryContext && ShouldRetrySingleChatWithoutHistory(rawInput, generated.Text))
         {
             var historyBypassInput = BuildHistoryBypassInput(preparedInput.Text);
             var recovered = await GenerateSingleAsync(historyBypassInput, effectiveSingleToken);

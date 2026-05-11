@@ -821,7 +821,7 @@ public sealed partial class CommandService
 
     private static bool ShouldUseForcedMemoryContext(string input)
     {
-        return ShouldUsePriorConversationContext(input)
+        return ShouldUsePriorConversationContext(input, out _)
             || ContainsAny(
                 (input ?? string.Empty).Trim().ToLowerInvariant(),
                 "rag",

@@ -252,9 +252,9 @@ public sealed partial class CommandService
     {
         var includePriorContext = ShouldUsePriorConversationContext(conversationId, input);
         var explicitRequestNotes = NormalizeExplicitMemoryNoteNames(requestMemoryNotes);
-        var autoLinkedNotes = includePriorContext
-            ? _conversationStore.Get(conversationId)?.LinkedMemoryNotes ?? Array.Empty<string>()
-            : Array.Empty<string>();
+        // linked memory notes는 압축된 대화 맥락이므로 includePriorContext와 무관하게 항상 로드.
+        // 그렇지 않으면 압축 직후 첫 질문에서 맥락이 단절됨.
+        var autoLinkedNotes = _conversationStore.Get(conversationId)?.LinkedMemoryNotes ?? Array.Empty<string>();
         var notes = MergeMemoryNoteNames(
             autoLinkedNotes,
             explicitRequestNotes
@@ -317,8 +317,50 @@ public sealed partial class CommandService
             return contextual;
         }
 
-        var tail = contextual[^8000..];
-        return $"[context_truncated]\n{tail}";
+        // 8000자 초과 시 꼬리 잘림 대신: 규칙 블록 + 새 요청을 우선 보존하고
+        // [최근 대화] 섹션만 축소.
+        var requestMarker = "\n[새 요청]";
+        var requestIdx = contextual.IndexOf(requestMarker, StringComparison.Ordinal);
+        if (requestIdx < 0)
+        {
+            return $"[context_truncated]\n{contextual[^8000..]}";
+        }
+
+        var headerAndHistory = contextual[..requestIdx];
+        var requestSection = contextual[requestIdx..];
+        var availableForHeaderAndHistory = 8000 - requestSection.Length - 50;
+
+        if (availableForHeaderAndHistory <= 200)
+        {
+            return $"[context_truncated]\n{requestSection.TrimStart()}";
+        }
+
+        if (headerAndHistory.Length <= availableForHeaderAndHistory)
+        {
+            return $"{headerAndHistory}{requestSection}";
+        }
+
+        // 규칙 블록(~400자)은 보존, 히스토리만 축소
+        var historyMarker = "\n[최근 대화]";
+        var historyIdx = headerAndHistory.IndexOf(historyMarker, StringComparison.Ordinal);
+        if (historyIdx < 0)
+        {
+            return $"{headerAndHistory[^availableForHeaderAndHistory..]}{requestSection}";
+        }
+
+        var header = headerAndHistory[..historyIdx];
+        var historySection = headerAndHistory[historyIdx..];
+        var availableForHistory = availableForHeaderAndHistory - header.Length;
+
+        if (availableForHistory <= 0)
+        {
+            return $"{header}[context_truncated]\n{requestSection}";
+        }
+
+        var trimmedHistory = historySection.Length <= availableForHistory
+            ? historySection
+            : historySection[^availableForHistory..];
+        return $"{header}{trimmedHistory}{requestSection}";
     }
 
     private static IReadOnlyList<string> NormalizeExplicitMemoryNoteNames(IReadOnlyList<string>? names)
@@ -337,20 +379,113 @@ public sealed partial class CommandService
 
     private bool ShouldUsePriorConversationContext(string conversationId, string input)
     {
-        if (ShouldUsePriorConversationContext(input))
+        if (ShouldUsePriorConversationContext(input, out var isAmbiguous))
         {
+            // 모호 키워드("어때", "괜찮" 등)는 토픽 오버랩이 있어야 history 로드.
+            // 직접 지시어("그거", "이어서" 등)는 무조건 history 로드.
+            if (isAmbiguous)
+            {
+                return HasTopicalOverlapWithRecentConversation(conversationId, input);
+            }
             return true;
         }
 
         return HasTopicalOverlapWithRecentConversation(conversationId, input);
     }
 
-    private static bool ShouldUsePriorConversationContext(string input)
+    private static bool ShouldUsePriorConversationContext(string input, out bool isAmbiguous)
     {
+        isAmbiguous = false;
         var normalized = Regex.Replace((input ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
         if (normalized.Length == 0)
         {
             return false;
+        }
+
+        if (ContainsAny(normalized, "아니", "그게 아니라", "그 말고", "말고", "라고", "라니까"))
+        {
+            return true;
+        }
+
+        if (LooksLikeCasualOrIdentityQuestion(normalized))
+        {
+            return false;
+        }
+
+        if (ContainsAny(
+                normalized,
+                "이전",
+                "앞서",
+                "아까",
+                "방금",
+                "위에서",
+                "위 내용",
+                "최근 대화",
+                "대화 내용",
+                "메모리",
+                "기억",
+                "그 답변",
+                "그 내용",
+                "그거",
+                "그것",
+                "그걸",
+                "해당",
+                "이어서",
+                "계속",
+                "다시",
+                "더 자세히",
+                "웹검색해서 찾아",
+                "웹 검색해서 찾아",
+                "찾아봐",
+                "검색해봐",
+                "search it",
+                "look it up",
+                // 후속 질문 마커 (anaphoric follow-up). 명시적인 anaphor가 없어도
+                // "그니까/그래서/그럼" 등 직전 답변에 대한 반응형 질문임을 시사.
+                "그니까",
+                "그러니까",
+                "그래서",
+                "그럼",
+                "그러면",
+                "그래도",
+                "결국"))
+        {
+            return true;
+        }
+
+        // 판단/의견 요청 — 모호 키워드. 토픽 오버랩 있을 때만 history 로드.
+        if (ContainsAny(
+                normalized,
+                "잘 돌아",
+                "잘 작동",
+                "잘 동작",
+                "잘 되",
+                "잘 될",
+                "잘 굴러",
+                "쓸만",
+                "쓸 만",
+                "괜찮",
+                "어때",
+                "어떨",
+                "어떤지",
+                "어떻게 생각",
+                "어떻게 봐",
+                "네 생각",
+                "네 의견",
+                "너 생각",
+                "너의 생각",
+                "당신 생각",
+                "당신의 생각",
+                "검토해",
+                "판단해",
+                "추천해",
+                "비교해",
+                "rec recommend",
+                "what do you think",
+                "would it work"))
+        {
+            isAmbiguous = true;
+            return true;
         }
 
         if (ContainsAny(normalized, "아니", "그게 아니라", "그 말고", "말고", "라고", "라니까"))
@@ -742,7 +877,7 @@ public sealed partial class CommandService
                     titleCts.Token
                 ).ConfigureAwait(false);
 
-                using var compressCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                using var compressCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
                 _ = await MaybeCompressConversationAsync(
                     conversationId,
                     modeKey,
@@ -1065,6 +1200,62 @@ public sealed partial class CommandService
                    || lowered.Contains("maximum value", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// BuildHistoryText 결과("[user] ...\n[assistant] ...")를 개별 메시지 블록으로 파싱.
+    /// 메시지 본문에 포함된 개행은 메시지 경계가 아니므로 [user]/[assistant] 시작 라인만 경계로 인식.
+    /// </summary>
+    private static List<(string Role, string Text)> ParseHistoryMessages(string history)
+    {
+        var result = new List<(string Role, string Text)>();
+        if (string.IsNullOrWhiteSpace(history))
+        {
+            return result;
+        }
+
+        var rawLines = history.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        string? currentRole = null;
+        var currentText = new StringBuilder();
+
+        for (var i = 0; i < rawLines.Length; i++)
+        {
+            var line = rawLines[i];
+            if (line.StartsWith("[user] ", StringComparison.Ordinal))
+            {
+                if (currentRole != null)
+                {
+                    result.Add((currentRole, currentText.ToString().TrimEnd()));
+                }
+
+                currentRole = "user";
+                currentText.Clear();
+                currentText.Append(line["[user] ".Length..]);
+            }
+            else if (line.StartsWith("[assistant] ", StringComparison.Ordinal))
+            {
+                if (currentRole != null)
+                {
+                    result.Add((currentRole, currentText.ToString().TrimEnd()));
+                }
+
+                currentRole = "assistant";
+                currentText.Clear();
+                currentText.Append(line["[assistant] ".Length..]);
+            }
+            else if (currentRole != null)
+            {
+                currentText.Append('\n');
+                currentText.Append(line);
+            }
+        }
+
+        if (currentRole != null)
+        {
+            result.Add((currentRole, currentText.ToString().TrimEnd()));
+        }
+
+        return result;
+    }
+
     private static string TrimContextHistory(string history, int maxChars)
     {
         if (string.IsNullOrWhiteSpace(history))
@@ -1072,21 +1263,40 @@ public sealed partial class CommandService
             return string.Empty;
         }
 
-        var lines = history
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(line =>
-            {
-                var normalized = line.Replace("\r", " ", StringComparison.Ordinal).Trim();
-                return normalized.Length <= 360 ? normalized : normalized[..360] + "...";
-            })
-            .ToArray();
-        var combined = string.Join('\n', lines);
-        if (combined.Length <= maxChars)
+        var trimmed = history.Trim();
+        if (trimmed.Length <= maxChars)
         {
-            return combined;
+            return trimmed;
         }
 
-        return combined[^maxChars..];
+        // 꼬리 잘림 대신: 최근 메시지부터 우선 보존, 오래된 것부터 버림.
+        var messages = ParseHistoryMessages(trimmed);
+        if (messages.Count == 0)
+        {
+            return trimmed[^maxChars..];
+        }
+
+        var kept = new List<string>();
+        var budget = maxChars;
+
+        for (var i = messages.Count - 1; i >= 0; i--)
+        {
+            var msg = messages[i];
+            var prefix = $"[{msg.Role}] ";
+            var available = budget - prefix.Length - 1;
+
+            if (available <= 0)
+            {
+                break;
+            }
+
+            var text = msg.Text.Length <= available ? msg.Text : msg.Text[..available] + "...";
+            var block = $"{prefix}{text}";
+            kept.Insert(0, block);
+            budget -= block.Length + 1;
+        }
+
+        return string.Join('\n', kept);
     }
 
     private static string BuildCodingQualityBrief(string objective, string languageHint)
@@ -1136,60 +1346,90 @@ public sealed partial class CommandService
             return string.Empty;
         }
 
-        var lines = history
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(line =>
-            {
-                var normalized = line.Replace("\r", " ", StringComparison.Ordinal).Trim();
-                return normalized.Length <= 360 ? normalized : normalized[..360] + "...";
-            })
-            .Where(line => !string.IsNullOrWhiteSpace(line))
-            .ToArray();
-        if (lines.Length == 0)
+        // 메시지 단위 분할: [user]/[assistant] 블록을 하나의 단위로 취급.
+        // 라인 단위 분할은 장문 웹 검색 결과가 최근 N라인 예산을 모두 잠식하는 버그가 있었음.
+        var messages = ParseHistoryMessages(history);
+        if (messages.Count == 0)
         {
             return string.Empty;
         }
 
-        var recentCount = Math.Min(lines.Length, 8);
-        var olderCount = Math.Max(0, lines.Length - recentCount);
-        var recent = string.Join('\n', lines.Skip(olderCount));
+        // 마지막 4개 메시지(2쌍)를 최근으로 유지. 장문 응답은 각각 800자까지.
+        const int RecentMessageCount = 4;
+        const int MaxCharsPerRecentMessage = 800;
+        var recentCount = Math.Min(messages.Count, RecentMessageCount);
+        var olderCount = Math.Max(0, messages.Count - recentCount);
+
+        var recentParts = new List<string>();
+        foreach (var msg in messages.Skip(olderCount))
+        {
+            var text = msg.Text.Length <= MaxCharsPerRecentMessage
+                ? msg.Text
+                : msg.Text[..MaxCharsPerRecentMessage] + "...";
+            recentParts.Add($"[{msg.Role}] {text}");
+        }
+
+        var recent = string.Join('\n', recentParts);
         if (olderCount == 0)
         {
             return TrimContextHistory(recent, maxChars);
         }
 
-        var olderSummary = BuildExtractiveHistorySummary(lines.Take(olderCount).ToArray(), 1200);
+        // 이전 메시지: 메시지 단위로 보존 (라인 분해 금지 — 맥락 단절 방지).
+        // 각 메시지에서 핵심 라인이 하나라도 포함되면 해당 메시지 전체(최대 300자)를 유지.
+        var olderMessages = messages.Take(olderCount).ToList();
+        var olderSummary = BuildMessageLevelSummary(olderMessages, 1200);
         var combined = string.IsNullOrWhiteSpace(olderSummary)
             ? recent
             : $"[이전 대화 압축]\n{olderSummary}\n\n[최근 턴]\n{recent}";
         return combined.Length <= maxChars ? combined : TrimContextHistory(combined, maxChars);
     }
 
-    private static string BuildExtractiveHistorySummary(IReadOnlyList<string> olderLines, int maxChars)
+    /// <summary>
+    /// 이전 메시지들을 메시지 단위로 유지하면서 예산 내로 요약.
+    /// 각 메시지의 핵심 라인 포함 여부로 중요도를 판단하고, 중요 메시지는 전체(최대 300자)를 보존.
+    /// 핵심 라인이 없는 메시지도 최근 2개는 fallback으로 포함.
+    /// </summary>
+    private static string BuildMessageLevelSummary(IReadOnlyList<(string Role, string Text)> olderMessages, int maxChars)
     {
-        if (olderLines.Count == 0)
+        if (olderMessages.Count == 0)
         {
             return string.Empty;
         }
 
+        const int MaxCharsPerOlderMessage = 300;
         var selected = new List<string>();
-        foreach (var line in olderLines)
+
+        // 핵심 라인이 포함된 메시지 우선 선택
+        foreach (var msg in olderMessages)
         {
-            if (!IsHighSignalHistoryLine(line))
+            var lines = msg.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var hasHighSignal = lines.Any(l => IsHighSignalHistoryLine(l));
+            if (!hasHighSignal)
             {
                 continue;
             }
 
-            selected.Add(line.Length <= 220 ? line : line[..220] + "...");
-            if (selected.Count >= 6)
+            var text = msg.Text.Length <= MaxCharsPerOlderMessage
+                ? msg.Text
+                : msg.Text[..MaxCharsPerOlderMessage] + "...";
+            selected.Add($"[{msg.Role}] {text}");
+            if (selected.Count >= 4)
             {
                 break;
             }
         }
 
+        // 핵심 라인이 없으면 최근 2개 메시지를 fallback으로 포함
         if (selected.Count == 0)
         {
-            selected.AddRange(olderLines.TakeLast(Math.Min(4, olderLines.Count)).Select(line => line.Length <= 220 ? line : line[..220] + "..."));
+            foreach (var msg in olderMessages.TakeLast(Math.Min(2, olderMessages.Count)))
+            {
+                var text = msg.Text.Length <= MaxCharsPerOlderMessage
+                    ? msg.Text
+                    : msg.Text[..MaxCharsPerOlderMessage] + "...";
+                selected.Add($"[{msg.Role}] {text}");
+            }
         }
 
         var summary = string.Join('\n', selected);
@@ -1217,7 +1457,32 @@ public sealed partial class CommandService
                || lowered.Contains("fix", StringComparison.Ordinal)
                || lowered.Contains("bug", StringComparison.Ordinal)
                || lowered.Contains("todo", StringComparison.Ordinal)
-               || lowered.Contains("requirement", StringComparison.Ordinal);
+               || lowered.Contains("requirement", StringComparison.Ordinal)
+               || lowered.Contains("검색", StringComparison.Ordinal)
+               || lowered.Contains("api", StringComparison.Ordinal)
+               || lowered.Contains("llm", StringComparison.Ordinal)
+               || lowered.Contains("모델", StringComparison.Ordinal)
+               || lowered.Contains("결과", StringComparison.Ordinal)
+               || lowered.Contains("답변", StringComparison.Ordinal)
+               || lowered.Contains("추천", StringComparison.Ordinal)
+               || lowered.Contains("비교", StringComparison.Ordinal)
+               || lowered.Contains("분석", StringComparison.Ordinal)
+               || lowered.Contains("search", StringComparison.Ordinal)
+               || lowered.Contains("web", StringComparison.Ordinal)
+               || lowered.Contains("result", StringComparison.Ordinal)
+               || lowered.Contains("recommend", StringComparison.Ordinal)
+               || lowered.Contains("tavily", StringComparison.Ordinal)
+               || lowered.Contains("rag", StringComparison.Ordinal)
+               || lowered.Contains("프레임워크", StringComparison.Ordinal)
+               || lowered.Contains("도구", StringComparison.Ordinal)
+               || lowered.Contains("tool", StringComparison.Ordinal)
+               || lowered.Contains("service", StringComparison.Ordinal)
+               || lowered.Contains("framework", StringComparison.Ordinal)
+               || lowered.Contains("통합", StringComparison.Ordinal)
+               || lowered.Contains("구현", StringComparison.Ordinal)
+               || lowered.Contains("서비스", StringComparison.Ordinal)
+               || lowered.Contains("필터", StringComparison.Ordinal)
+               || lowered.Contains("filter", StringComparison.Ordinal);
     }
 
     private static string SanitizeChatOutput(string text, bool keepMarkdownTables = false)
