@@ -3128,6 +3128,9 @@ public sealed class LlmRouter : IDisposable
                 mb.Append($",{{\"role\":\"{apiRole}\",\"content\":\"{EscapeJson(msgContent)}\"}}");
             }
             messagesJson = mb.ToString();
+            var roles = new List<string>();
+            foreach (var (r, _) in multiTurn) roles.Add(r == "assistant" ? "A" : "U");
+            Console.WriteLine($"[DEBUG:groq-body] msgRoles=system+{string.Join(",", roles)} jsonLen={messagesJson.Length}");
         }
         else
         {
