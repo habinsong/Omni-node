@@ -639,6 +639,7 @@ public sealed class LlmRouter : IDisposable
         var effectiveMaxOutputTokens = ClampGroqMaxOutputTokensForModel(model, requestedMaxOutputTokens);
         var promptForRequest = TruncatePromptForGroq(userInput, ResolveGroqPromptBudgetChars(model));
         var multiTurn = SplitPromptToMultiTurn(promptForRequest);
+        Console.WriteLine($"[DEBUG:groq-stream] multiTurnCount={multiTurn.Count} promptLen={promptForRequest.Length} historyInPrompt={promptForRequest.Contains("[최근 대화]")}");
 
         return await GenerateOpenAiCompatibleChatStreamingAsync(
             "groq",
