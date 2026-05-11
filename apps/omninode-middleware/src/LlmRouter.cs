@@ -638,6 +638,7 @@ public sealed class LlmRouter : IDisposable
         var requestedMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
         var effectiveMaxOutputTokens = ClampGroqMaxOutputTokensForModel(model, requestedMaxOutputTokens);
         var promptForRequest = TruncatePromptForGroq(userInput, ResolveGroqPromptBudgetChars(model));
+        var multiTurn = SplitPromptToMultiTurn(promptForRequest);
 
         return await GenerateOpenAiCompatibleChatStreamingAsync(
             "groq",
@@ -646,6 +647,7 @@ public sealed class LlmRouter : IDisposable
             model,
             systemPrompt,
             promptForRequest,
+            multiTurn,
             "max_tokens",
             effectiveMaxOutputTokens,
             deltaCallback,
@@ -1877,6 +1879,7 @@ public sealed class LlmRouter : IDisposable
             initialModel,
             systemPrompt,
             userInput,
+            null,
             "max_completion_tokens",
             effectiveMaxOutputTokens,
             deltaCallback,
@@ -1898,6 +1901,7 @@ public sealed class LlmRouter : IDisposable
                     resolved,
                     systemPrompt,
                     userInput,
+                    null,
                     "max_completion_tokens",
                     effectiveMaxOutputTokens,
                     deltaCallback,
@@ -1942,6 +1946,7 @@ public sealed class LlmRouter : IDisposable
                     model,
                     systemPrompt,
                     promptForTurn,
+                    null,
                     "max_tokens",
                     effectiveMaxOutputTokens,
                     stream: false
@@ -2025,6 +2030,7 @@ public sealed class LlmRouter : IDisposable
             model,
             systemPrompt,
             userInput,
+            null,
             "max_tokens",
             NormalizeNvidiaMaxOutputTokens(maxOutputTokens),
             deltaCallback,
@@ -2854,6 +2860,7 @@ public sealed class LlmRouter : IDisposable
         string model,
         string systemPrompt,
         string userInput,
+        List<(string Role, string Content)>? multiTurn,
         string maxTokensProperty,
         int maxOutputTokens,
         Action<string>? deltaCallback,
@@ -2871,6 +2878,7 @@ public sealed class LlmRouter : IDisposable
                     model,
                     systemPrompt,
                     promptForTurn,
+                    multiTurn,
                     maxTokensProperty,
                     maxOutputTokens,
                     stream: true
@@ -3102,19 +3110,37 @@ public sealed class LlmRouter : IDisposable
         string model,
         string systemPrompt,
         string userInput,
+        List<(string Role, string Content)>? multiTurn,
         string maxTokensProperty,
         int maxOutputTokens,
         bool stream
     )
     {
+        string messagesJson;
+        if (multiTurn != null && multiTurn.Count > 1 && multiTurn[0].Role != "user")
+        {
+            var mb = new StringBuilder();
+            mb.Append($"{{\"role\":\"system\",\"content\":\"{EscapeJson(systemPrompt)}\"}}");
+            foreach (var (role, msgContent) in multiTurn)
+            {
+                var apiRole = role == "assistant" ? "assistant" : "user";
+                mb.Append($",{{\"role\":\"{apiRole}\",\"content\":\"{EscapeJson(msgContent)}\"}}");
+            }
+            messagesJson = mb.ToString();
+        }
+        else
+        {
+            messagesJson = $"{{\"role\":\"system\",\"content\":\"{EscapeJson(systemPrompt)}\"}},"
+                + $"{{\"role\":\"user\",\"content\":\"{EscapeJson(userInput)}\"}}";
+        }
+
         return "{"
             + $"\"model\":\"{EscapeJson(model)}\","
             + "\"temperature\":0.3,"
             + $"\"stream\":{(stream ? "true" : "false")},"
             + $"\"{EscapeJson(maxTokensProperty)}\":{maxOutputTokens},"
             + "\"messages\":["
-            + $"{{\"role\":\"system\",\"content\":\"{EscapeJson(systemPrompt)}\"}},"
-            + $"{{\"role\":\"user\",\"content\":\"{EscapeJson(userInput)}\"}}"
+            + messagesJson
             + "]"
             + "}";
     }
