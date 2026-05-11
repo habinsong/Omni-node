@@ -510,7 +510,6 @@ public sealed class LlmRouter : IDisposable
             {
                 var promptForRequest = TruncatePromptForGroq(promptForTurn, promptBudgetChars);
                 var multiTurn = SplitPromptToMultiTurn(promptForRequest);
-                Console.WriteLine($"[DEBUG:groq] multiTurnCount={multiTurn.Count} promptLen={promptForRequest.Length} firstRole={multiTurn[0].Role} historyInPrompt={promptForRequest.Contains("[최근 대화]")}");
                 string messagesJson;
                 if (multiTurn.Count > 1 && multiTurn[0].Role != "user")
                 {
@@ -639,7 +638,6 @@ public sealed class LlmRouter : IDisposable
         var effectiveMaxOutputTokens = ClampGroqMaxOutputTokensForModel(model, requestedMaxOutputTokens);
         var promptForRequest = TruncatePromptForGroq(userInput, ResolveGroqPromptBudgetChars(model));
         var multiTurn = SplitPromptToMultiTurn(promptForRequest);
-        Console.WriteLine($"[DEBUG:groq-stream] multiTurnCount={multiTurn.Count} promptLen={promptForRequest.Length} historyInPrompt={promptForRequest.Contains("[최근 대화]")}");
 
         return await GenerateOpenAiCompatibleChatStreamingAsync(
             "groq",
@@ -3128,9 +3126,6 @@ public sealed class LlmRouter : IDisposable
                 mb.Append($",{{\"role\":\"{apiRole}\",\"content\":\"{EscapeJson(msgContent)}\"}}");
             }
             messagesJson = mb.ToString();
-            var roles = new List<string>();
-            foreach (var (r, _) in multiTurn) roles.Add(r == "assistant" ? "A" : "U");
-            Console.WriteLine($"[DEBUG:groq-body] msgRoles=system+{string.Join(",", roles)} jsonLen={messagesJson.Length}");
         }
         else
         {
