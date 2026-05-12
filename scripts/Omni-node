@@ -485,6 +485,9 @@ run_setup() {
       brew_install_formula_if_missing python3 python
       brew_install_formula_if_missing sqlite3 sqlite
       brew_install_cask_if_missing dotnet dotnet-sdk
+      # 파이썬 추가 모듈
+      info "파이썬 추가 모듈 설치 중"
+      python3 -m pip install --quiet pygame matplotlib numpy requests beautifulsoup4 pillow flask fastapi uvicorn tkinter-inter 2>/dev/null || true
       ;;
     Linux)
       apt_install_packages_if_command_missing cc build-essential
@@ -495,6 +498,15 @@ run_setup() {
       apt_install_packages_if_command_missing sqlite3 sqlite3
       apt_install_packages_if_command_missing curl curl
       apt_install_packages_if_command_missing dotnet dotnet-sdk-9.0
+      # 파이썬 GUI/게임/과학 모듈 (tkinter, pygame, matplotlib 등)
+      info "파이썬 추가 모듈 설치 중"
+      if command_exists sudo && [ "$(id -u)" -ne 0 ]; then
+        sudo -n apt-get install -y python3-tk python3-pygame python3-matplotlib python3-numpy python3-requests python3-beautifulsoup4 python3-pillow 2>/dev/null || true
+      elif [ "$(id -u)" -eq 0 ]; then
+        apt-get install -y python3-tk python3-pygame python3-matplotlib python3-numpy python3-requests python3-beautifulsoup4 python3-pillow 2>/dev/null || true
+      fi
+      # pip 전용 모듈 (apt에 없는 것들)
+      python3 -m pip install --quiet flask fastapi uvicorn 2>/dev/null || true
       ;;
     *)
       fail "현재 setup 자동 설치는 macOS(Homebrew)와 Linux(apt-get)만 지원합니다. Windows에서는 scripts/Omni-node.ps1을 사용하세요."
