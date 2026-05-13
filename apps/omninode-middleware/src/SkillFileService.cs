@@ -85,7 +85,7 @@ public sealed class SkillFileService
         }
     }
 
-    public SkillFileSaveResult Save(string? name, string? scope, string? description, string? body)
+    public SkillFileSaveResult Save(string? name, string? scope, string? description, string? body, bool allowOverwrite = true)
     {
         var validation = ValidateNameAndScope(name, scope);
         if (validation.Error != null)
@@ -97,6 +97,11 @@ public sealed class SkillFileService
 
         try
         {
+            if (File.Exists(skillFilePath) && !allowOverwrite)
+            {
+                return new SkillFileSaveResult(false, "같은 이름의 스킬이 이미 있습니다. 기존 스킬을 고칠 때만 overwrite를 허용하세요.", validation.Name, validation.Scope, skillFilePath);
+            }
+
             Directory.CreateDirectory(validation.SkillDir);
             var content = BuildSkillFileContent(validation.Name, description ?? string.Empty, body ?? string.Empty);
             File.WriteAllText(skillFilePath, content, new UTF8Encoding(false));

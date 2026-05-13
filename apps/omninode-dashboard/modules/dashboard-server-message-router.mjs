@@ -1291,5 +1291,19 @@ export function handleDashboardServerMessage(msg, context) {
     return true
   }
 
+  if (msg.type === "skill_active_clear_result") {
+    const payload = msg.payload || msg
+    const ok = payload.Ok !== false && payload.ok !== false
+    const error = payload.Error || payload.error || null
+    if (typeof setters.setSkillStatus === "function") {
+      setters.setSkillStatus(
+        ok
+          ? { kind: "ok", message: "활성 스킬을 해제했습니다." }
+          : { kind: "error", message: error || "활성 스킬 해제에 실패했습니다." },
+      )
+    }
+    return true
+  }
+
   return false
 }

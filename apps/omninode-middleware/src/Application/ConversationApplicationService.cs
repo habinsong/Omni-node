@@ -43,4 +43,5 @@ public sealed class ConversationApplicationService : IConversationApplicationSer
 
     public WorkspaceFilePreview? ReadWorkspaceFile(string filePath, int maxChars = 120_000) => _inner.ReadWorkspaceFile(filePath, maxChars);
     public WorkspaceFilePreview? ReadWorkspaceFile(string filePath, string? conversationId, int maxChars = 120_000) => _inner.ReadWorkspaceFile(filePath, conversationId, maxChars);
+    public bool ClearActiveSkill(string? conversationId) => _inner.ClearActiveSkillForConversation(conversationId);
 }

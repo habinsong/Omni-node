@@ -13915,7 +13915,7 @@ video {
 }
 
 .routine-overview-grid {
-  grid-template-columns: minmax(180px, 1.2fr) repeat(6, minmax(112px, 1fr)) !important;
+  grid-template-columns: minmax(180px, 1.2fr) repeat(7, minmax(96px, 1fr)) !important;
   gap: 8px !important;
   margin-bottom: 10px !important;
 }
@@ -14079,7 +14079,7 @@ video {
 
 @media (max-width: 1500px) {
   .routine-overview-grid {
-    grid-template-columns: minmax(170px, 1.2fr) repeat(6, minmax(88px, 1fr)) !important;
+    grid-template-columns: minmax(170px, 1.2fr) repeat(7, minmax(76px, 1fr)) !important;
   }
 
   .routine-overview-card-selected {

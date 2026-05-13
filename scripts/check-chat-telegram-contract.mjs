@@ -47,7 +47,7 @@ assert(
 );
 assert(
   telegram.includes("shouldAllowFastWeb") &&
-    telegram.includes("!isSkillContextQuery || LooksLikeExplicitWebLookupQuestion") &&
+    telegram.includes("&& !isSkillContextQuery") &&
     telegram.includes("var effectiveWebSearchEnabled = snapshot.Mode == \"single\"") &&
     !telegram.includes("var effectiveWebSearchEnabled = snapshot.Mode == \"single\" ? false : webSearchEnabled"),
   "텔레그램 단일 모드에서 스킬/Think+ 조합의 웹검색 컨텍스트가 무조건 꺼지면 안 됩니다."

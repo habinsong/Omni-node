@@ -192,6 +192,9 @@ public sealed partial class CommandService
             );
         }
 
+        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, rawInput);
+        var effectiveSkillForFastPath = ResolveEffectiveSkillNameForThread(requestedSkillName, session.SessionId);
+        var shouldBypassFastWebForSkill = !string.IsNullOrWhiteSpace(effectiveSkillForFastPath);
         var requestedProvider = NormalizeProvider(request.Provider, allowAuto: true);
         if (requestedProvider == "auto")
         {
@@ -209,7 +212,7 @@ public sealed partial class CommandService
         }
         var resolvedModel = ResolveModelForCategory(TaskCategory.GeneralChat, requestedProvider, request.Model);
         var resolvedWebUrls = ResolveWebUrls(rawInput, request.WebUrls, request.WebSearchEnabled);
-        if (resolvedWebUrls.Count > 0 && _llmRouter.HasGeminiApiKey())
+        if (!shouldBypassFastWebForSkill && resolvedWebUrls.Count > 0 && _llmRouter.HasGeminiApiKey())
         {
             var memoryHint = BuildSafeWebMemoryPreferenceHint(
                 session.SessionId,
@@ -270,7 +273,7 @@ public sealed partial class CommandService
         }
 
         // Think+ 모드면 fast-web 단독 라우팅 우회. 기본 LLM이 web context를 prepend 받아 직접 답변하도록.
-        if (request.WebSearchEnabled && !request.ThinkPlusEnabled)
+        if (request.WebSearchEnabled && !request.ThinkPlusEnabled && !shouldBypassFastWebForSkill)
         {
             var webLookupInput = ResolveContextualWebLookupInput(thread.Id, rawInput);
             var decisionStopwatch = Stopwatch.StartNew();
@@ -401,7 +404,9 @@ public sealed partial class CommandService
             singleRequestToken,
             request.Source,
             session.SessionKey,
-            session.SessionId
+            session.SessionId,
+            requestedSkillName,
+            request.SkillScope
         );
         if (!string.IsNullOrWhiteSpace(preparedInput.UnsupportedMessage))
         {
@@ -483,7 +488,6 @@ public sealed partial class CommandService
                 );
         }
 
-        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, rawInput);
         var skillPreparedText = ApplySelectedSkillToPrompt(
             preparedInput.Text,
             requestedSkillName,
@@ -1027,6 +1031,32 @@ public sealed partial class CommandService
         return mentioned.Count == 1 ? mentioned[0] : null;
     }
 
+    private SkillManifest? FindSkillManifestByName(string? skillName, string? skillScope)
+    {
+        var normalizedName = (skillName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalizedName))
+        {
+            return null;
+        }
+
+        try
+        {
+            var normalizedScope = (skillScope ?? string.Empty).Trim();
+            return _projectContextLoader.LoadSnapshot()
+                .Skills
+                .Where(item => item.Name.Equals(normalizedName, StringComparison.OrdinalIgnoreCase))
+                .Where(item => string.IsNullOrWhiteSpace(normalizedScope)
+                               || item.Scope.Equals(normalizedScope, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(item => item.Scope.Equals("project", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            _auditLogger.Log("local", "skill_find_manifest", "failed", ex.Message);
+            return null;
+        }
+    }
+
     // 프롬프트 안에서 스킬 이름이 명시되면 그 스킬을, 그렇지 않으면 UI 드롭다운 선택을 사용.
     // 다중 스킬은 상위 흐름에서 이미 거부되므로 여기선 단일 매칭만 처리한다.
     // UI 선택과 프롬프트 명시가 다르면 프롬프트가 우선 — 사용자가 직접 입력한 의도가 더 명시적.
@@ -1546,14 +1576,7 @@ public sealed partial class CommandService
 
         try
         {
-            var normalizedScope = (skillScope ?? string.Empty).Trim();
-            var snapshot = _projectContextLoader.LoadSnapshot();
-            var skill = snapshot.Skills
-                .Where(item => item.Name.Equals(normalizedName, StringComparison.OrdinalIgnoreCase))
-                .Where(item => string.IsNullOrWhiteSpace(normalizedScope)
-                               || item.Scope.Equals(normalizedScope, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(item => item.Scope.Equals("project", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
-                .FirstOrDefault();
+            var skill = FindSkillManifestByName(normalizedName, skillScope);
             if (skill == null || string.IsNullOrWhiteSpace(skill.Path) || !File.Exists(skill.Path))
             {
                 return safeInput;
@@ -1734,6 +1757,7 @@ public sealed partial class CommandService
             );
         }
 
+        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, rawInput);
         var basePrepared = await PrepareSharedInputAsync(
             rawInput,
             request.Attachments,
@@ -1742,7 +1766,9 @@ public sealed partial class CommandService
             cancellationToken,
             request.Source,
             session.SessionKey,
-            session.SessionId
+            session.SessionId,
+            requestedSkillName,
+            request.SkillScope
         );
         if (!string.IsNullOrWhiteSpace(basePrepared.UnsupportedMessage))
         {
@@ -1773,7 +1799,6 @@ public sealed partial class CommandService
                 basePrepared.RetryStopReason
             );
         }
-        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, rawInput);
         var thinkPlusPreText = ApplySelectedSkillToPrompt(
             basePrepared.Text,
             requestedSkillName,
@@ -1983,6 +2008,7 @@ public sealed partial class CommandService
             );
         }
 
+        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, rawInput);
         var basePrepared = await PrepareSharedInputAsync(
             rawInput,
             request.Attachments,
@@ -1991,7 +2017,9 @@ public sealed partial class CommandService
             cancellationToken,
             request.Source,
             session.SessionKey,
-            session.SessionId
+            session.SessionId,
+            requestedSkillName,
+            request.SkillScope
         );
         if (!string.IsNullOrWhiteSpace(basePrepared.UnsupportedMessage))
         {
@@ -2031,7 +2059,6 @@ public sealed partial class CommandService
                 localNvidiaModel
             );
         }
-        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, rawInput);
         var thinkPlusPreText = ApplySelectedSkillToPrompt(
             basePrepared.Text,
             requestedSkillName,

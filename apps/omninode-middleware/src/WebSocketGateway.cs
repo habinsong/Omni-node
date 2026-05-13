@@ -252,6 +252,7 @@ public sealed partial class WebSocketGateway
         );
         _contextCommandDispatcher = new WsContextCommandDispatcher(
             contextService,
+            conversationService,
             new SkillFileService(_config),
             SendProjectContextAsync,
             SendSkillsListAsync,

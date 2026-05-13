@@ -179,6 +179,7 @@ public interface IConversationApplicationService
     );
     WorkspaceFilePreview? ReadWorkspaceFile(string filePath, int maxChars = 120_000);
     WorkspaceFilePreview? ReadWorkspaceFile(string filePath, string? conversationId, int maxChars = 120_000);
+    bool ClearActiveSkill(string? conversationId);
 }
 
 public interface IMemoryApplicationService

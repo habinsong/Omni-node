@@ -75,7 +75,8 @@ import {
   requestSkillsList,
   requestSkillGet,
   requestSkillSave,
-  requestSkillDelete
+  requestSkillDelete,
+  requestSkillActiveClear
 } from "./modules/ws-context.js";
 import {
   requestPlanApprove,
@@ -7832,6 +7833,13 @@ import {
     function renderComposerInputBar({ value, onChange, onSend, onCreateRoutine, onCreatePlan, pendingKey, placeholder }) {
       const thinkPlusVisible = pendingKey?.startsWith("chat:") || pendingKey?.startsWith("coding:");
       const thinkPlusReady = !!geminiUsage?.totals || true; // Gemini API 키 가용 여부는 백엔드가 더 정확히 알지만 UI는 일단 활성화 후 백엔드에서 fallback
+      const clearSkillForCurrentConversation = () => {
+        setSelectedChatSkill(null);
+        const conversationId = activeConversationByKey[pendingKey] || activeConversationByKey[currentKey] || "";
+        if (conversationId) {
+          requestSkillActiveClear(send, conversationId);
+        }
+      };
       return renderComposerInputBarShell({
         e,
         value,
@@ -7851,7 +7859,7 @@ import {
         onAttachmentSelected,
         onClearAttachments: () => setAttachmentsByKey((prev) => clearAttachmentDraft(prev, currentKey)),
         selectedSkill: (currentKey.startsWith("chat:") || currentKey.startsWith("coding:")) ? selectedChatSkill : null,
-        onClearSkill: () => setSelectedChatSkill(null),
+        onClearSkill: clearSkillForCurrentConversation,
         speechState,
         onStartVoiceInput: startVoiceInput,
         thinkPlusVisible,
@@ -9024,7 +9032,8 @@ import {
           name,
           scope,
           description: `${editor.description || ""}`.trim(),
-          body: editor.body || ""
+          body: editor.body || "",
+          allowOverwrite: !editor.isNew
         });
         if (!ok) {
           setSkillStatus({ kind: "error", message: "저장 요청 전송에 실패했습니다." });

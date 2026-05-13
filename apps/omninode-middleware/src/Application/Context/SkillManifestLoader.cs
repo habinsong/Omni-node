@@ -17,7 +17,7 @@ public sealed class SkillManifestLoader
         LoadDirectory(Path.Combine(projectRoot, ".omni", "skills"), "project");
         LoadDirectory(_pathResolver.GetGlobalSkillsRoot(), "global");
         return items
-            .OrderBy(item => item.Scope, StringComparer.Ordinal)
+            .OrderBy(item => item.Scope.Equals("project", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
             .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 

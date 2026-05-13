@@ -27,6 +27,7 @@ internal sealed class WsContextCommandDispatcher
     );
 
     private readonly IContextApplicationService _contextService;
+    private readonly IConversationApplicationService _conversationService;
     private readonly SkillFileService _skillFileService;
     private readonly SendProjectContextDelegate _sendProjectContextAsync;
     private readonly SendSkillsListDelegate _sendSkillsListAsync;
@@ -34,6 +35,7 @@ internal sealed class WsContextCommandDispatcher
 
     public WsContextCommandDispatcher(
         IContextApplicationService contextService,
+        IConversationApplicationService conversationService,
         SkillFileService skillFileService,
         SendProjectContextDelegate sendProjectContextAsync,
         SendSkillsListDelegate sendSkillsListAsync,
@@ -41,6 +43,7 @@ internal sealed class WsContextCommandDispatcher
     )
     {
         _contextService = contextService;
+        _conversationService = conversationService;
         _skillFileService = skillFileService;
         _sendProjectContextAsync = sendProjectContextAsync;
         _sendSkillsListAsync = sendSkillsListAsync;
@@ -114,7 +117,13 @@ internal sealed class WsContextCommandDispatcher
         {
             try
             {
-                var result = _skillFileService.Save(message.SkillName, message.SkillScope, message.SkillDescription, message.SkillBody);
+                var result = _skillFileService.Save(
+                    message.SkillName,
+                    message.SkillScope,
+                    message.SkillDescription,
+                    message.SkillBody,
+                    message.SkillAllowOverwrite == true
+                );
                 await SendPayloadAsync(socket, sendLock, "skill_save_result", result, cancellationToken);
             }
             catch (Exception ex)
@@ -148,6 +157,22 @@ internal sealed class WsContextCommandDispatcher
                 );
                 await SendPayloadAsync(socket, sendLock, "skill_delete_result", result, cancellationToken);
             }
+            return true;
+        }
+
+        if (message.Type == "skill_active_clear")
+        {
+            var ok = _conversationService.ClearActiveSkill(message.ConversationId);
+            var error = ok ? string.Empty : "활성 스킬을 해제할 대화 ID가 없거나 처리에 실패했습니다.";
+            var json = "{"
+                       + "\"type\":\"skill_active_clear_result\","
+                       + "\"payload\":{"
+                       + $"\"ok\":{(ok ? "true" : "false")},"
+                       + $"\"conversationId\":\"{WebSocketGateway.EscapeJson(message.ConversationId ?? string.Empty)}\","
+                       + $"\"error\":\"{WebSocketGateway.EscapeJson(error)}\""
+                       + "}"
+                       + "}";
+            await WebSocketGateway.SendTextAsync(socket, sendLock, json, cancellationToken);
             return true;
         }
 

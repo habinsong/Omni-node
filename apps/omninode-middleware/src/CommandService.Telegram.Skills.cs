@@ -336,7 +336,7 @@ public sealed partial class CommandService
                 return Task.FromResult<string?>(BuildTelegramSkillCreateUsage());
             }
 
-            var save = SkillFiles.Save(name, scope, bodySpec.Value.Description, bodySpec.Value.Body);
+            var save = SkillFiles.Save(name, scope, bodySpec.Value.Description, bodySpec.Value.Body, allowOverwrite: false);
             if (!save.Ok)
             {
                 return Task.FromResult<string?>($"스킬 저장 실패: {save.Error}");

@@ -14,7 +14,7 @@ export function requestSkillGet(send, name, scope = "project", options = {}) {
   return send({ type: "skill_get", skillName: name, skillScope: scope }, options);
 }
 
-export function requestSkillSave(send, { name, scope = "project", description = "", body = "" }, options = {}) {
+export function requestSkillSave(send, { name, scope = "project", description = "", body = "", allowOverwrite = false }, options = {}) {
   return send(
     {
       type: "skill_save",
@@ -22,6 +22,7 @@ export function requestSkillSave(send, { name, scope = "project", description = 
       skillScope: scope,
       skillDescription: description,
       skillBody: body,
+      skillAllowOverwrite: !!allowOverwrite,
     },
     options,
   );
@@ -29,4 +30,8 @@ export function requestSkillSave(send, { name, scope = "project", description = 
 
 export function requestSkillDelete(send, name, scope = "project", options = {}) {
   return send({ type: "skill_delete", skillName: name, skillScope: scope }, options);
+}
+
+export function requestSkillActiveClear(send, conversationId, options = {}) {
+  return send({ type: "skill_active_clear", conversationId }, options);
 }

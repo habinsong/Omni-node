@@ -376,4 +376,34 @@ public sealed partial class CommandService :
         }
     }
 
+    public bool ClearActiveSkill(string? conversationId) => ClearActiveSkillForConversation(conversationId);
+
+    public bool ClearActiveSkillForConversation(string? conversationId)
+    {
+        var trimmed = (conversationId ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return false;
+        }
+
+        try
+        {
+            var normalized = trimmed.ToLowerInvariant();
+            var removed = _activeSkillByThread.TryRemove(trimmed, out _);
+            if (!string.Equals(trimmed, normalized, StringComparison.Ordinal))
+            {
+                removed = _activeSkillByThread.TryRemove(normalized, out _) || removed;
+            }
+
+            _conversationStore.SetActiveSkillName(trimmed, null);
+            _auditLogger.Log("web", "skill_active_clear", "ok", $"conversation={trimmed} removed={(removed ? "true" : "false")}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _auditLogger.Log("web", "skill_active_clear", "failed", ex.Message);
+            return false;
+        }
+    }
+
 }

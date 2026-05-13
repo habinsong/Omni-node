@@ -1861,8 +1861,22 @@ public sealed partial class CommandService
         }
 
         var effectiveTopicInput = BuildTelegramFollowupAwareInput(telegramThread, requestText);
+        var requestedSkillName = TryExtractInlineSkillName(requestText);
+        var skillQueryText = requestText;
+        var hasStickyActiveSkillForTelegram = !string.IsNullOrWhiteSpace(telegramStateKey)
+            && _activeSkillByThread.ContainsKey(telegramStateKey);
+        var thinkPlusActiveForTelegram = IsThinkPlusActiveForThread(telegramStateKey);
+        var isSkillContextQuery = LooksLikeProjectContextRequest(skillQueryText)
+            || LooksLikeSkillCreationRequest(skillQueryText)
+            || LooksLikeSkillDeactivationRequest(skillQueryText)
+            || Regex.IsMatch(skillQueryText, @"(?i)(스킬|skill|skills|skill\.md).*(목록|리스트|뭐|보여|알려|어떤|종류|있어|있니|돼)")
+            || hasStickyActiveSkillForTelegram;
         var resolvedWebUrls = ResolveWebUrls(effectiveTopicInput, webUrls, webSearchEnabled);
-        if (resolvedWebUrls.Count > 0 && snapshot.Mode == "single" && _llmRouter.HasGeminiApiKey())
+        if (resolvedWebUrls.Count > 0
+            && snapshot.Mode == "single"
+            && _llmRouter.HasGeminiApiKey()
+            && !isSkillContextQuery
+            && !thinkPlusActiveForTelegram)
         {
             var allowMarkdownTable = LooksLikeTableRenderRequest(effectiveTopicInput);
             var memoryHint = BuildSafeWebMemoryPreferenceHint(
@@ -1901,21 +1915,10 @@ public sealed partial class CommandService
             return urlResponseText;
         }
 
-        var skillQueryText = requestText;
-        var hasStickyActiveSkillForTelegram = !string.IsNullOrWhiteSpace(telegramStateKey)
-            && _activeSkillByThread.ContainsKey(telegramStateKey);
-        var thinkPlusActiveForTelegram = IsThinkPlusActiveForThread(telegramStateKey);
-
-        var isSkillContextQuery = LooksLikeProjectContextRequest(skillQueryText)
-            || LooksLikeSkillCreationRequest(skillQueryText)
-            || LooksLikeSkillDeactivationRequest(skillQueryText)
-            || Regex.IsMatch(skillQueryText, @"(?i)(스킬|skill|skills|skill\.md).*(목록|리스트|뭐|보여|알려|어떤|종류|있어|있니|돼)")
-            || hasStickyActiveSkillForTelegram;
-
         var shouldAllowFastWeb = webSearchEnabled
             && snapshot.Mode == "single"
             && !thinkPlusActiveForTelegram
-            && (!isSkillContextQuery || LooksLikeExplicitWebLookupQuestion(effectiveTopicInput) || LooksLikeRealtimeQuestion(effectiveTopicInput));
+            && !isSkillContextQuery;
 
         if (shouldAllowFastWeb)
         {
@@ -1999,7 +2002,9 @@ public sealed partial class CommandService
             cancellationToken,
             "telegram",
             session.SessionKey,
-            telegramStateKey
+            telegramStateKey,
+            requestedSkillName,
+            null
         );
         if (!string.IsNullOrWhiteSpace(sharedPrepared.UnsupportedMessage))
         {
@@ -2036,7 +2041,6 @@ public sealed partial class CommandService
                              || normalizedAttachments.Count > 0
         );
 
-        var requestedSkillName = TryExtractInlineSkillName(requestText);
         preparedInput = ApplySelectedSkillToPrompt(
             preparedInput,
             requestedSkillName,

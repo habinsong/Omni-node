@@ -48,7 +48,9 @@ public sealed partial class CommandService
         CancellationToken cancellationToken,
         string source = "web",
         string? sessionKey = null,
-        string? threadBindingKey = null
+        string? threadBindingKey = null,
+        string? requestedSkillName = null,
+        string? requestedSkillScope = null
     )
     {
         var normalizedInput = (input ?? string.Empty).Trim();
@@ -114,6 +116,9 @@ public sealed partial class CommandService
                 // 단어 경계 검사 helper로 이름 부분문자열 false-positive를 차단.
                 // 다중 스킬 입력은 상위 흐름에서 이미 거부되므로 여기선 첫 매칭(가장 긴 이름)만 채택.
                 var explicitlyMentionedSkill = DetectMentionedSkillsInPrompt(normalizedInput).FirstOrDefault();
+                var requestedSkill = explicitlyMentionedSkill == null && !deactivationDetected
+                    ? FindSkillManifestByName(requestedSkillName, requestedSkillScope)
+                    : null;
 
                 if (deactivationDetected && explicitlyMentionedSkill == null)
                 {
@@ -144,6 +149,22 @@ public sealed partial class CommandService
                     {
                         _activeSkillByThread[threadKey] = explicitlyMentionedSkill.Name;
                         PersistActiveSkillForThread(threadKey, explicitlyMentionedSkill.Name);
+                    }
+                }
+                else if (requestedSkill != null)
+                {
+                    if (!string.IsNullOrWhiteSpace(threadKey)
+                        && _activeSkillByThread.TryGetValue(threadKey, out var existingActive)
+                        && !string.IsNullOrWhiteSpace(existingActive)
+                        && !string.Equals(existingActive, requestedSkill.Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        previousSkillName = existingActive;
+                    }
+                    skillToActivate = requestedSkill;
+                    if (!string.IsNullOrWhiteSpace(threadKey))
+                    {
+                        _activeSkillByThread[threadKey] = requestedSkill.Name;
+                        PersistActiveSkillForThread(threadKey, requestedSkill.Name);
                     }
                 }
                 else if (!deactivationDetected
@@ -379,7 +400,9 @@ public sealed partial class CommandService
         CancellationToken cancellationToken,
         string source = "web",
         string? sessionKey = null,
-        string? threadBindingKey = null
+        string? threadBindingKey = null,
+        string? requestedSkillName = null,
+        string? requestedSkillScope = null
     )
     {
         var shared = includeSharedContext
@@ -391,7 +414,9 @@ public sealed partial class CommandService
                 cancellationToken,
                 source,
                 sessionKey,
-                threadBindingKey
+                threadBindingKey,
+                requestedSkillName,
+                requestedSkillScope
             )
             : new InputPreparationResult((input ?? string.Empty).Trim(), string.Empty);
         var normalizedAttachments = NormalizeAttachments(attachments);

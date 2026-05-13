@@ -358,6 +358,7 @@ public sealed partial class WebSocketGateway
         public string? SkillScope { get; set; }
         public string? SkillDescription { get; set; }
         public string? SkillBody { get; set; }
+        public bool? SkillAllowOverwrite { get; set; }
         public bool? ThinkPlus { get; set; }
         public string? RoutineId { get; set; }
         public string? ExecutionMode { get; set; }

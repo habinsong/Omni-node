@@ -142,6 +142,7 @@ public sealed partial class CommandService
         }
 
         var model = ResolveModelForCategory(routingCategory, provider, request.Model);
+        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, rawInput);
         var preparedInput = await PrepareInputForProviderAsync(
             rawInput,
             provider,
@@ -153,7 +154,9 @@ public sealed partial class CommandService
             cancellationToken,
             request.Source,
             session.SessionKey,
-            session.SessionId
+            session.SessionId,
+            requestedSkillName,
+            request.SkillScope
         );
         if (!string.IsNullOrWhiteSpace(preparedInput.UnsupportedMessage))
         {
@@ -208,7 +211,6 @@ public sealed partial class CommandService
             ));
         }
 
-        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, rawInput);
         var thinkPlusPreText = ApplySelectedSkillToPrompt(
             preparedInput.Text,
             requestedSkillName,
@@ -437,6 +439,7 @@ public sealed partial class CommandService
         var effectiveInput = autoRoleMode
             ? BuildAutoOrchestrationCodingInput(request.Language)
             : rawInput;
+        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, effectiveInput);
         var sharedPrepared = await PrepareSharedInputAsync(
             effectiveInput,
             request.Attachments,
@@ -445,7 +448,9 @@ public sealed partial class CommandService
             cancellationToken,
             request.Source,
             session.SessionKey,
-            session.SessionId
+            session.SessionId,
+            requestedSkillName,
+            request.SkillScope
         );
         if (!string.IsNullOrWhiteSpace(sharedPrepared.UnsupportedMessage))
         {
@@ -493,7 +498,6 @@ public sealed partial class CommandService
                 sharedPrepared.RetryStopReason
             ));
         }
-        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, effectiveInput);
         var thinkPlusPreText = ApplySelectedSkillToPrompt(
             sharedPrepared.Text,
             requestedSkillName,
@@ -880,6 +884,7 @@ public sealed partial class CommandService
             return multiSkillRejectionMulti;
         }
 
+        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, rawInput);
         var sharedPrepared = await PrepareSharedInputAsync(
             rawInput,
             request.Attachments,
@@ -888,7 +893,9 @@ public sealed partial class CommandService
             cancellationToken,
             request.Source,
             session.SessionKey,
-            session.SessionId
+            session.SessionId,
+            requestedSkillName,
+            request.SkillScope
         );
         if (!string.IsNullOrWhiteSpace(sharedPrepared.UnsupportedMessage))
         {
@@ -933,7 +940,6 @@ public sealed partial class CommandService
                 sharedPrepared.RetryStopReason
             ));
         }
-        var requestedSkillName = ResolvePromptOrUiSkillName(request.SkillName, rawInput);
         var thinkPlusPreText = ApplySelectedSkillToPrompt(
             sharedPrepared.Text,
             requestedSkillName,

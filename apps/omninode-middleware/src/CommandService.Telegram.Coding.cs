@@ -605,6 +605,12 @@ public sealed partial class CommandService
 
         var conversation = EnsureTelegramLinkedCodingConversation(mode);
         var resolvedWebUrls = ResolveWebUrls(input, webUrls, webSearchEnabled);
+        var telegramStateKey = ResolveTelegramStateKey();
+        var telegramActiveSkillName = !string.IsNullOrWhiteSpace(telegramStateKey)
+                                      && _activeSkillByThread.TryGetValue(telegramStateKey, out var activeSkillName)
+                                      && !string.IsNullOrWhiteSpace(activeSkillName)
+            ? activeSkillName
+            : null;
 
         if (mode == "single")
         {
@@ -625,7 +631,8 @@ public sealed partial class CommandService
                     conversation.LinkedMemoryNotes,
                     Attachments: normalizedAttachments,
                     WebUrls: resolvedWebUrls,
-                    WebSearchEnabled: webSearchEnabled
+                    WebSearchEnabled: webSearchEnabled,
+                    SkillName: telegramActiveSkillName
                 ),
                 cancellationToken
             );
@@ -657,7 +664,8 @@ public sealed partial class CommandService
                     resolvedWebUrls,
                     webSearchEnabled,
                     snapshot.OrchestrationCodexModel,
-                    NvidiaModel: snapshot.OrchestrationNvidiaModel
+                    NvidiaModel: snapshot.OrchestrationNvidiaModel,
+                    SkillName: telegramActiveSkillName
                 ),
                 cancellationToken
             );
@@ -687,7 +695,8 @@ public sealed partial class CommandService
                 resolvedWebUrls,
                 webSearchEnabled,
                 snapshot.MultiCodexModel,
-                NvidiaModel: snapshot.MultiNvidiaModel
+                NvidiaModel: snapshot.MultiNvidiaModel,
+                SkillName: telegramActiveSkillName
             ),
             cancellationToken
         );
