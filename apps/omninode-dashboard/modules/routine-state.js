@@ -35,6 +35,10 @@ export function createRoutineState(options) {
     routineSelectedId: "",
     groqUsageWindowBaseByModel: {},
     mobilePaneByTab: { ...defaultMobilePanes },
-    progress: createRoutineProgressState()
+    progress: createRoutineProgressState(),
+    preview: null,
+    schedulerStatus: null,
+    listQuery: "",
+    listFilter: "all"
   };
 }

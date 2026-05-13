@@ -315,17 +315,17 @@ public sealed partial class CommandService
         );
         if (string.IsNullOrWhiteSpace(text))
         {
-            return lang is "html" or "css" or "javascript";
+            return lang is "html" or "css" or "javascript" or "typescript" or "react-vite";
         }
 
         if (lang != "auto")
         {
-            return (lang is "html" or "css" or "javascript") && !backendSignals;
+            return (lang is "html" or "css" or "javascript" or "typescript" or "react-vite") && !backendSignals;
         }
 
         if (!string.IsNullOrWhiteSpace(explicitLanguage))
         {
-            return (explicitLanguage is "html" or "css" or "javascript") && !backendSignals;
+            return (explicitLanguage is "html" or "css" or "javascript" or "typescript" or "react-vite") && !backendSignals;
         }
 
         var frontendSignals = ContainsAny(
@@ -348,7 +348,7 @@ public sealed partial class CommandService
             "브라우저"
         );
 
-        return (lang is "html" or "css" or "javascript" || frontendSignals) && !backendSignals;
+        return (lang is "html" or "css" or "javascript" or "typescript" or "react-vite" || frontendSignals) && !backendSignals;
     }
 
     private static bool IsGameLikeCodingTask(string objective, string languageHint)
@@ -369,15 +369,15 @@ public sealed partial class CommandService
 
         if (lang != "auto")
         {
-            return lang is "html" or "javascript" or "css";
+            return lang is "html" or "javascript" or "typescript" or "react-vite" or "css" or "python";
         }
 
         if (!string.IsNullOrWhiteSpace(explicitLanguage))
         {
-            return explicitLanguage is "html" or "javascript" or "css";
+            return explicitLanguage is "html" or "javascript" or "typescript" or "react-vite" or "css" or "python";
         }
 
-        return ContainsAny(text, "웹", "web", "canvas", "브라우저", "html");
+        return ContainsAny(text, "웹", "web", "canvas", "브라우저", "html", "파이썬", "python", "pygame");
     }
 
     private bool ShouldUseOneShotMode(CodingExecutionProfile profile, string objective, string languageHint)
@@ -506,53 +506,111 @@ public sealed partial class CommandService
     {
         var normalizedProvider = (provider ?? string.Empty).Trim().ToLowerInvariant();
         var normalizedModel = (model ?? string.Empty).Trim();
-        var normalizedLanguage = ResolveInitialCodingLanguage(languageHint, objective);
+        var projectProfile = ResolveCodingProjectProfile(objective, languageHint, requestedPaths);
+        var normalizedLanguage = projectProfile.Language;
         var effectiveRequestedPaths = requestedPaths ?? ExtractRequestedCodingPaths(objective, normalizedLanguage);
         var frontendLike = IsFrontendLikeCodingTask(objective, normalizedLanguage);
         var gameLike = IsGameLikeCodingTask(objective, normalizedLanguage);
-        var dependencyFreePythonGame = ShouldRequireDependencyFreePythonGame(objective, normalizedLanguage);
-        var lines = new List<string>();
+        var lines = new List<string>
+        {
+            $"- 프로젝트 프로파일은 {projectProfile.ProjectKind} 기준으로 잡고, 필요한 파일을 여러 개로 나눠 실제로 연결하라",
+            "- import/export/package/include 경로, 엔트리 파일, 빌드/실행 명령이 서로 맞아야 한다",
+            "- 단일 파일이 명시되지 않은 일반 요청은 설정/소스/테스트 또는 보조 파일을 포함한 프로젝트 구조를 우선하라",
+            "- TODO, placeholder, 빈 함수, 껍데기 UI, 테스트용 로그만 있는 구현은 실패로 본다"
+        };
 
         switch (normalizedLanguage)
         {
             case "python":
                 lines.Add("- Python은 실행 엔트리를 main.py 또는 요청한 파일명으로 고정하고 stdout 조건이 있으면 print 문자열을 정확히 맞춰라");
                 lines.Add("- import 경로, f-string, 들여쓰기 블록을 중간 줄바꿈으로 끊지 말고 파일 전체를 완성본으로 작성하라");
-                lines.Add("- 명시적으로 요구되지 않으면 외부 pip 패키지보다 표준 라이브러리를 우선하라");
+                lines.Add("- 필요한 외부 pip 패키지는 실제 import와 requirements.txt로 명확히 사용하라. 런타임은 자동 설치를 시도한다");
                 if (gameLike)
                 {
-                    lines.Add(dependencyFreePythonGame
-                        ? "- Python 게임/시각화는 외부 pip 패키지를 사용하지 말고 curses를 우선하며, 필요할 때만 tkinter 또는 표준 라이브러리를 사용하라"
-                        : "- Python 게임/시각화는 pygame 같은 외부 의존성보다 tkinter 또는 표준 라이브러리 기반 구현을 우선하라");
-                    lines.Add("- 단순 print 반복이나 턴제 로그 출력으로 끝내지 말고 실제 입력 처리와 화면 갱신이 있는 게임 루프를 구현하라");
-                }
-                if (dependencyFreePythonGame)
-                {
-                    lines.Add("- pygame, pyglet, arcade, panda3d, kivy, requirements.txt, pip install 지시를 출력하거나 생성하지 말라");
+                    lines.Add("- Python 게임/시각화는 요청한 라이브러리를 그대로 사용하라. Pygame을 요구하거나 적합하면 pygame 기반 구현을 우선하라");
+                    lines.Add("- 단순 print 반복이나 턴제 로그 출력으로 끝내지 말고 실제 입력 처리, 렌더링, 상태 갱신이 있는 게임 루프를 구현하라");
+                    lines.Add("- headless 검증을 위해 OMNI_HEADLESS_TEST=1이면 초기화, 핵심 객체 생성, 짧은 프레임 루프 후 종료하라");
+                    lines.Add("- 일반 실행에서는 OMNI_HEADLESS_TEST 분기가 작동하지 않아야 하며 실제 게임 창과 메인 루프가 실행되어야 한다");
+                    if (ContainsAny(objective.ToLowerInvariant(), "tetris", "테트리스"))
+                    {
+                        lines.Add("- 테트리스류 게임은 10x20 보드, 블록 형태, 이동/회전, 충돌, 라인 클리어, 점수, 레벨, 게임오버 로직을 실제 코드로 포함하라");
+                    }
                 }
                 break;
             case "javascript":
                 if (frontendLike || effectiveRequestedPaths.Count > 1)
                 {
-                    lines.Add("- 브라우저형 JavaScript는 index.html/styles.css/app.js 같은 번들 구조를 우선하고 DOMContentLoaded에서 실제 DOM을 렌더링하라");
+                    lines.Add("- 브라우저형 JavaScript/TypeScript는 package.json이 있으면 npm scripts(build/test/start)를 실제로 맞추고, 없으면 index.html/styles.css/app.js 같은 실행 가능한 번들 구조를 우선하라");
+                    lines.Add("- React/Vite 요청은 package.json, src/main.jsx 또는 src/main.tsx, index.html을 포함하고 root 렌더링이 실제 DOM에 연결되게 하라");
                     lines.Add("- 화면 검증 문자열은 console.log가 아니라 document.body에 실제 텍스트로 보여야 한다");
                 }
                 else
                 {
-                    lines.Add("- Node.js JavaScript는 main.js 엔트리와 CommonJS 기준을 우선하고 stdout 문자열을 직접 조립하라");
-                    lines.Add("- 객체 출력이나 console.table 대신 console.log 한 줄 형식으로 요구 stdout을 정확히 맞춰라");
+                    lines.Add("- Node.js JavaScript/TypeScript는 package.json이 있으면 scripts를 실제 실행 가능하게 맞추고, 없으면 main.js 엔트리와 CommonJS 기준을 우선하라");
+                    lines.Add("- CLI 요청은 process.argv 또는 stdin 처리를 실제로 구현하고, 객체 출력이나 console.table 대신 요구 stdout을 정확히 맞춰라");
                 }
                 break;
+            case "typescript":
+                if (frontendLike || projectProfile.ProjectKind == "react-vite")
+                {
+                    lines.Add("- TypeScript 프론트엔드는 package.json, tsconfig.json, index.html, src/main.tsx 또는 src/main.ts를 포함하라");
+                    lines.Add("- npm run build 또는 npx tsc --noEmit 기준으로 타입 오류 없이 통과하게 작성하라");
+                    lines.Add("- React/Vite 요청이면 root DOM 렌더링과 실제 화면 텍스트/상호작용을 구현하라");
+                }
+                else
+                {
+                    lines.Add("- TypeScript Node 프로젝트는 package.json, tsconfig.json, src/index.ts 구조를 우선하고 npm scripts를 실제 실행 가능하게 맞춰라");
+                    lines.Add("- CLI 요청은 process.argv/stdin 처리를 실제로 구현하고, 빌드 산출물 실행 경로를 맞춰라");
+                }
+                break;
+            case "react-vite":
+                lines.Add("- React/Vite 프로젝트는 package.json, index.html, src/main.tsx 또는 src/main.jsx, src/App.*를 포함하라");
+                lines.Add("- npm run build가 통과해야 하며, 화면은 실제 DOM에 렌더링되어 Playwright smoke로 확인 가능해야 한다");
+                lines.Add("- 버튼/폼/상태 변경이 요구되면 컴포넌트 상태와 이벤트 핸들러를 실제로 연결하라");
+                break;
             case "java":
-                lines.Add("- Java는 package 선언 없이 Main.java를 엔트리로 두고 보조 클래스는 별도 파일로 분리하라");
+                lines.Add("- Java 단일 파일 요청은 Main.java를 엔트리로 두고, 프로젝트/Gradle/Maven 요청이면 build.gradle 또는 pom.xml과 src/main/java 구조를 실제로 맞춰라");
                 lines.Add("- stdout 조건이 있으면 Map.toString()이나 디버그 출력으로 대체하지 말고 문자열을 직접 조립해 정확히 맞춰라");
-                lines.Add("- javac Main.java ... && java Main 기준으로 바로 실행되도록 작성하라");
+                lines.Add("- package 선언을 쓰면 파일 경로와 실행 클래스 이름이 일치해야 하며 build 도구 또는 javac -d out 경로로 검증 가능해야 한다");
+                break;
+            case "go":
+                lines.Add("- Go 프로젝트는 go.mod와 main.go 또는 cmd/<app>/main.go 구조를 우선하고 gofmt 가능한 코드로 작성하라");
+                lines.Add("- 라이브러리/테스트 요청이면 패키지 파일과 *_test.go를 분리하고 go test ./...가 통과하게 하라");
+                break;
+            case "rust":
+                lines.Add("- Rust 프로젝트는 Cargo.toml과 src/main.rs 또는 src/lib.rs 구조를 사용하라");
+                lines.Add("- cargo build/cargo test가 통과하게 모듈 경로, use 선언, Result 처리, ownership을 맞춰라");
+                break;
+            case "php":
+                lines.Add("- PHP 프로젝트는 composer.json, src/, bin/ 또는 public/ 엔트리를 우선하고 autoload 경로가 실제로 맞게 작성하라");
+                lines.Add("- CLI 요청은 argv 처리와 exit code를 구현하고, 웹/API 요청은 라우팅 엔트리를 명확히 둬라");
+                break;
+            case "ruby":
+                lines.Add("- Ruby 프로젝트는 Gemfile, lib/, bin/ 구조를 우선하고 require_relative 경로가 실제로 맞게 작성하라");
+                lines.Add("- CLI 요청은 ARGV 처리, usage, 실패 exit code를 실제로 구현하라");
+                break;
+            case "swift":
+                lines.Add("- Swift 프로젝트는 Package.swift와 Sources/<App>/main.swift 구조를 우선하고 swift build 기준으로 컴파일되게 작성하라");
+                lines.Add("- 테스트 요청이면 Tests/ 하위 XCTest 파일을 포함하라");
+                break;
+            case "csharp":
+                lines.Add("- C#은 .csproj가 필요하면 생성하고 dotnet restore/build/run 기준으로 바로 실행되게 작성하라");
+                lines.Add("- 단일 파일 요청도 Program.cs/Main 또는 top-level statements가 컴파일되게 만들고 NuGet 의존성은 csproj PackageReference에 명시하라");
+                break;
+            case "kotlin":
+                lines.Add("- Kotlin 단일 파일은 main 함수와 kotlinc 실행 기준으로 동작하게 만들고, Gradle 요청이면 build.gradle.kts와 src/main/kotlin 구조를 맞춰라");
+                lines.Add("- package 선언을 쓰면 파일 경로와 실행 엔트리가 일치해야 하며 외부 의존성은 Gradle에 명시하라");
                 break;
             case "c":
             case "cpp":
                 lines.Add("- C/C++는 main.c/main.cpp 엔트리, 보조 .c/.cpp, .h 분리를 지키고 헤더에 선언/소스에 구현을 둬라");
+                lines.Add("- Makefile 또는 CMakeLists.txt를 만들면 make/cmake 빌드가 바로 통과하게 하고 include 경로와 링킹 옵션을 명시하라");
                 lines.Add("- scanf scanset은 `%[^,]`처럼 쉼표 기준으로 작성하고 포맷 문자열이나 #include를 줄 중간에서 끊지 말라");
                 lines.Add("- stdout 조건이 있으면 printf/puts로 최종 문자열을 직접 조립하고 placeholder 0 출력으로 대체하지 말라");
+                break;
+            case "bash":
+                lines.Add("- Bash/CLI 요청은 set -euo pipefail, 인자 처리, stdin 처리, 사용법 메시지, 실패 exit code를 실제로 구현하라");
+                lines.Add("- 단순 echo 더미가 아니라 요청된 파일 입출력/옵션/오류 케이스를 동작 코드로 작성하라");
                 break;
             case "html":
             case "css":
@@ -756,7 +814,16 @@ public sealed partial class CommandService
             return true;
         }
 
-        return profile.PreferBundleFallback && (IsFrontendLikeCodingTask(objective, "auto") || IsGameLikeCodingTask(objective, "auto"));
+        if (IsExplicitSingleFileSimpleTask(objective, "auto", requestedPaths))
+        {
+            return false;
+        }
+
+        var projectProfile = ResolveCodingProjectProfile(objective, "auto", requestedPaths);
+        return projectProfile.PrefersMultiFile
+            || profile.PreferBundleFallback
+            || IsFrontendLikeCodingTask(objective, "auto")
+            || IsGameLikeCodingTask(objective, "auto");
     }
 
     private bool ShouldAttemptEarlyDirectRecovery(

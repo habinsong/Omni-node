@@ -40,6 +40,7 @@ public sealed partial class CommandService
         string notifyPolicy,
         bool notifyTelegram,
         RoutineScheduleConfig scheduleConfig,
+        bool runImmediately,
         string source,
         CancellationToken cancellationToken,
         Action<RoutineProgressUpdate>? progressCallback = null
@@ -124,12 +125,31 @@ public sealed partial class CommandService
 
         if (string.Equals(executionRoute.Mode, "script", StringComparison.Ordinal))
         {
+            if (!_llmRouter.HasGroqApiKey())
+            {
+                return new RoutineActionResult(
+                    false,
+                    "루틴 스크립트 생성 실패: Groq API 키가 없어 실행 코드를 만들 수 없습니다. 설정에서 Groq 키를 저장하거나 실행 모드를 일반 답변/URL 참조/브라우저 에이전트로 바꾸세요.",
+                    null
+                );
+            }
+
             generation = await GenerateRoutineImplementationAsync(
                 taskRequest,
                 new RoutineSchedule(scheduleConfig.Hour, scheduleConfig.Minute, scheduleConfig.Display),
                 cancellationToken,
                 progressCallback
             );
+            var validation = ValidateRoutineGeneratedCode(generation.Language, generation.Code, taskRequest);
+            if (!validation.Ok)
+            {
+                return new RoutineActionResult(
+                    false,
+                    $"루틴 스크립트 생성 품질 검증 실패: {string.Join(" / ", validation.Warnings)}",
+                    null
+                );
+            }
+
             ReportRoutineCreateProgress(
                 progressCallback,
                 "생성한 실행 코드를 저장하는 중입니다.",
@@ -224,6 +244,8 @@ public sealed partial class CommandService
             Planner = planner,
             PlannerModel = plannerModel,
             CoderModel = coderModel,
+            QualityStatus = generation?.QualityStatus ?? (string.Equals(executionRoute.Mode, "script", StringComparison.Ordinal) ? "ok" : "not_applicable"),
+            QualityWarnings = generation?.QualityWarnings?.ToList() ?? new List<string>(),
             CronScheduleKind = "cron",
             CronScheduleExpr = scheduleConfig.CronExpr,
             CronScheduleAtMs = null,
@@ -247,6 +269,26 @@ public sealed partial class CommandService
         {
             _routinesById[routine.Id] = routine;
             SaveRoutineStateLocked();
+        }
+
+        if (!runImmediately)
+        {
+            ReportRoutineCreateProgress(
+                progressCallback,
+                "루틴을 저장했습니다. 필요하면 상세 화면에서 테스트 실행하세요.",
+                100,
+                "save",
+                "루틴 등록",
+                "생성 결과를 저장하고 다음 예약 실행을 대기합니다.",
+                4,
+                done: true,
+                ok: true
+            );
+            return new RoutineActionResult(
+                true,
+                $"루틴 생성 완료: {title} ({scheduleConfig.Display})\n초기 실행은 건너뛰었습니다.",
+                ToRoutineSummary(routine)
+            );
         }
 
         ReportRoutineCreateProgress(

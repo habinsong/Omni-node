@@ -152,7 +152,7 @@ public sealed partial class CommandService
         {
             var items = _routinesById.Values
                 .Where(IsLogicGraphRoutine)
-                .Select(ToLogicGraphSummary)
+                .Select(ToLogicGraphSummaryWithRuntime)
                 .OrderBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(item => item.GraphId, StringComparer.Ordinal)
                 .ToArray();
@@ -178,7 +178,7 @@ public sealed partial class CommandService
             return new LogicGraphActionResult(
                 true,
                 "작업 흐름을 불러왔습니다.",
-                ToLogicGraphSummary(routine),
+                ToLogicGraphSummaryWithRuntime(routine),
                 routine.LogicGraph
             );
         }
@@ -246,7 +246,7 @@ public sealed partial class CommandService
                 return new LogicGraphActionResult(
                     false,
                     "지금 실행 중인 작업 흐름은 저장할 수 없습니다.",
-                    ToLogicGraphSummary(existing),
+                    ToLogicGraphSummaryWithRuntime(existing),
                     existing.LogicGraph
                 );
             }
@@ -297,7 +297,7 @@ public sealed partial class CommandService
         return new LogicGraphActionResult(
             true,
             "작업 흐름을 저장했습니다.",
-            ToLogicGraphSummary(routine),
+            ToLogicGraphSummaryWithRuntime(routine),
             normalizedGraph
         );
     }
@@ -322,7 +322,7 @@ public sealed partial class CommandService
                 return new LogicGraphActionResult(
                     false,
                     "지금 실행 중인 작업 흐름은 삭제할 수 없습니다.",
-                    ToLogicGraphSummary(routine),
+                    ToLogicGraphSummaryWithRuntime(routine),
                     routine.LogicGraph
                 );
             }
@@ -363,12 +363,20 @@ public sealed partial class CommandService
             if (routine.Running)
             {
                 var active = _logicRuntimeCoordinator.GetSnapshotByGraphId(normalizedGraphId);
+                if (active == null || IsTerminalLogicStatus(active.Status))
+                {
+                    routine.Running = false;
+                    SaveRoutineStateLocked();
+                }
+                else
+                {
                 return Task.FromResult(new LogicRunActionResult(
                     false,
                     "이미 이 작업 흐름이 실행 중입니다.",
                     active?.RunId,
                     active
                 ));
+                }
             }
 
             routine.Running = true;
@@ -404,7 +412,13 @@ public sealed partial class CommandService
             return new LogicRunActionResult(false, "흐름 실행 기능이 아직 준비되지 않았습니다.", null, null);
         }
 
-        return _logicRuntimeCoordinator.CancelRun(runId);
+        var result = _logicRuntimeCoordinator.CancelRun(runId);
+        if (result.Snapshot != null && IsTerminalLogicStatus(result.Snapshot.Status))
+        {
+            ClearLogicGraphRunningState(result.Snapshot.GraphId);
+        }
+
+        return result;
     }
 
     public LogicRunSnapshot? GetLogicGraphRun(string runId)
@@ -937,12 +951,12 @@ public sealed partial class CommandService
             "if" => ExecuteLogicIfNode(node, resolvedConfig, context),
             "parallel_split" => ExecuteLogicPassNode(node, resolvedConfig, "병렬 분기 실행"),
             "parallel_join" => ExecuteLogicPassNode(node, resolvedConfig, "병렬 합류 완료"),
-            "chat_single" => await ExecuteLogicChatNodeAsync(graph, node, resolvedConfig, "single", cancellationToken).ConfigureAwait(false),
-            "chat_orchestration" => await ExecuteLogicChatNodeAsync(graph, node, resolvedConfig, "orchestration", cancellationToken).ConfigureAwait(false),
-            "chat_multi" => await ExecuteLogicChatMultiNodeAsync(graph, node, resolvedConfig, cancellationToken).ConfigureAwait(false),
-            "coding_single" => await ExecuteLogicCodingNodeAsync(graph, node, resolvedConfig, "single", cancellationToken).ConfigureAwait(false),
-            "coding_orchestration" => await ExecuteLogicCodingNodeAsync(graph, node, resolvedConfig, "orchestration", cancellationToken).ConfigureAwait(false),
-            "coding_multi" => await ExecuteLogicCodingNodeAsync(graph, node, resolvedConfig, "multi", cancellationToken).ConfigureAwait(false),
+            "chat_single" => NormalizeLogicAiOutcome(await ExecuteLogicChatNodeAsync(graph, node, resolvedConfig, "single", cancellationToken).ConfigureAwait(false)),
+            "chat_orchestration" => NormalizeLogicAiOutcome(await ExecuteLogicChatNodeAsync(graph, node, resolvedConfig, "orchestration", cancellationToken).ConfigureAwait(false)),
+            "chat_multi" => NormalizeLogicAiOutcome(await ExecuteLogicChatMultiNodeAsync(graph, node, resolvedConfig, cancellationToken).ConfigureAwait(false)),
+            "coding_single" => NormalizeLogicCodingOutcome(await ExecuteLogicCodingNodeAsync(graph, node, resolvedConfig, "single", cancellationToken).ConfigureAwait(false)),
+            "coding_orchestration" => NormalizeLogicCodingOutcome(await ExecuteLogicCodingNodeAsync(graph, node, resolvedConfig, "orchestration", cancellationToken).ConfigureAwait(false)),
+            "coding_multi" => NormalizeLogicCodingOutcome(await ExecuteLogicCodingNodeAsync(graph, node, resolvedConfig, "multi", cancellationToken).ConfigureAwait(false)),
             "routine_run" => await ExecuteLogicRoutineRunNodeAsync(node, resolvedConfig, cancellationToken).ConfigureAwait(false),
             "memory_search" => ExecuteLogicMemorySearchNode(node, resolvedConfig),
             "memory_get" => ExecuteLogicMemoryGetNode(node, resolvedConfig),
@@ -1453,6 +1467,86 @@ public sealed partial class CommandService
                 ["status"] = result.Routine?.LastStatus ?? "-"
             }
         ));
+    }
+
+    private LogicNodeExecutionOutcome NormalizeLogicAiOutcome(LogicNodeExecutionOutcome outcome)
+    {
+        if (!outcome.Envelope.Ok || !LooksLikeLogicAiFailure(outcome.Envelope.Text))
+        {
+            return outcome;
+        }
+
+        return outcome with
+        {
+            Envelope = outcome.Envelope with
+            {
+                Ok = false,
+                Data = MergeLogicData(outcome.Envelope.Data, "error", "ai_response_failed")
+            }
+        };
+    }
+
+    private LogicNodeExecutionOutcome NormalizeLogicCodingOutcome(LogicNodeExecutionOutcome outcome)
+    {
+        if (!outcome.Envelope.Ok)
+        {
+            return outcome;
+        }
+
+        var executionStatus = outcome.Envelope.Data.TryGetValue("executionStatus", out var status)
+            ? status
+            : string.Empty;
+        if (IsSuccessfulLogicExecutionStatus(executionStatus))
+        {
+            return outcome;
+        }
+
+        var error = string.IsNullOrWhiteSpace(executionStatus)
+            ? "coding_execution_failed"
+            : $"coding_execution_{executionStatus}";
+        return outcome with
+        {
+            Envelope = outcome.Envelope with
+            {
+                Ok = false,
+                Text = FirstNonEmpty(outcome.Envelope.Text, $"코딩 실행 상태가 성공이 아닙니다: {executionStatus}"),
+                Data = MergeLogicData(outcome.Envelope.Data, "error", error)
+            }
+        };
+    }
+
+    private static IReadOnlyDictionary<string, string> MergeLogicData(
+        IReadOnlyDictionary<string, string> source,
+        string key,
+        string value
+    )
+    {
+        var next = new Dictionary<string, string>(source ?? new Dictionary<string, string>(), StringComparer.Ordinal);
+        next[key] = value;
+        return next;
+    }
+
+    private static bool IsSuccessfulLogicExecutionStatus(string? status)
+    {
+        var normalized = (status ?? string.Empty).Trim();
+        return normalized.Equals("ok", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("success", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool LooksLikeLogicAiFailure(string? text)
+    {
+        var normalized = (text ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return true;
+        }
+
+        return normalized.StartsWith("error:", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("API 키가 설정되지 않았습니다", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("인증이 필요합니다", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("호출 오류", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("요청 실패", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("응답 시간이 초과", StringComparison.OrdinalIgnoreCase);
     }
 
     private LogicNodeExecutionOutcome ExecuteLogicMemorySearchNode(
@@ -2492,7 +2586,26 @@ public sealed partial class CommandService
                && routine.LogicGraph != null;
     }
 
-    private static LogicGraphSummary ToLogicGraphSummary(RoutineDefinition routine)
+    private LogicGraphSummary ToLogicGraphSummaryWithRuntime(RoutineDefinition routine)
+    {
+        var activeRunId = string.Empty;
+        if (routine.Running && _logicRuntimeCoordinator != null)
+        {
+            var active = _logicRuntimeCoordinator.GetSnapshotByGraphId(routine.Id);
+            if (active == null || IsTerminalLogicStatus(active.Status))
+            {
+                routine.Running = false;
+            }
+            else
+            {
+                activeRunId = active.RunId;
+            }
+        }
+
+        return ToLogicGraphSummary(routine, activeRunId);
+    }
+
+    private static LogicGraphSummary ToLogicGraphSummary(RoutineDefinition routine, string activeRunId = "")
     {
         var graph = routine.LogicGraph ?? new LogicGraphDefinition
         {
@@ -2517,8 +2630,39 @@ public sealed partial class CommandService
             lastRunLocal,
             string.IsNullOrWhiteSpace(routine.LastStatus) ? "saved" : routine.LastStatus,
             graph.Nodes.Count,
-            graph.Edges.Count
+            graph.Edges.Count,
+            activeRunId
         );
+    }
+
+    private void ClearLogicGraphRunningState(string graphId)
+    {
+        var normalizedGraphId = (graphId ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalizedGraphId))
+        {
+            return;
+        }
+
+        lock (_routineLock)
+        {
+            if (_routinesById.TryGetValue(normalizedGraphId, out var routine) && IsLogicGraphRoutine(routine) && routine.Running)
+            {
+                routine.Running = false;
+                SaveRoutineStateLocked();
+            }
+        }
+    }
+
+    private static bool IsTerminalLogicStatus(string? status)
+    {
+        var normalized = (status ?? string.Empty).Trim();
+        return normalized.Equals("completed", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("error", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("failed", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("canceled", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("cancelled", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("timeout", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("killed", StringComparison.OrdinalIgnoreCase);
     }
 
     private static LogicGraphDefinition NormalizeLogicGraphDefinition(

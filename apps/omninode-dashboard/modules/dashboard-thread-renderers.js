@@ -288,7 +288,10 @@ export function renderMessagesPanel(props) {
     parseCodingMultiComparisonMessage,
     ttsSupported,
     speakingMessageId,
-    onToggleSpeakMessage
+    onToggleSpeakMessage,
+    onSaveAssistantMessageToNotebook,
+    onCreatePlanFromAssistantMessage,
+    notebookPending
   } = props;
 
   const optimisticUserEntry = optimisticUserByKey[currentKey];
@@ -357,6 +360,25 @@ export function renderMessagesPanel(props) {
               )
             )
           : null;
+        const saveNotebookButton = !isUser && typeof onSaveAssistantMessageToNotebook === "function"
+          ? e("button", {
+              type: "button",
+              className: "tts-pill tts-pill-icon-only notebook-save-pill",
+              "aria-label": "노트북에 저장",
+              title: "노트북에 저장",
+              disabled: !!notebookPending,
+              onClick: () => onSaveAssistantMessageToNotebook(item, index)
+            }, "NB")
+          : null;
+        const createPlanButton = !isUser && typeof onCreatePlanFromAssistantMessage === "function"
+          ? e("button", {
+              type: "button",
+              className: "tts-pill tts-pill-icon-only plan-create-pill",
+              "aria-label": "작업계획 만들기",
+              title: "이 답변으로 작업계획 만들기",
+              onClick: () => onCreatePlanFromAssistantMessage(item, index)
+            }, "PL")
+          : null;
         const bubbleNode = e(
           "div",
           { className: `bubble ${isUser ? "user" : "assistant"}${inlineMulti ? " bubble-multi-inline" : ""}` },
@@ -374,8 +396,9 @@ export function renderMessagesPanel(props) {
                 e(MarkdownBubbleText, { key: "body", text: bubbleText })
               ]
         );
-        const bubbleWithTts = ttsButton
-          ? e("div", { className: "bubble-with-tts" }, bubbleNode, ttsButton)
+        const bubbleActions = [ttsButton, saveNotebookButton, createPlanButton].filter(Boolean);
+        const bubbleWithTts = bubbleActions.length > 0
+          ? e("div", { className: "bubble-with-tts" }, bubbleNode, ...bubbleActions)
           : bubbleNode;
         return e(
           "div",

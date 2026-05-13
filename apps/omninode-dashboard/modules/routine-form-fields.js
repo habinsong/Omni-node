@@ -27,6 +27,7 @@ export function renderRoutineRetryAndNotifyFields(props) {
   const { e, form, formType, patchRoutineForm } = props;
   const retries = clampNumber(form.maxRetries ?? 1, 0, RETRY_MAX, 1);
   const retryDelay = clampNumber(form.retryDelaySeconds ?? 15, 0, RETRY_DELAY_MAX, 15);
+  const runImmediately = form.runImmediately === true;
   const notifyTelegram = normalizeRoutineNotifyTelegram(form.notifyTelegram, true);
   const notifyPolicy = normalizeRoutineNotifyPolicy(form.notifyPolicy, "always");
 
@@ -55,6 +56,19 @@ export function renderRoutineRetryAndNotifyFields(props) {
         onChange: (event) => patchRoutineForm(formType, { retryDelaySeconds: Number(event.target.value) || 0 })
       })
     ),
+    formType === "create"
+      ? e("label", { className: "routine-field routine-toggle-field" },
+        e("span", { className: "routine-field-label" }, "생성 후 동작"),
+        e("span", { className: "toggle-inline routine-run-toggle" },
+          e("input", {
+            type: "checkbox",
+            checked: runImmediately,
+            onChange: (event) => patchRoutineForm(formType, { runImmediately: event.target.checked })
+          }),
+          e("span", null, runImmediately ? "저장 후 바로 테스트 실행" : "저장만 하고 예약 실행 대기")
+        )
+      )
+      : null,
     e("label", { className: "routine-field" },
       e("span", { className: "routine-field-label" }, "텔레그램 봇 응답"),
       e("select", {

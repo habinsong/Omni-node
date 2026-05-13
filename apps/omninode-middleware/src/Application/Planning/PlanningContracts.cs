@@ -23,6 +23,19 @@ public sealed record PlanStep(
     IReadOnlyList<string> Verification
 );
 
+public sealed record PlanDraftStep(
+    string? Title,
+    string? Description,
+    IReadOnlyList<string>? MustDo,
+    IReadOnlyList<string>? MustNotDo,
+    IReadOnlyList<string>? Verification
+);
+
+public sealed record PlanDraft(
+    string? Title,
+    IReadOnlyList<PlanDraftStep>? Steps
+);
+
 public sealed record WorkPlan(
     string PlanId,
     string Title,

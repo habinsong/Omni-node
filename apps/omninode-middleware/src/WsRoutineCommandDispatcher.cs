@@ -65,6 +65,29 @@ internal sealed class WsRoutineCommandDispatcher
             return true;
         }
 
+        if (message.Type == "preview_routine")
+        {
+            var preview = _routineService.PreviewRoutine(
+                message.Text ?? string.Empty,
+                message.ExecutionMode,
+                message.ScheduleSourceMode,
+                message.ScheduleKind,
+                message.ScheduleTime,
+                message.Weekdays,
+                message.DayOfMonth,
+                message.TimezoneId
+            );
+            await WebSocketGateway.SendTextAsync(socket, sendLock, BuildRoutinePreviewJson(preview), cancellationToken);
+            return true;
+        }
+
+        if (message.Type == "get_routine_scheduler_status")
+        {
+            var status = _routineService.GetRoutineSchedulerStatus();
+            await WebSocketGateway.SendTextAsync(socket, sendLock, BuildRoutineSchedulerStatusJson(status), cancellationToken);
+            return true;
+        }
+
         if (message.Type == "create_routine")
         {
             if (string.IsNullOrWhiteSpace(message.Text))
@@ -93,6 +116,7 @@ internal sealed class WsRoutineCommandDispatcher
                 message.Weekdays,
                 message.DayOfMonth,
                 message.TimezoneId,
+                message.RunImmediately ?? true,
                 "web",
                 cancellationToken,
                 update => _ = _sendRoutineProgressAsync(socket, sendLock, update, cancellationToken)
@@ -252,5 +276,69 @@ internal sealed class WsRoutineCommandDispatcher
         }
 
         return false;
+    }
+
+    private static string BuildRoutinePreviewJson(RoutineExecutionPreviewResult preview)
+    {
+        return "{"
+            + "\"type\":\"routine_preview\","
+            + $"\"request\":\"{EscapeJson(preview.Request)}\","
+            + $"\"scheduleSourceMode\":\"{EscapeJson(preview.ScheduleSourceMode)}\","
+            + $"\"scheduleText\":\"{EscapeJson(preview.ScheduleText)}\","
+            + $"\"scheduleKind\":\"{EscapeJson(preview.ScheduleKind)}\","
+            + $"\"timezoneId\":\"{EscapeJson(preview.TimezoneId)}\","
+            + $"\"resolvedExecutionMode\":\"{EscapeJson(preview.ResolvedExecutionMode)}\","
+            + $"\"executionRoute\":\"{EscapeJson(preview.ExecutionRoute)}\","
+            + $"\"warnings\":{BuildStringArrayJson(preview.Warnings)}"
+            + "}";
+    }
+
+    private static string BuildRoutineSchedulerStatusJson(RoutineSchedulerStatus status)
+    {
+        return "{"
+            + "\"type\":\"routine_scheduler_status\","
+            + $"\"enabled\":{(status.Enabled ? "true" : "false")},"
+            + $"\"totalRoutines\":{status.TotalRoutines},"
+            + $"\"enabledRoutines\":{status.EnabledRoutines},"
+            + $"\"runningRoutines\":{status.RunningRoutines},"
+            + $"\"dueRoutines\":{status.DueRoutines},"
+            + $"\"nextRunAtMs\":{(status.NextRunAtMs.HasValue ? status.NextRunAtMs.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "null")},"
+            + $"\"lastError\":{ToJsonStringOrNull(status.LastError)}"
+            + "}";
+    }
+
+    private static string BuildStringArrayJson(IReadOnlyList<string> values)
+    {
+        var builder = new System.Text.StringBuilder();
+        builder.Append("[");
+        for (var i = 0; i < values.Count; i += 1)
+        {
+            if (i > 0)
+            {
+                builder.Append(",");
+            }
+
+            builder.Append($"\"{EscapeJson(values[i])}\"");
+        }
+
+        builder.Append("]");
+        return builder.ToString();
+    }
+
+    private static string ToJsonStringOrNull(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? "null"
+            : $"\"{EscapeJson(value)}\"";
+    }
+
+    private static string EscapeJson(string? value)
+    {
+        return (value ?? string.Empty)
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\"", "\\\"", StringComparison.Ordinal)
+            .Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal)
+            .Replace("\t", "\\t", StringComparison.Ordinal);
     }
 }

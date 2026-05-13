@@ -90,6 +90,36 @@ function main() {
     [toRelative(path.join(dashboardDir, "check-dashboard-server-message-router.mjs"))]
   );
   runStep(
+    "coding python game contract",
+    "node",
+    [toRelative(path.join(repoRoot, "scripts", "check-coding-python-game-contract.mjs"))]
+  );
+  runStep(
+    "chat telegram contract",
+    "node",
+    [toRelative(path.join(repoRoot, "scripts", "check-chat-telegram-contract.mjs"))]
+  );
+  runStep(
+    "logic tab contract",
+    "node",
+    [toRelative(path.join(repoRoot, "scripts", "check-logic-tab-contract.mjs"))]
+  );
+  runStep(
+    "routine tab contract",
+    "node",
+    [toRelative(path.join(repoRoot, "scripts", "check-routine-tab-contract.mjs"))]
+  );
+  runStep(
+    "notebook tab contract",
+    "node",
+    [toRelative(path.join(repoRoot, "scripts", "check-notebook-tab-contract.mjs"))]
+  );
+  runStep(
+    "plan tab contract",
+    "node",
+    [toRelative(path.join(repoRoot, "scripts", "check-plan-tab-contract.mjs"))]
+  );
+  runStep(
     "middleware build",
     "dotnet",
     ["build", "apps/omninode-middleware/OmniNode.Middleware.csproj"]

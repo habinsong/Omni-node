@@ -178,6 +178,7 @@ public sealed partial class WebSocketGateway
 
                 if (await _logicCommandDispatcher.TryHandleAsync(
                         message,
+                        remoteDashboardClient,
                         socket,
                         sendLock,
                         cancellationToken

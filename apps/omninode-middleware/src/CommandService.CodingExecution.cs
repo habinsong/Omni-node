@@ -57,6 +57,8 @@ public sealed partial class CommandService
 
                 var pythonBaseDir = ResolveDependencyBaseDirectory(command, workDir, ".py");
                 var requirementsPath = FindRequirementsFile(pythonBaseDir, workDir);
+                var pythonEnvironmentReady = await EnsureWorkspacePythonEnvironmentAsync(workDir, logs, errors, cancellationToken);
+
                 if (!string.IsNullOrWhiteSpace(requirementsPath) && File.Exists(requirementsPath))
                 {
                     var pipCommand = BuildPipRequirementsInstallCommand(requirementsPath);
@@ -64,21 +66,21 @@ public sealed partial class CommandService
                     AppendInstallOutcome("requirements.txt 설치", pipCommand, installResult, logs, errors);
                 }
 
-                var pythonScriptPath = TryExtractScriptPath(command, workDir, ".py");
-                if (!string.IsNullOrWhiteSpace(pythonScriptPath) && File.Exists(pythonScriptPath))
+                var pythonSourceFiles = EnumeratePythonDependencySourceFiles(command, pythonBaseDir, workDir).ToArray();
+                if (pythonSourceFiles.Length > 0)
                 {
-                    var packages = ExtractPythonPackagesFromSource(pythonScriptPath);
+                    var packages = CollectPythonThirdPartyPackagesFromSources(pythonSourceFiles);
                     if (packages.Count > 0)
                     {
-                        if (ShouldSkipPythonThirdPartyAutoInstallForInteractiveScript(command, pythonScriptPath))
-                        {
-                            errors.Add($"Python 게임 외부 패키지 자동 설치 차단: {string.Join(", ", packages)}");
-                            return;
-                        }
-
                         var pipCommand = BuildPipPackageInstallCommand(packages);
                         var installResult = await RunWorkspaceCommandAsync(pipCommand, workDir, cancellationToken);
-                        AppendInstallOutcome("Python import 패키지 설치", pipCommand, installResult, logs, errors);
+                        AppendInstallOutcome(
+                            pythonEnvironmentReady ? "Python import 패키지 설치(.venv)" : "Python import 패키지 설치",
+                            pipCommand,
+                            installResult,
+                            logs,
+                            errors
+                        );
                     }
                 }
             }
@@ -97,6 +99,12 @@ public sealed partial class CommandService
                         AppendInstallOutcome("package.json 의존성 설치", npmInstallCommand, installResult, logs, errors);
                     }
                 }
+                else if (HasNodeWorkspaceSignals(command, workDir))
+                {
+                    var initCommand = "npm init -y >/dev/null";
+                    var initResult = await RunWorkspaceCommandAsync(initCommand, nodeBaseDir, cancellationToken);
+                    AppendInstallOutcome("Node 임시 package.json 생성", initCommand, initResult, logs, errors);
+                }
 
                 var nodeScriptPath = TryExtractScriptPath(command, workDir, ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx");
                 if (!string.IsNullOrWhiteSpace(nodeScriptPath) && File.Exists(nodeScriptPath))
@@ -104,7 +112,7 @@ public sealed partial class CommandService
                     var packages = ExtractNodePackagesFromSource(nodeScriptPath);
                     if (packages.Count > 0)
                     {
-                        var npmCommand = $"npm install --no-save {string.Join(" ", packages.Select(EscapeShellArg))}";
+                        var npmCommand = $"npm install --no-save --no-fund --no-audit {string.Join(" ", packages.Select(EscapeShellArg))}";
                         var installResult = await RunWorkspaceCommandAsync(npmCommand, nodeBaseDir, cancellationToken);
                         AppendInstallOutcome("Node import 패키지 설치", npmCommand, installResult, logs, errors);
                     }
@@ -114,6 +122,41 @@ public sealed partial class CommandService
         catch (Exception ex)
         {
             errors.Add($"의존성 자동 설치 파이프라인 내부 오류: {ex.Message}");
+        }
+    }
+
+    private static IEnumerable<string> EnumeratePythonDependencySourceFiles(string command, string primaryDir, string workDir)
+    {
+        var scriptPath = TryExtractScriptPath(command, workDir, ".py");
+        if (!string.IsNullOrWhiteSpace(scriptPath) && File.Exists(scriptPath))
+        {
+            yield return scriptPath;
+        }
+
+        var roots = new[] { primaryDir, workDir }
+            .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        foreach (var root in roots)
+        {
+            IEnumerable<string> files;
+            try
+            {
+                files = Directory.EnumerateFiles(root, "*.py", SearchOption.AllDirectories)
+                    .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}.venv{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                                   && !path.Contains($"{Path.DirectorySeparatorChar}__pycache__{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+                    .Take(80)
+                    .ToArray();
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var file in files)
+            {
+                yield return file;
+            }
         }
     }
 
@@ -157,15 +200,7 @@ public sealed partial class CommandService
                 var pythonPackage = ResolvePythonPackageName(missingModule);
                 if (!string.IsNullOrWhiteSpace(pythonPackage))
                 {
-                    var pythonScriptPath = TryExtractScriptPath(command, workDir, ".py");
-                    if (!string.IsNullOrWhiteSpace(pythonScriptPath)
-                        && File.Exists(pythonScriptPath)
-                        && ShouldSkipPythonThirdPartyAutoInstallForInteractiveScript(command, pythonScriptPath))
-                    {
-                        errors.Add($"Python 게임 외부 패키지 자동 설치 차단: {pythonPackage}");
-                        return false;
-                    }
-
+                    await EnsureWorkspacePythonEnvironmentAsync(workDir, logs, errors, cancellationToken);
                     var pipCommand = BuildPipPackageInstallCommand(new[] { pythonPackage });
                     var installResult = await RunWorkspaceCommandAsync(pipCommand, workDir, cancellationToken);
                     AppendInstallOutcome($"Python 누락 모듈 설치({pythonPackage})", pipCommand, installResult, logs, errors);
@@ -183,7 +218,7 @@ public sealed partial class CommandService
                 if (!string.IsNullOrWhiteSpace(nodePackage))
                 {
                     var nodeBaseDir = ResolveDependencyBaseDirectory(command, workDir, ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx");
-                    var npmCommand = $"npm install --no-save {EscapeShellArg(nodePackage)}";
+                    var npmCommand = $"npm install --no-save --no-fund --no-audit {EscapeShellArg(nodePackage)}";
                     var installResult = await RunWorkspaceCommandAsync(npmCommand, nodeBaseDir, cancellationToken);
                     AppendInstallOutcome($"Node 누락 모듈 설치({nodePackage})", npmCommand, installResult, logs, errors);
                     if (installResult.ExitCode == 0)
@@ -218,51 +253,6 @@ public sealed partial class CommandService
         }
 
         return false;
-    }
-
-    private static bool ShouldSkipPythonThirdPartyAutoInstallForInteractiveScript(string command, string scriptPath)
-    {
-        if (string.IsNullOrWhiteSpace(scriptPath) || !File.Exists(scriptPath))
-        {
-            return false;
-        }
-
-        if (!LooksLikePythonCommand(command))
-        {
-            return false;
-        }
-
-        var packages = ExtractPythonPackagesFromSource(scriptPath);
-        if (packages.Count == 0)
-        {
-            return false;
-        }
-
-        var normalizedPath = scriptPath.Replace('\\', '/').ToLowerInvariant();
-        var scriptName = Path.GetFileNameWithoutExtension(scriptPath).ToLowerInvariant();
-        var sourceText = SafeReadAllText(scriptPath).ToLowerInvariant();
-        var looksInteractive = normalizedPath.Contains("game", StringComparison.Ordinal)
-                               || normalizedPath.Contains("tetris", StringComparison.Ordinal)
-                               || normalizedPath.Contains("shooter", StringComparison.Ordinal)
-                               || normalizedPath.Contains("1942", StringComparison.Ordinal)
-                               || scriptName.Contains("game", StringComparison.Ordinal)
-                               || scriptName.Contains("tetris", StringComparison.Ordinal)
-                               || sourceText.Contains("pygame", StringComparison.Ordinal)
-                               || sourceText.Contains("tkinter", StringComparison.Ordinal)
-                               || sourceText.Contains("curses", StringComparison.Ordinal)
-                               || sourceText.Contains("mainloop", StringComparison.Ordinal)
-                               || sourceText.Contains("getch()", StringComparison.Ordinal);
-        if (!looksInteractive)
-        {
-            return false;
-        }
-
-        return packages.Any(package =>
-            package.Equals("pygame", StringComparison.OrdinalIgnoreCase)
-            || package.Equals("pyglet", StringComparison.OrdinalIgnoreCase)
-            || package.Equals("arcade", StringComparison.OrdinalIgnoreCase)
-            || package.Equals("panda3d", StringComparison.OrdinalIgnoreCase)
-            || package.Equals("kivy", StringComparison.OrdinalIgnoreCase));
     }
 
     private static string SafeReadAllText(string path)
@@ -371,7 +361,7 @@ public sealed partial class CommandService
             }
         }
 
-        var npmCommand = $"npm install --no-save {EscapeShellArg(nodePackage)}";
+        var npmCommand = $"npm install --no-save --no-fund --no-audit {EscapeShellArg(nodePackage)}";
         var installResult = await RunWorkspaceCommandAsync(npmCommand, nodeBaseDir, cancellationToken);
         AppendInstallOutcome($"Node CLI 패키지 설치({nodePackage})", npmCommand, installResult, logs, errors);
         return installResult.ExitCode == 0;
@@ -398,6 +388,7 @@ public sealed partial class CommandService
             return false;
         }
 
+        await EnsureWorkspacePythonEnvironmentAsync(workDir, logs, errors, cancellationToken);
         var pipCommand = BuildPipPackageInstallCommand(new[] { pythonPackage });
         var installResult = await RunWorkspaceCommandAsync(pipCommand, workDir, cancellationToken);
         AppendInstallOutcome($"Python CLI 패키지 설치({pythonPackage})", pipCommand, installResult, logs, errors);
@@ -445,6 +436,42 @@ public sealed partial class CommandService
         );
     }
 
+    private async Task<bool> EnsureWorkspacePythonEnvironmentAsync(
+        string workDir,
+        List<string> logs,
+        List<string> errors,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!await EnsurePythonToolchainAsync(workDir, logs, errors, cancellationToken))
+        {
+            return false;
+        }
+
+        var venvPython = OperatingSystem.IsWindows()
+            ? Path.Combine(workDir, ".venv", "Scripts", "python.exe")
+            : Path.Combine(workDir, ".venv", "bin", "python");
+        if (File.Exists(venvPython))
+        {
+            return true;
+        }
+
+        var createVenv = OperatingSystem.IsWindows() ? "python -m venv .venv" : "python3 -m venv .venv";
+        var venvResult = await RunWorkspaceCommandAsync(createVenv, workDir, cancellationToken);
+        AppendInstallOutcome("Python 가상환경 생성(.venv)", createVenv, venvResult, logs, errors);
+        if (venvResult.ExitCode != 0 || !File.Exists(venvPython))
+        {
+            return false;
+        }
+
+        var upgradePip = OperatingSystem.IsWindows()
+            ? ".venv\\Scripts\\python.exe -m pip install --disable-pip-version-check --upgrade pip setuptools wheel"
+            : ".venv/bin/python -m pip install --disable-pip-version-check --upgrade pip setuptools wheel";
+        var pipResult = await RunWorkspaceCommandAsync(upgradePip, workDir, cancellationToken);
+        AppendInstallOutcome("Python 가상환경 pip 준비(.venv)", upgradePip, pipResult, logs, errors);
+        return pipResult.ExitCode == 0;
+    }
+
     private async Task<bool> InstallNodeRuntimeToolchainAsync(
         string program,
         string workDir,
@@ -481,10 +508,10 @@ public sealed partial class CommandService
 
         if (OperatingSystem.IsLinux())
         {
-            var aptCheck = await RunWorkspaceCommandAsync("command -v apt-get >/dev/null 2>&1", workDir, cancellationToken);
-            if (aptCheck.ExitCode != 0)
+            var linuxPackageManager = await DetectLinuxPackageManagerAsync(workDir, cancellationToken);
+            if (linuxPackageManager != "apt-get")
             {
-                errors.Add($"Node 런타임 자동 설치 건너뜀: apt-get 없음 ({program})");
+                errors.Add($"Node 런타임 자동 설치 건너뜀: apt-get 없음 ({program}, 감지됨: {linuxPackageManager})");
                 return false;
             }
 
@@ -511,16 +538,23 @@ public sealed partial class CommandService
 
     private static string BuildPipRequirementsInstallCommand(string requirementsPath)
     {
-        var python = OperatingSystem.IsWindows() ? "python" : "python3";
-        var breakSystemPackages = OperatingSystem.IsWindows() ? string.Empty : " --break-system-packages";
-        return $"{python} -m pip install --disable-pip-version-check --user{breakSystemPackages} -r {EscapeShellArg(requirementsPath)}";
+        if (OperatingSystem.IsWindows())
+        {
+            return $"if exist .venv\\Scripts\\python.exe (.venv\\Scripts\\python.exe -m pip install --disable-pip-version-check -r {EscapeShellArg(requirementsPath)}) else (python -m pip install --disable-pip-version-check --user -r {EscapeShellArg(requirementsPath)})";
+        }
+
+        return $"if [ -x .venv/bin/python ]; then .venv/bin/python -m pip install --disable-pip-version-check -r {EscapeShellArg(requirementsPath)}; else python3 -m pip install --disable-pip-version-check --user $(python3 -m pip help install 2>/dev/null | grep -q -- '--break-system-packages' && printf %s ' --break-system-packages') -r {EscapeShellArg(requirementsPath)}; fi";
     }
 
     private static string BuildPipPackageInstallCommand(IEnumerable<string> packages)
     {
-        var python = OperatingSystem.IsWindows() ? "python" : "python3";
-        var breakSystemPackages = OperatingSystem.IsWindows() ? string.Empty : " --break-system-packages";
-        return $"{python} -m pip install --disable-pip-version-check --user{breakSystemPackages} {string.Join(" ", packages.Select(EscapeShellArg))}";
+        var packageArgs = string.Join(" ", packages.Select(EscapeShellArg));
+        if (OperatingSystem.IsWindows())
+        {
+            return $"if exist .venv\\Scripts\\python.exe (.venv\\Scripts\\python.exe -m pip install --disable-pip-version-check {packageArgs}) else (python -m pip install --disable-pip-version-check --user {packageArgs})";
+        }
+
+        return $"if [ -x .venv/bin/python ]; then .venv/bin/python -m pip install --disable-pip-version-check {packageArgs}; else python3 -m pip install --disable-pip-version-check --user $(python3 -m pip help install 2>/dev/null | grep -q -- '--break-system-packages' && printf %s ' --break-system-packages') {packageArgs}; fi";
     }
 
     private async Task<bool> InstallPythonRuntimeToolchainAsync(
@@ -548,10 +582,10 @@ public sealed partial class CommandService
 
         if (OperatingSystem.IsLinux())
         {
-            var aptCheck = await RunWorkspaceCommandAsync("command -v apt-get >/dev/null 2>&1", workDir, cancellationToken);
-            if (aptCheck.ExitCode != 0)
+            var linuxPackageManager = await DetectLinuxPackageManagerAsync(workDir, cancellationToken);
+            if (linuxPackageManager != "apt-get")
             {
-                errors.Add($"Python 런타임 자동 설치 건너뜀: apt-get 없음 ({program})");
+                errors.Add($"Python 런타임 자동 설치 건너뜀: apt-get 없음 ({program}, 감지됨: {linuxPackageManager})");
                 return false;
             }
 
@@ -648,10 +682,10 @@ public sealed partial class CommandService
 
         if (OperatingSystem.IsLinux())
         {
-            var aptCheck = await RunWorkspaceCommandAsync("command -v apt-get >/dev/null 2>&1", workDir, cancellationToken);
-            if (aptCheck.ExitCode != 0)
+            var linuxPackageManager = await DetectLinuxPackageManagerAsync(workDir, cancellationToken);
+            if (linuxPackageManager != "apt-get")
             {
-                errors.Add("tkinter 자동 설치 건너뜀: apt-get 없음 (python3-tk)");
+                errors.Add($"tkinter 자동 설치 건너뜀: apt-get 없음 (python3-tk, 감지됨: {linuxPackageManager})");
                 return false;
             }
 
@@ -696,10 +730,10 @@ public sealed partial class CommandService
 
         if (OperatingSystem.IsLinux())
         {
-            var aptCheck = await RunWorkspaceCommandAsync("command -v apt-get >/dev/null 2>&1", workDir, cancellationToken);
-            if (aptCheck.ExitCode != 0)
+            var linuxPackageManager = await DetectLinuxPackageManagerAsync(workDir, cancellationToken);
+            if (linuxPackageManager != "apt-get")
             {
-                errors.Add($"프로그램 자동 설치 건너뜀: apt-get 없음 ({safeProgram})");
+                errors.Add($"프로그램 자동 설치 건너뜀: apt-get 없음 ({safeProgram}, 감지됨: {linuxPackageManager})");
                 return false;
             }
 
@@ -711,6 +745,22 @@ public sealed partial class CommandService
 
         errors.Add($"프로그램 자동 설치 미지원 OS ({safeProgram})");
         return false;
+    }
+
+    private async Task<string> DetectLinuxPackageManagerAsync(string workDir, CancellationToken cancellationToken)
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return "unsupported";
+        }
+
+        var result = await RunWorkspaceCommandAsync(
+            "for manager in apt-get dnf yum pacman apk zypper; do if command -v \"$manager\" >/dev/null 2>&1; then printf '%s' \"$manager\"; exit 0; fi; done; printf 'none'",
+            workDir,
+            cancellationToken
+        );
+        var detected = result.StdOut.Trim();
+        return string.IsNullOrWhiteSpace(detected) ? "none" : detected;
     }
 
     private static string? FindRequirementsFile(string primaryDir, string fallbackDir)
@@ -1265,9 +1315,10 @@ public sealed partial class CommandService
         string? standardInput = null
     )
     {
+        var shellPath = ResolveWorkspaceShellPath();
         var startInfo = new ProcessStartInfo
         {
-            FileName = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/zsh",
+            FileName = shellPath,
             UseShellExecute = false,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -1377,9 +1428,39 @@ public sealed partial class CommandService
         return normalized.EndsWith('\n') ? normalized : normalized + "\n";
     }
 
+    private static string ResolveWorkspaceShellPath()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return "cmd.exe";
+        }
+
+        foreach (var candidate in new[] { "/bin/zsh", "/usr/bin/zsh", "/bin/bash", "/usr/bin/bash", "/bin/sh" })
+        {
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return "/bin/sh";
+    }
+
     private static void ApplyWorkspaceExecutablePath(ProcessStartInfo startInfo, string command, string workDir)
     {
         var pathPrefixes = new List<string>();
+
+        var workspacePythonBin = Path.Combine(workDir, ".venv", "bin");
+        if (Directory.Exists(workspacePythonBin))
+        {
+            pathPrefixes.Add(workspacePythonBin);
+        }
+
+        var workspaceWindowsPythonBin = Path.Combine(workDir, ".venv", "Scripts");
+        if (Directory.Exists(workspaceWindowsPythonBin))
+        {
+            pathPrefixes.Add(workspaceWindowsPythonBin);
+        }
 
         var workspaceNodeBin = Path.Combine(workDir, "node_modules", ".bin");
         if (Directory.Exists(workspaceNodeBin))

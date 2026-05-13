@@ -2747,17 +2747,21 @@ public sealed class LlmRouter : IDisposable
                 아래 목표를 실제 구현 가능한 작업 계획으로 분해하라.
                 과도한 설명 없이 바로 실행 가능한 단계만 작성하라.
 
-                반드시 아래 형식만 사용한다.
-                TITLE: 한 줄 제목
-                STEPS:
-                1. ...
-                2. ...
-                3. ...
+                반드시 JSON 객체 하나만 출력한다. Markdown 코드블록, 설명 문장, 주석은 쓰지 않는다.
+                스키마 키:
+                - title: 한 줄 제목
+                - steps: 4~8개 배열
+                - steps[].title: 단계 제목
+                - steps[].description: 실제 수행할 작업 설명
+                - steps[].mustDo: 반드시 할 일 배열
+                - steps[].mustNotDo: 피해야 할 일 배열
+                - steps[].verification: 확인 방법 배열
 
                 규칙:
                 - 단계는 4개 이상 8개 이하
                 - 각 단계는 실제 저장소 작업 단위로 쓴다
-                - 문서/검증 단계도 포함한다
+                - 각 단계마다 mustDo, mustNotDo, verification을 비우지 않는다
+                - 마지막 단계에는 빌드/테스트/수동 확인 등 검증을 포함한다
                 - mode=interview면 첫 단계에 모호한 지점 확인을 넣는다
 
                 [목표]

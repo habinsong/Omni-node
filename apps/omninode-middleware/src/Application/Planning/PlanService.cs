@@ -67,10 +67,13 @@ public sealed class PlanService
             BuildPlanningAvailabilitySnapshot(plannerRoute),
             reason: "plan_create"
         );
-        var steps = ParseSteps(draft, normalizedObjective, normalizedConstraints, normalizedMode);
+        var structuredDraft = TryParseStructuredDraft(draft);
+        var steps = structuredDraft == null
+            ? ParseSteps(draft, normalizedObjective, normalizedConstraints, normalizedMode)
+            : BuildStepsFromDraft(structuredDraft, normalizedObjective, normalizedConstraints, normalizedMode);
         var plan = new WorkPlan(
             planId,
-            ResolveTitle(draft, normalizedObjective),
+            ResolveTitle(structuredDraft, draft, normalizedObjective),
             normalizedObjective,
             PlanStatus.Draft,
             createdAtUtc,
@@ -257,6 +260,125 @@ public sealed class PlanService
         return steps;
     }
 
+    private static PlanDraft? TryParseStructuredDraft(string rawDraft)
+    {
+        var normalized = (rawDraft ?? string.Empty).Trim();
+        if (normalized.Length == 0)
+        {
+            return null;
+        }
+
+        foreach (var candidate in EnumerateJsonCandidates(normalized))
+        {
+            try
+            {
+                var draft = PlanJson.DeserializeDraft(candidate);
+                if (draft?.Steps != null && draft.Steps.Count > 0)
+                {
+                    return draft;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> EnumerateJsonCandidates(string text)
+    {
+        yield return text;
+
+        var fenced = Regex.Match(text, @"```(?:json)?\s*(?<json>\{[\s\S]*?\})\s*```", RegexOptions.IgnoreCase);
+        if (fenced.Success)
+        {
+            yield return fenced.Groups["json"].Value.Trim();
+        }
+
+        var start = text.IndexOf('{');
+        var end = text.LastIndexOf('}');
+        if (start >= 0 && end > start)
+        {
+            yield return text[start..(end + 1)].Trim();
+        }
+    }
+
+    private static IReadOnlyList<PlanStep> BuildStepsFromDraft(
+        PlanDraft draft,
+        string objective,
+        IReadOnlyList<string> constraints,
+        string mode
+    )
+    {
+        var verificationHints = BuildVerificationHints(objective);
+        var globalMustNotDo = constraints.Count == 0
+            ? Array.Empty<string>()
+            : constraints.ToArray();
+        var sourceSteps = (draft.Steps ?? Array.Empty<PlanDraftStep>())
+            .Where(step => !string.IsNullOrWhiteSpace(step.Title) || !string.IsNullOrWhiteSpace(step.Description))
+            .Take(8)
+            .ToArray();
+        if (sourceSteps.Length == 0)
+        {
+            return BuildFallbackStepTexts(objective, mode)
+                .Select((text, index) => BuildFallbackPlanStep(text, index, globalMustNotDo, verificationHints))
+                .ToArray();
+        }
+
+        return sourceSteps.Select((step, index) =>
+        {
+            var description = Regex.Replace((step.Description ?? step.Title ?? $"단계 {index + 1}").Trim(), @"\s+", " ");
+            var title = Regex.Replace((step.Title ?? description).Trim(), @"\s+", " ");
+            var mustDo = NormalizePlanList(step.MustDo)
+                .DefaultIfEmpty(description)
+                .Take(8)
+                .ToArray();
+            var mustNotDo = NormalizePlanList(step.MustNotDo)
+                .Concat(globalMustNotDo)
+                .Distinct(StringComparer.Ordinal)
+                .Take(8)
+                .ToArray();
+            var verification = NormalizePlanList(step.Verification)
+                .DefaultIfEmpty(index == sourceSteps.Length - 1 ? verificationHints.Last() : "이 단계 산출물이 다음 단계 입력으로 충분한지 확인한다.")
+                .Take(8)
+                .ToArray();
+
+            return new PlanStep(
+                $"step-{index + 1:00}",
+                title.Length > 56 ? title[..56].TrimEnd() : title,
+                description,
+                mustDo,
+                mustNotDo,
+                verification
+            );
+        }).ToArray();
+    }
+
+    private static PlanStep BuildFallbackPlanStep(
+        string text,
+        int index,
+        IReadOnlyList<string> mustNotDo,
+        IReadOnlyList<string> verificationHints
+    )
+    {
+        return new PlanStep(
+            $"step-{index + 1:00}",
+            ResolveStepTitle(text, index),
+            text,
+            new[] { text },
+            mustNotDo,
+            index == 3 ? verificationHints : new[] { "이 단계 산출물이 다음 단계 입력으로 충분한지 확인한다." }
+        );
+    }
+
+    private static IEnumerable<string> NormalizePlanList(IReadOnlyList<string>? items)
+    {
+        return (items ?? Array.Empty<string>())
+            .Select(item => Regex.Replace((item ?? string.Empty).Trim(), @"\s+", " "))
+            .Where(item => item.Length > 0);
+    }
+
     private static IReadOnlyList<string> BuildFallbackStepTexts(string objective, string mode)
     {
         return mode == "interview"
@@ -301,8 +423,14 @@ public sealed class PlanService
         return hints;
     }
 
-    private static string ResolveTitle(string rawDraft, string objective)
+    private static string ResolveTitle(PlanDraft? draft, string rawDraft, string objective)
     {
+        var draftTitle = Regex.Replace((draft?.Title ?? string.Empty).Trim(), @"\s+", " ");
+        if (draftTitle.Length > 0)
+        {
+            return draftTitle.Length > 72 ? draftTitle[..72].TrimEnd() : draftTitle;
+        }
+
         foreach (var line in (rawDraft ?? string.Empty).Split('\n'))
         {
             var trimmed = line.Trim();

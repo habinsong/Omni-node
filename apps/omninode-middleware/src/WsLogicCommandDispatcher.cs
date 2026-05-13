@@ -65,11 +65,23 @@ internal sealed class WsLogicCommandDispatcher
 
     public async Task<bool> TryHandleAsync(
         WebSocketGateway.ClientMessage message,
+        bool remoteDashboardClient,
         WebSocket socket,
         SemaphoreSlim sendLock,
         CancellationToken cancellationToken
     )
     {
+        if (remoteDashboardClient && IsRemoteRestrictedLogicMessage(message.Type))
+        {
+            await WebSocketGateway.SendTextAsync(
+                socket,
+                sendLock,
+                "{\"type\":\"error\",\"message\":\"forbidden_remote_dashboard\"}",
+                cancellationToken
+            );
+            return true;
+        }
+
         if (message.Type == "logic_graph_list")
         {
             await _sendLogicGraphListResultAsync(
@@ -143,14 +155,35 @@ internal sealed class WsLogicCommandDispatcher
 
         if (message.Type == "logic_graph_run")
         {
-            if (string.IsNullOrWhiteSpace(message.GraphId))
+            var targetGraphId = message.GraphId?.Trim() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(message.LogicGraphJson))
+            {
+                var saveResult = await _logicService.SaveLogicGraphAsync(
+                    targetGraphId,
+                    message.LogicGraphJson,
+                    "web",
+                    cancellationToken
+                );
+                await _sendLogicGraphActionResultAsync(socket, sendLock, saveResult, cancellationToken);
+                await _sendLogicGraphListResultAsync(socket, sendLock, _logicService.ListLogicGraphs(), cancellationToken);
+                if (!saveResult.Ok)
+                {
+                    return true;
+                }
+
+                targetGraphId = saveResult.Summary?.GraphId
+                    ?? saveResult.Graph?.GraphId
+                    ?? targetGraphId;
+            }
+
+            if (string.IsNullOrWhiteSpace(targetGraphId))
             {
                 await WebSocketGateway.SendTextAsync(socket, sendLock, "{\"type\":\"error\",\"message\":\"graphId가 필요합니다.\"}", cancellationToken);
                 return true;
             }
 
             var result = await _logicService.RunLogicGraphAsync(
-                message.GraphId.Trim(),
+                targetGraphId.Trim(),
                 "web",
                 string.IsNullOrWhiteSpace(message.LogicRunInput) ? null : message.LogicRunInput.Trim(),
                 evt => _ = _sendLogicRunEventAsync(socket, sendLock, evt, cancellationToken),
@@ -191,5 +224,18 @@ internal sealed class WsLogicCommandDispatcher
         }
 
         return false;
+    }
+
+    private static bool IsRemoteRestrictedLogicMessage(string? messageType)
+    {
+        return messageType is
+            "logic_graph_list" or
+            "logic_graph_get" or
+            "logic_path_list" or
+            "logic_graph_save" or
+            "logic_graph_delete" or
+            "logic_graph_run" or
+            "logic_graph_cancel" or
+            "logic_graph_run_get";
     }
 }

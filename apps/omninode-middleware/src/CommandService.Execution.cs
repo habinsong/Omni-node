@@ -9,10 +9,11 @@ public sealed partial class CommandService
         IReadOnlyList<InputAttachment>? attachments = null,
         IReadOnlyList<string>? webUrls = null,
         bool webSearchEnabled = true,
-        Action<string>? streamCallback = null
+        Action<string>? streamCallback = null,
+        TelegramTurnContext? telegramContext = null
     )
     {
-        return ExecuteCoreAsync(input, source, cancellationToken, attachments, webUrls, webSearchEnabled, streamCallback);
+        return ExecuteCoreAsync(input, source, cancellationToken, attachments, webUrls, webSearchEnabled, streamCallback, telegramContext);
     }
 
     private async Task<string> ExecuteCoreAsync(
@@ -22,69 +23,76 @@ public sealed partial class CommandService
         IReadOnlyList<InputAttachment>? attachments = null,
         IReadOnlyList<string>? webUrls = null,
         bool webSearchEnabled = true,
-        Action<string>? streamCallback = null
+        Action<string>? streamCallback = null,
+        TelegramTurnContext? telegramContext = null
     )
     {
+        var previousTelegramContext = _telegramTurnContext.Value;
+        if (source.Equals("telegram", StringComparison.OrdinalIgnoreCase) && telegramContext != null)
+        {
+            _telegramTurnContext.Value = telegramContext;
+        }
+
         var normalizedAttachments = NormalizeAttachments(attachments);
         var text = (input ?? string.Empty).Trim();
-        if (source.Equals("telegram", StringComparison.OrdinalIgnoreCase)
-            && TryGetAudioAttachment(normalizedAttachments, out var audioAttachment)
-            && (string.IsNullOrWhiteSpace(text) || text.Equals("첨부 파일을 분석해줘", StringComparison.OrdinalIgnoreCase)))
-        {
-            var transcribed = await _llmRouter.TranscribeAudioAsync(audioAttachment, cancellationToken);
-            if (transcribed.StartsWith("음성 변환 설정 필요", StringComparison.OrdinalIgnoreCase)
-                || transcribed.StartsWith("음성 변환 실패", StringComparison.OrdinalIgnoreCase)
-                || transcribed.StartsWith("음성 변환 오류", StringComparison.OrdinalIgnoreCase)
-                || transcribed.StartsWith("음성 변환 시간이 초과", StringComparison.OrdinalIgnoreCase))
-            {
-                return transcribed;
-            }
-
-            text = transcribed.Trim();
-
-            // 사용자가 자기 음성이 어떻게 들렸는지 즉시 확인할 수 있게 transcript를 별도 메시지로 echo.
-            // 잘못 들렸을 때 다시 말하도록 유도한다. 메시지 전송 실패는 무시.
-            try
-            {
-                var preview = text.Length > 360 ? text[..360] + "…" : text;
-                await _telegramClient.SendMessageAsync(
-                    $"🎙️ 들은 내용:\n\"{preview}\"\n(분석을 시작합니다.)",
-                    cancellationToken
-                );
-            }
-            catch
-            {
-            }
-        }
-
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            if (normalizedAttachments.Count > 0 && source.Equals("telegram", StringComparison.OrdinalIgnoreCase))
-            {
-                text = "첨부 파일을 분석해줘";
-            }
-            else
-            {
-                return "empty command";
-            }
-        }
-
-        if (text.Length > _config.CommandMaxLength)
-        {
-            return $"command too long (max={_config.CommandMaxLength})";
-        }
-
-        if (source.Equals("telegram", StringComparison.OrdinalIgnoreCase))
-        {
-            SetCurrentTelegramExecutionMetadata();
-        }
-        attachments = normalizedAttachments;
-
-        RecordEvent($"{source}:user:{text}");
-        _auditLogger.Log(source, "command_received", "ok", text);
-
         try
         {
+            if (source.Equals("telegram", StringComparison.OrdinalIgnoreCase)
+                && TryGetAudioAttachment(normalizedAttachments, out var audioAttachment)
+                && (string.IsNullOrWhiteSpace(text) || text.Equals("첨부 파일을 분석해줘", StringComparison.OrdinalIgnoreCase)))
+            {
+                var transcribed = await _llmRouter.TranscribeAudioAsync(audioAttachment, cancellationToken);
+                if (transcribed.StartsWith("음성 변환 설정 필요", StringComparison.OrdinalIgnoreCase)
+                    || transcribed.StartsWith("음성 변환 실패", StringComparison.OrdinalIgnoreCase)
+                    || transcribed.StartsWith("음성 변환 오류", StringComparison.OrdinalIgnoreCase)
+                    || transcribed.StartsWith("음성 변환 시간이 초과", StringComparison.OrdinalIgnoreCase))
+                {
+                    return transcribed;
+                }
+
+                text = transcribed.Trim();
+
+                // 사용자가 자기 음성이 어떻게 들렸는지 즉시 확인할 수 있게 transcript를 별도 메시지로 echo.
+                // 잘못 들렸을 때 다시 말하도록 유도한다. 메시지 전송 실패는 무시.
+                try
+                {
+                    var preview = text.Length > 360 ? text[..360] + "…" : text;
+                    await _telegramClient.SendMessageAsync(
+                        $"🎙️ 들은 내용:\n\"{preview}\"\n(분석을 시작합니다.)",
+                        cancellationToken
+                    );
+                }
+                catch
+                {
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                if (normalizedAttachments.Count > 0 && source.Equals("telegram", StringComparison.OrdinalIgnoreCase))
+                {
+                    text = "첨부 파일을 분석해줘";
+                }
+                else
+                {
+                    return "empty command";
+                }
+            }
+
+            if (text.Length > _config.CommandMaxLength)
+            {
+                return $"command too long (max={_config.CommandMaxLength})";
+            }
+
+            if (source.Equals("telegram", StringComparison.OrdinalIgnoreCase))
+            {
+                SetCurrentTelegramExecutionMetadata();
+            }
+            attachments = normalizedAttachments;
+
+            RecordEvent($"{source}:user:{text}");
+            _auditLogger.Log(source, "command_received", "ok", text);
+
             // 텔레그램에서 등록한 스킬 별명을 슬래시 명령으로 받았을 때 자연어 호출로 rewrite.
             // 예: "/e 디지털 카메라" + alias e→eli5  =>  "eli5 스킬 사용해서 디지털 카메라"
             if (source.Equals("telegram", StringComparison.OrdinalIgnoreCase) && text.StartsWith("/", StringComparison.Ordinal))
@@ -398,6 +406,10 @@ public sealed partial class CommandService
         {
             _auditLogger.Log(source, "command_error", "fail", ex.Message);
             return $"error: {ex.Message}";
+        }
+        finally
+        {
+            _telegramTurnContext.Value = previousTelegramContext;
         }
     }
 

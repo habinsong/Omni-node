@@ -9,6 +9,8 @@ export function createNotebooksState() {
     projectKeyDraft: "",
     appendKind: "learning",
     appendText: "",
+    filterText: "",
+    expandedDocument: "",
     snapshot: null,
     receivedAt: ""
   };

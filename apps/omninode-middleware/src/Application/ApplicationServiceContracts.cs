@@ -9,7 +9,8 @@ public interface ICommandExecutionService
         IReadOnlyList<InputAttachment>? attachments = null,
         IReadOnlyList<string>? webUrls = null,
         bool webSearchEnabled = true,
-        Action<string>? streamCallback = null
+        Action<string>? streamCallback = null,
+        TelegramTurnContext? telegramContext = null
     );
 
     TelegramExecutionMetadata GetCurrentTelegramExecutionMetadata();
@@ -149,6 +150,7 @@ public interface INotebookApplicationService
     Task<NotebookActionResult> AppendDecisionAsync(string? projectKey, string content, CancellationToken cancellationToken);
     Task<NotebookActionResult> AppendVerificationAsync(string? projectKey, string content, CancellationToken cancellationToken);
     Task<NotebookActionResult> CreateHandoffAsync(string? projectKey, CancellationToken cancellationToken);
+    Task<string> BuildNotebookContextBlockAsync(string? projectKey, CancellationToken cancellationToken);
 }
 
 public interface IConversationApplicationService
@@ -298,6 +300,17 @@ public interface IToolApplicationService
 public interface IRoutineApplicationService
 {
     IReadOnlyList<RoutineSummary> ListRoutines();
+    RoutineSchedulerStatus GetRoutineSchedulerStatus();
+    RoutineExecutionPreviewResult PreviewRoutine(
+        string request,
+        string? executionMode,
+        string? scheduleSourceMode,
+        string? scheduleKind,
+        string? scheduleTime,
+        IReadOnlyList<int>? weekdays,
+        int? dayOfMonth,
+        string? timezoneId
+    );
     Task<RoutineActionResult> CreateRoutineAsync(
         string request,
         string source,
@@ -324,6 +337,7 @@ public interface IRoutineApplicationService
         IReadOnlyList<int>? weekdays,
         int? dayOfMonth,
         string? timezoneId,
+        bool runImmediately,
         string source,
         CancellationToken cancellationToken,
         Action<RoutineProgressUpdate>? progressCallback = null

@@ -16,10 +16,11 @@ public sealed class CommandExecutionService : ICommandExecutionService
         IReadOnlyList<InputAttachment>? attachments = null,
         IReadOnlyList<string>? webUrls = null,
         bool webSearchEnabled = true,
-        Action<string>? streamCallback = null
+        Action<string>? streamCallback = null,
+        TelegramTurnContext? telegramContext = null
     )
     {
-        return _inner.ExecuteAsync(input, source, cancellationToken, attachments, webUrls, webSearchEnabled, streamCallback);
+        return _inner.ExecuteAsync(input, source, cancellationToken, attachments, webUrls, webSearchEnabled, streamCallback, telegramContext);
     }
 
     public TelegramExecutionMetadata GetCurrentTelegramExecutionMetadata()

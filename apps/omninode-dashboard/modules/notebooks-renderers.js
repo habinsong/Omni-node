@@ -158,6 +158,27 @@ function buildNotebookDocuments(snapshot) {
   ];
 }
 
+function filterNotebookDocuments(documents, filterText) {
+  const query = `${filterText || ""}`.trim().toLowerCase();
+  if (!query) {
+    return documents;
+  }
+
+  return documents.filter((item) => {
+    const meta = NOTEBOOK_KIND_META[item.key] || NOTEBOOK_KIND_META.learning;
+    const document = item.document || {};
+    const text = [
+      item.key,
+      meta.label,
+      meta.title,
+      document.preview,
+      document.content,
+      document.path
+    ].join("\n").toLowerCase();
+    return text.includes(query);
+  });
+}
+
 function buildNotebookChecklist(snapshot) {
   if (!snapshot) {
     return [
@@ -260,6 +281,14 @@ function renderNotebookDocumentCard(e, options) {
       ? e("div", { className: "notebook-document-path" }, trimNotebookText(document.path, 140))
       : null,
     e("div", { className: "notebook-document-actions" },
+      kind !== "handoff"
+        ? e("button", {
+          type: "button",
+          className: "btn ghost",
+          disabled: !exists,
+          onClick: () => options.setNotebookExpandedDocument(kind)
+        }, "전체 보기")
+        : null,
       kind === "handoff"
         ? e("button", {
           type: "button",
@@ -285,6 +314,8 @@ export function renderNotebooksPanel(props) {
     setNotebookProjectKey,
     setNotebookAppendKind,
     setNotebookAppendText,
+    setNotebookFilterText,
+    setNotebookExpandedDocument,
     refreshNotebook,
     appendNotebook,
     createNotebookHandoff,
@@ -297,6 +328,7 @@ export function renderNotebooksPanel(props) {
   const snapshot = notebooksState.snapshot || null;
   const notebook = snapshot?.notebook || null;
   const documents = buildNotebookDocuments(snapshot);
+  const filteredDocuments = filterNotebookDocuments(documents, notebooksState.filterText);
   const coverageCount = documents.filter((item) => item.document?.exists).length;
   const checklist = buildNotebookChecklist(snapshot);
   const disabled = !authed || notebooksState.pending || notebooksState.loading;
@@ -536,20 +568,64 @@ export function renderNotebooksPanel(props) {
         e("div", null,
           e("strong", null, "문서 보기"),
           e("p", null, "나중에 다시 볼 내용을 카드별로 나눠서 보여줍니다.")
+        ),
+        e("label", { className: "meta-field notebook-search-field" },
+          e("span", { className: "meta-label" }, "검색"),
+          e("input", {
+            className: "input",
+            value: notebooksState.filterText || "",
+            placeholder: "결정, 파일명, 키워드 검색",
+            onChange: (event) => setNotebookFilterText(event.target.value)
+          })
         )
       ),
       !snapshot
         ? e("div", { className: "empty doctor-empty-state notebook-empty-state" }, "노트북을 아직 읽지 않았습니다. 상단에서 새로고침을 눌러 현재 상태를 불러오세요.")
         : e("div", { className: "notebook-documents-grid" },
-          documents.map((item) => renderNotebookDocumentCard(e, {
+          filteredDocuments.map((item) => renderNotebookDocumentCard(e, {
             kind: item.key,
             document: item.document,
             applyDraft,
             createNotebookHandoff,
             disabled: !authed || notebooksState.pending,
-            isHandoffPending
+            isHandoffPending,
+            setNotebookExpandedDocument
           }))
+        ),
+      notebooksState.expandedDocument && snapshot
+        ? e("div", {
+          className: "modal notebook-document-modal",
+          onClick: () => setNotebookExpandedDocument("")
+        },
+          e("div", {
+            className: "support-overlay-shell notebook-document-modal-shell",
+            onClick: (event) => event.stopPropagation()
+          },
+            (() => {
+              const selected = documents.find((item) => item.key === notebooksState.expandedDocument);
+              const meta = NOTEBOOK_KIND_META[selected?.key] || NOTEBOOK_KIND_META.learning;
+              const document = selected?.document || {};
+              const fullText = `${document.content || document.preview || ""}`.trim();
+              return [
+                e("div", { key: "head", className: "coding-result-head" },
+                  e("strong", null, `${meta.label} 전체 보기`),
+                  e("button", {
+                    type: "button",
+                    className: "btn ghost",
+                    onClick: () => setNotebookExpandedDocument("")
+                  }, "닫기")
+                ),
+                document.contentTruncated
+                  ? e("div", { key: "truncated", className: "hint" }, "문서가 길어 최근 20,000자만 표시합니다.")
+                  : null,
+                e("pre", { key: "content", className: "notebook-document-full-content" }, fullText || "표시할 내용이 없습니다.")
+              ];
+            })()
+          )
         )
+        : null
     )
   );
 }
+
+export { NOTEBOOK_KIND_META };

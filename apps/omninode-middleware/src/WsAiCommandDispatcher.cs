@@ -135,6 +135,17 @@ internal sealed class WsAiCommandDispatcher
         _buildMultiChatResultJson = buildMultiChatResultJson;
     }
 
+    private static async Task FlushCodingProgressAsync(Task progressPipeline)
+    {
+        try
+        {
+            await progressPipeline;
+        }
+        catch
+        {
+        }
+    }
+
     public async Task<bool> TryHandleAsync(
         WebSocketGateway.ClientMessage message,
         string sessionId,
@@ -367,9 +378,15 @@ internal sealed class WsAiCommandDispatcher
             {
                 var scopeValue = message.Scope ?? "coding";
                 var modeValue = message.Mode ?? "single";
+                var progressPipeline = Task.CompletedTask;
                 Action<CodingProgressUpdate> progress = update =>
                 {
-                    _ = _sendCodingProgressAsync(socket, sendLock, scopeValue, modeValue, update, cancellationToken);
+                    progressPipeline = progressPipeline.ContinueWith(
+                        _ => _sendCodingProgressAsync(socket, sendLock, scopeValue, modeValue, update, cancellationToken),
+                        cancellationToken,
+                        TaskContinuationOptions.None,
+                        TaskScheduler.Default
+                    ).Unwrap();
                 };
                 var result = await _codingService.RunCodingSingleAsync(
                     new CodingRunRequest(
@@ -397,6 +414,7 @@ internal sealed class WsAiCommandDispatcher
                     cancellationToken,
                     progress
                 );
+                await FlushCodingProgressAsync(progressPipeline);
                 await _sendCodingResultAsync(socket, sendLock, result, cancellationToken);
                 await _sendConversationsAsync(socket, sendLock, scopeValue, modeValue, cancellationToken);
             }
@@ -419,9 +437,15 @@ internal sealed class WsAiCommandDispatcher
             {
                 var scopeValue = message.Scope ?? "coding";
                 var modeValue = message.Mode ?? "orchestration";
+                var progressPipeline = Task.CompletedTask;
                 Action<CodingProgressUpdate> progress = update =>
                 {
-                    _ = _sendCodingProgressAsync(socket, sendLock, scopeValue, modeValue, update, cancellationToken);
+                    progressPipeline = progressPipeline.ContinueWith(
+                        _ => _sendCodingProgressAsync(socket, sendLock, scopeValue, modeValue, update, cancellationToken),
+                        cancellationToken,
+                        TaskContinuationOptions.None,
+                        TaskScheduler.Default
+                    ).Unwrap();
                 };
                 var result = await _codingService.RunCodingOrchestrationAsync(
                     new CodingRunRequest(
@@ -454,6 +478,7 @@ internal sealed class WsAiCommandDispatcher
                     cancellationToken,
                     progress
                 );
+                await FlushCodingProgressAsync(progressPipeline);
                 await _sendCodingResultAsync(socket, sendLock, result, cancellationToken);
                 await _sendConversationsAsync(socket, sendLock, scopeValue, modeValue, cancellationToken);
             }
@@ -487,9 +512,15 @@ internal sealed class WsAiCommandDispatcher
             {
                 var scopeValue = message.Scope ?? "coding";
                 var modeValue = message.Mode ?? "multi";
+                var progressPipeline = Task.CompletedTask;
                 Action<CodingProgressUpdate> progress = update =>
                 {
-                    _ = _sendCodingProgressAsync(socket, sendLock, scopeValue, modeValue, update, cancellationToken);
+                    progressPipeline = progressPipeline.ContinueWith(
+                        _ => _sendCodingProgressAsync(socket, sendLock, scopeValue, modeValue, update, cancellationToken),
+                        cancellationToken,
+                        TaskContinuationOptions.None,
+                        TaskScheduler.Default
+                    ).Unwrap();
                 };
                 var result = await _codingService.RunCodingMultiAsync(
                     new CodingRunRequest(
@@ -522,6 +553,7 @@ internal sealed class WsAiCommandDispatcher
                     cancellationToken,
                     progress
                 );
+                await FlushCodingProgressAsync(progressPipeline);
                 await _sendCodingResultAsync(socket, sendLock, result, cancellationToken);
                 await _sendConversationsAsync(socket, sendLock, scopeValue, modeValue, cancellationToken);
             }

@@ -337,6 +337,7 @@ public sealed partial class WebSocketGateway
         public string? ConversationTitle { get; set; }
         public string? Project { get; set; }
         public string? ProjectKey { get; set; }
+        public string? Source { get; set; }
         public string? Category { get; set; }
         public string? Kind { get; set; }
         public string? PlanId { get; set; }
@@ -402,6 +403,7 @@ public sealed partial class WebSocketGateway
         public long? Timestamp { get; set; }
         public bool? Enabled { get; set; }
         public bool? AgentUsePlaywright { get; set; }
+        public bool? RunImmediately { get; set; }
         public bool? Overwrite { get; set; }
         public bool? CompactConversation { get; set; }
         public bool? IncludeDisabled { get; set; }

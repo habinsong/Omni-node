@@ -213,8 +213,7 @@ public sealed partial class CommandService
 
         var firstLine = normalized.Split('\n', 2)[0];
         var tokens = firstLine.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var session = SessionContext.Create(EnsureTelegramLinkedConversation(), "telegram");
-        var key = session.SessionId;
+        var key = ResolveTelegramStateKey();
 
         if (tokens.Length < 2 || tokens[1].Equals("status", StringComparison.OrdinalIgnoreCase) || tokens[1].Equals("?", StringComparison.Ordinal))
         {
@@ -250,8 +249,7 @@ public sealed partial class CommandService
 
         var firstLine = normalized.Split('\n', 2)[0];
         var tokens = firstLine.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var session = SessionContext.Create(EnsureTelegramLinkedConversation(), "telegram");
-        var key = session.SessionId;
+        var key = ResolveTelegramStateKey();
 
         if (tokens.Length < 2 || tokens[1].Equals("status", StringComparison.OrdinalIgnoreCase))
         {

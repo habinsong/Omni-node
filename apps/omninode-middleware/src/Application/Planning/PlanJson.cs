@@ -63,6 +63,11 @@ internal static class PlanJson
         return JsonSerializer.Deserialize(json, BaseContext.PlanIndexState);
     }
 
+    public static PlanDraft? DeserializeDraft(string json)
+    {
+        return JsonSerializer.Deserialize(json, BaseContext.PlanDraft);
+    }
+
     private static JsonSerializerOptions CreateOptions(bool indented)
     {
         return new JsonSerializerOptions(JsonSerializerDefaults.Web)

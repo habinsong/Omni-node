@@ -81,6 +81,8 @@ function createStateStore() {
     routines: [],
     routineSelectedId: "",
     routineProgress: {},
+    routinePreview: null,
+    routineSchedulerStatus: null,
     routineOutputPreview: {},
     logicGraphs: [],
     logicSelectedNodeId: "",
@@ -192,6 +194,8 @@ function createContext(store, calls) {
       setRoutines: createSetter(store, "routines"),
       setRoutineSelectedId: createSetter(store, "routineSelectedId"),
       setRoutineProgress: createSetter(store, "routineProgress"),
+      setRoutinePreview: createSetter(store, "routinePreview"),
+      setRoutineSchedulerStatus: createSetter(store, "routineSchedulerStatus"),
       setRoutineOutputPreview: createSetter(store, "routineOutputPreview"),
       setLogicGraphs: createSetter(store, "logicGraphs"),
       setLogicSelectedGraphId: createSetter(store, "logicSelectedGraphId"),
@@ -285,6 +289,9 @@ function createContext(store, calls) {
       requestLogicGraphGet: (_send, graphId, options) => {
         calls.requests.push({ type: "logic_graph_get", graphId, options });
       },
+      requestLogicGraphRunGet: (_send, runId, options) => {
+        calls.requests.push({ type: "logic_graph_run_get", runId, options });
+      },
       requestTaskOutput: (_send, graphId, taskId, options) => {
         calls.requests.push({ type: "task_output", graphId, taskId, options });
       },
@@ -304,7 +311,7 @@ function createContext(store, calls) {
         return false;
       },
       handleRoutineMessage: (msg) => {
-        if (msg.type === "routine_result") {
+        if (msg.type === "routine_result" || msg.type === "routine_preview" || msg.type === "routine_scheduler_status") {
           calls.delegated.push("routine_result");
           return true;
         }
@@ -487,13 +494,18 @@ function run() {
   handleDashboardServerMessage({
     type: "logic_graph_list_result",
     items: [
-      { graphId: "logic-a", title: "A", nodeCount: 2, edgeCount: 1 }
+      { graphId: "logic-a", title: "A", nodeCount: 2, edgeCount: 1, activeRunId: "logic-run-active" }
     ]
   }, createContext(logicStore, logicCalls));
 
   assert.deepEqual(
     logicCalls.requests.filter((entry) => entry.type === "logic_graph_get").map((entry) => entry.graphId),
     ["logic-a"]
+  );
+  assert.equal(logicStore.logicActiveRunId, "logic-run-active");
+  assert.deepEqual(
+    logicCalls.requests.filter((entry) => entry.type === "logic_graph_run_get").map((entry) => entry.runId),
+    ["logic-run-active"]
   );
 
   handleDashboardServerMessage({

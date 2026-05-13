@@ -17,6 +17,10 @@ public sealed partial class CommandService
     private static readonly Regex PythonFromImportRegex = new("^\\s*from\\s+(?<mod>[A-Za-z0-9_.]+)\\s+import\\s+", RegexOptions.Compiled | RegexOptions.Multiline);
     private static readonly Regex NodeImportRegex = new("from\\s+['\\\"](?<mod>[^'\\\"]+)['\\\"]|require\\(\\s*['\\\"](?<mod2>[^'\\\"]+)['\\\"]\\s*\\)|import\\(\\s*['\\\"](?<mod3>[^'\\\"]+)['\\\"]\\s*\\)", RegexOptions.Compiled);
     private static readonly Regex ShellTokenRegex = new("'(?<sq>[^']*)'|\"(?<dq>[^\"]*)\"|(?<bare>[^\\s]+)", RegexOptions.Compiled);
+    private static readonly Regex DangerousGeneratedRunCommandRegex = new(
+        @"(^|[;&|]\s*)(?:sudo|su|rm\s+(?:-[A-Za-z]*r[A-Za-z]*|-?[A-Za-z]*f[A-Za-z]*r)|mkfs|dd\s+|chmod\s+-R|chown\s+-R|curl\b[^;&|]*\|\s*(?:sh|bash|zsh)|wget\b[^;&|]*\|\s*(?:sh|bash|zsh))\b|>\s*(?:/Users|/home|/private|/tmp|/var|/etc)/",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase
+    );
     private static readonly Dictionary<string, string> PythonCliPackageMap = new(StringComparer.OrdinalIgnoreCase)
     {
         ["black"] = "black",
@@ -91,7 +95,7 @@ public sealed partial class CommandService
         RegexOptions.Compiled
     );
     private static readonly Regex RequestedCodingPathRegex = new(
-        @"(?<path>(?:(?:[A-Za-z]:)?[\\/])?(?:[\w.-]+[\\/])*(?:[\w.-]+\.)+(?:json|html|java|tsx|jsx|mjs|cjs|cpp|cxx|hpp|htm|css|txt|md|py|ts|js|cs|kt|sh|cc|hh|h|c))(?![\w.-])",
+        @"(?<path>(?:(?:[A-Za-z]:)?[\\/])?(?:[\w.-]+[\\/])*(?:[\w.-]+\.)+(?:json|html|java|tsx|jsx|mjs|cjs|cpp|cxx|hpp|htm|css|txt|md|py|ts|js|cs|kt|kts|sh|cc|hh|h|c|go|rs|php|rb|swift|yml|yaml|toml|xml|csproj|sln|gradle|svelte|vue))(?![\w.-])",
         RegexOptions.Compiled | RegexOptions.IgnoreCase
     );
     private static readonly Regex ExpectedOutputAfterQuotedRegex = new(
@@ -282,6 +286,8 @@ public sealed partial class CommandService
         var builder = new StringBuilder();
         builder.AppendLine("[컨텍스트 사용 규칙]");
         builder.AppendLine("- '새 요청'을 최우선으로 처리하세요.");
+        builder.AppendLine("- 새 요청이 '왜/그럼/그래서/그건/이건/예시는/근거는/더 자세히/다시'처럼 짧은 후속 질문이면 [최근 대화]의 바로 직전 주제와 답변을 기준으로 해석하세요.");
+        builder.AppendLine("- 새 요청에 자체 주제와 대상이 분명하면 [최근 대화]는 배경으로만 참고하고, 이전 주제를 끌고 오지 마세요.");
         builder.AppendLine("- 제공된 최근 대화/메모리와 새 요청이 충돌하면 새 요청을 따르세요.");
         builder.AppendLine("- 이전 답변 형식(예: 뉴스 N건 목록)을 관성으로 복사하지 마세요.");
         builder.AppendLine("- 절대 답변에 [user], [assistant], [system], [Single ...], [Multi ...], [Project Context], [Active Skill ...], [Think+ ...], [컨텍스트 ...], [최근 대화], [공유 메모리 노트], [새 요청], [로컬 시간] 같은 내부 마커/헤더를 출력하지 마세요. 이 마커들은 LLM 입력 구조용이며 사용자에게 보일 답변이 아닙니다.");
@@ -381,12 +387,17 @@ public sealed partial class CommandService
     {
         if (ShouldUsePriorConversationContext(input, out var isAmbiguous))
         {
+            var normalized = (input ?? string.Empty).Trim();
+            if (LooksLikeExplicitStandaloneQuestion(normalized))
+            {
+                return HasTopicalOverlapWithRecentConversation(conversationId, normalized);
+            }
+
             // 모호 키워드("어때", "괜찮" 등)는 토픽 오버랩이 있어야 history 로드.
             // 단, 초단문(≤15자) 판단/의견 요청("잘 돌아갈까?", "어때?")은
             // 토큰 오버랩이 거의 없어도 직전 대화가 있으면 무조건 history 로드.
             if (isAmbiguous)
             {
-                var normalized = (input ?? string.Empty).Trim();
                 if (normalized.Length <= 15 && HasAnyRecentAssistantMessage(conversationId))
                 {
                     return true;
@@ -466,6 +477,11 @@ public sealed partial class CommandService
             return true;
         }
 
+        if (LooksLikeStrongFollowupQuestion(normalized))
+        {
+            return true;
+        }
+
         // 판단/의견 요청 — 모호 키워드. 토픽 오버랩 있을 때만 history 로드.
         if (ContainsAny(
                 normalized,
@@ -501,85 +517,6 @@ public sealed partial class CommandService
             return true;
         }
 
-        if (ContainsAny(normalized, "아니", "그게 아니라", "그 말고", "말고", "라고", "라니까"))
-        {
-            return true;
-        }
-
-        if (LooksLikeCasualOrIdentityQuestion(normalized))
-        {
-            return false;
-        }
-
-        if (ContainsAny(
-                normalized,
-                "이전",
-                "앞서",
-                "아까",
-                "방금",
-                "위에서",
-                "위 내용",
-                "최근 대화",
-                "대화 내용",
-                "메모리",
-                "기억",
-                "그 답변",
-                "그 내용",
-                "그거",
-                "그것",
-                "그걸",
-                "해당",
-                "이어서",
-                "계속",
-                "다시",
-                "더 자세히",
-                "웹검색해서 찾아",
-                "웹 검색해서 찾아",
-                "찾아봐",
-                "검색해봐",
-                "search it",
-                "look it up",
-                // 후속 질문 마커 (anaphoric follow-up). 명시적인 anaphor가 없어도
-                // "그니까/그래서/그럼" 등 직전 답변에 대한 반응형 질문임을 시사.
-                "그니까",
-                "그러니까",
-                "그래서",
-                "그럼",
-                "그러면",
-                "그래도",
-                "결국",
-                // 판단/의견 요청 — 회피하지 말고 history 기반으로 답해야 함.
-                "잘 돌아",
-                "잘 작동",
-                "잘 동작",
-                "잘 되",
-                "잘 될",
-                "잘 굴러",
-                "쓸만",
-                "쓸 만",
-                "괜찮",
-                "어때",
-                "어떨",
-                "어떤지",
-                "어떻게 생각",
-                "어떻게 봐",
-                "네 생각",
-                "네 의견",
-                "너 생각",
-                "너의 생각",
-                "당신 생각",
-                "당신의 생각",
-                "검토해",
-                "판단해",
-                "추천해",
-                "비교해",
-                "rec recommend",
-                "what do you think",
-                "would it work"))
-        {
-            return true;
-        }
-
         // 짧은 후속 발화는 거의 항상 직전 turn 의 맥락이 필요함.
         // 길이 60 이하이면서 이름·구성 정보·숫자 같은 단편 정보만 담은 경우에도 history를 함께 본다.
         if (normalized.Length <= 60)
@@ -596,6 +533,94 @@ public sealed partial class CommandService
         }
 
         return false;
+    }
+
+    private static bool LooksLikeStrongFollowupQuestion(string normalized)
+    {
+        var text = Regex.Replace((normalized ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
+        if (text.Length == 0)
+        {
+            return false;
+        }
+
+        if (ContainsAny(
+                text,
+                "왜 그렇게",
+                "왜 그런",
+                "왜?",
+                "근거는",
+                "예시는",
+                "장점은",
+                "단점은",
+                "차이는",
+                "문제는",
+                "해결책은",
+                "그 이유",
+                "그 원리",
+                "그 차이",
+                "더 쉽게",
+                "더 자세히",
+                "한 줄로",
+                "예시 들어",
+                "예시를 들어",
+                "그 기준",
+                "그 방식",
+                "방금 말한",
+                "위 답변"))
+        {
+            return true;
+        }
+
+        if (text.Length <= 40
+            && (text.StartsWith("왜", StringComparison.Ordinal)
+                || text.StartsWith("그럼", StringComparison.Ordinal)
+                || text.StartsWith("그러면", StringComparison.Ordinal)
+                || text.StartsWith("그래서", StringComparison.Ordinal)
+                || text.StartsWith("근데", StringComparison.Ordinal)
+                || text.StartsWith("근데 ", StringComparison.Ordinal)
+                || text.StartsWith("그건", StringComparison.Ordinal)
+                || text.StartsWith("이건", StringComparison.Ordinal)
+                || text.StartsWith("그게", StringComparison.Ordinal)
+                || text.StartsWith("그걸", StringComparison.Ordinal)
+                || text.StartsWith("그거", StringComparison.Ordinal)
+                || text.StartsWith("그 부분", StringComparison.Ordinal)))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool LooksLikeExplicitStandaloneQuestion(string input)
+    {
+        var text = Regex.Replace((input ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
+        if (text.Length == 0)
+        {
+            return false;
+        }
+
+        if (LooksLikeStrongFollowupQuestion(text))
+        {
+            return false;
+        }
+
+        if (ContainsAny(text, "이전", "앞서", "아까", "방금", "그거", "그것", "그 답변", "해당", "이어서", "계속"))
+        {
+            return false;
+        }
+
+        var hasStandaloneTopic = ExtractContextTokens(text).Any(token =>
+            token.Length >= 4
+            || token.Any(char.IsDigit)
+            || token.Contains('-', StringComparison.Ordinal)
+            || token.Contains('/', StringComparison.Ordinal)
+            || token.Contains('.', StringComparison.Ordinal));
+        if (!hasStandaloneTopic)
+        {
+            return false;
+        }
+
+        return ContainsAny(text, "뭐야", "무엇", "설명", "알려", "정리", "원리", "방법", "비교", "추천", "분석", "어떻게", "왜", "what", "how", "why", "explain");
     }
 
     private bool HasTopicalOverlapWithRecentConversation(string conversationId, string input)
@@ -3300,15 +3325,19 @@ public sealed partial class CommandService
                 if (string.Equals(action.Type, "run", StringComparison.OrdinalIgnoreCase))
                 {
                     var candidateCommand = NormalizeGeneratedRunCommand(action.Command);
-                    if (!string.IsNullOrWhiteSpace(candidateCommand))
+                    if (string.IsNullOrWhiteSpace(candidateCommand))
+                    {
+                        actionResults.Add("run_deferred:empty_command");
+                    }
+                    else if (IsDangerousGeneratedRunCommand(candidateCommand))
+                    {
+                        actionResults.Add($"run_blocked_unsafe:{TrimForOutput(candidateCommand, 120)}");
+                    }
+                    else
                     {
                         deferredRunCommand = candidateCommand;
                         hasDeferredRunAction = true;
                         actionResults.Add($"run_deferred:{TrimForOutput(candidateCommand, 120)}");
-                    }
-                    else
-                    {
-                        actionResults.Add("run_deferred:empty_command");
                     }
 
                     continue;
@@ -3660,6 +3689,13 @@ public sealed partial class CommandService
                     shell.StdErr,
                     shell.TimedOut ? "timeout" : (shell.ExitCode == 0 ? "ok" : "error")
                 );
+                lastExecution = ApplyCodingQualityGateToExecution(
+                    objective,
+                    currentLanguage,
+                    workspaceRoot,
+                    changedFiles,
+                    lastExecution
+                );
             }
         }
 
@@ -3759,7 +3795,7 @@ public sealed partial class CommandService
         var summary = BuildAutonomousCodingSummary(iterations, orderedChangedFiles, lastExecution, maxIterations);
 
         if (allowRunActions
-            && repairAttempt < MaxCodingRepairPasses
+            && repairAttempt < ResolveMaxCodingRepairPasses(objective, currentLanguage)
             && orderedChangedFiles.Length > 0
             && !string.Equals(lastExecution.Status, "ok", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(lastExecution.Status, "skipped", StringComparison.OrdinalIgnoreCase))
@@ -3864,7 +3900,8 @@ public sealed partial class CommandService
             return false;
         }
 
-        if (normalizedLanguage == "javascript" && IsFrontendLikeCodingTask(objective, normalizedLanguage))
+        if (normalizedLanguage is "javascript" or "typescript" or "react-vite"
+            && IsFrontendLikeCodingTask(objective, normalizedLanguage))
         {
             return false;
         }
@@ -3874,7 +3911,7 @@ public sealed partial class CommandService
             return false;
         }
 
-        return normalizedLanguage is "python" or "javascript" or "bash";
+        return normalizedLanguage is "python" or "javascript" or "typescript" or "go" or "rust" or "php" or "ruby" or "swift" or "bash";
     }
 
     private static bool IsInteractiveProgramObjective(string objective, string normalizedLanguage)
@@ -3917,7 +3954,7 @@ public sealed partial class CommandService
             );
         }
 
-        if (normalizedLanguage == "javascript")
+        if (normalizedLanguage is "javascript" or "typescript" or "react-vite")
         {
             return IsFrontendLikeCodingTask(objective ?? string.Empty, normalizedLanguage)
                    || ContainsAny(text, "canvas", "animation", "sprite", "dom", "browser", "브라우저");
@@ -3929,42 +3966,6 @@ public sealed partial class CommandService
         }
 
         return false;
-    }
-
-    private static bool ShouldRequireDependencyFreePythonGame(string objective, string languageHint)
-    {
-        var normalizedLanguage = NormalizeLanguageForCode(languageHint);
-        if (normalizedLanguage != "python")
-        {
-            return false;
-        }
-
-        if (!IsInteractiveProgramObjective(objective, normalizedLanguage))
-        {
-            return false;
-        }
-
-        var text = ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty)).ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return false;
-        }
-
-        return !ContainsAny(
-            text,
-            "pygame",
-            "pyglet",
-            "arcade",
-            "panda3d",
-            "kivy",
-            "sdl",
-            "외부 패키지 사용",
-            "외부 패키지 허용",
-            "third-party",
-            "third party",
-            "requirements.txt",
-            "pip install"
-        );
     }
 
     private async Task<CodingLoopActionResult> ExecuteCodingLoopActionAsync(
@@ -4070,6 +4071,10 @@ public sealed partial class CommandService
             if (string.IsNullOrWhiteSpace(command))
             {
                 return new CodingLoopActionResult("run:empty_command", null, string.Empty, string.Empty, string.Empty, false);
+            }
+            if (IsDangerousGeneratedRunCommand(command))
+            {
+                return new CodingLoopActionResult($"run_blocked_unsafe:{TrimForOutput(command, 120)}", null, string.Empty, string.Empty, string.Empty, false);
             }
 
             var shell = await RunWorkspaceCommandWithAutoInstallAsync(command, workspaceRoot, cancellationToken);
@@ -4336,8 +4341,9 @@ public sealed partial class CommandService
     private static string BuildFallbackCodeOnlyPrompt(string objective, string languageHint)
     {
         var resolvedLanguage = ResolveInitialCodingLanguage(languageHint, objective);
+        var projectProfile = ResolveCodingProjectProfile(objective, languageHint);
         var builder = new StringBuilder();
-        builder.AppendLine("아래 요구사항을 만족하는 실행 가능한 코드만 반환하세요.");
+        builder.AppendLine("아래 요구사항을 만족하는 실행 가능한 단일 파일 코드만 반환하세요.");
         builder.AppendLine("규칙:");
         builder.AppendLine("- 반드시 첫 줄: LANGUAGE=<언어>");
         builder.AppendLine("- 반드시 단 하나의 코드블록만 출력");
@@ -4345,6 +4351,7 @@ public sealed partial class CommandService
         builder.AppendLine("- 코드블록 안에는 순수 코드만 작성");
         builder.AppendLine("- 더미 구현, TODO, 의사코드 금지");
         builder.AppendLine("- 요청에 실행/출력 조건이 있으면 실제로 그 조건을 만족하는 코드만 작성");
+        builder.AppendLine("- 이 경로는 명시적 단일 파일/단순 stdout 작업용이다. 여러 파일이 필요하면 파일 번들 경로가 사용된다");
         foreach (var rule in BuildLanguagePromptRuleLines(string.Empty, string.Empty, resolvedLanguage, objective))
         {
             builder.AppendLine(rule);
@@ -4352,6 +4359,7 @@ public sealed partial class CommandService
 
         builder.AppendLine();
         builder.AppendLine($"언어 힌트: {resolvedLanguage}");
+        builder.AppendLine($"프로젝트 프로파일: {projectProfile.ProjectKind}");
         builder.AppendLine("요구사항:");
         builder.AppendLine(objective ?? string.Empty);
         return builder.ToString().Trim();
@@ -4364,6 +4372,7 @@ public sealed partial class CommandService
     )
     {
         var resolvedLanguage = ResolveInitialCodingLanguage(languageHint, objective);
+        var projectProfile = ResolveCodingProjectProfile(objective, languageHint, requestedPaths);
         var builder = new StringBuilder();
         builder.AppendLine("아래 요구사항을 만족하는 파일 번들을 JSON으로만 반환하세요.");
         builder.AppendLine("규칙:");
@@ -4373,14 +4382,30 @@ public sealed partial class CommandService
         builder.AppendLine("- path 는 상대경로만 사용");
         builder.AppendLine("- content 는 실제 파일 내용 전체를 문자열로 넣기");
         builder.AppendLine("- run 은 최종 실행 명령이 있으면 넣고, 없으면 빈 문자열");
+        builder.AppendLine("- build/test/entry/notes 필드는 알맞게 넣고, 없으면 빈 문자열 또는 빈 배열");
+        builder.AppendLine("- 일반 코딩 요청은 여러 파일 프로젝트 구조를 우선하라");
+        builder.AppendLine("- 파일 간 import/export/package/include 경로와 실행 엔트리가 실제로 맞아야 한다");
         builder.AppendLine("- 미사용 파일, 설명용 더미 파일, TODO 전용 파일 금지");
+        builder.AppendLine("- 빈 함수, placeholder 데이터, 껍데기 UI, print-only 게임으로 완료 처리 금지");
         foreach (var rule in BuildLanguagePromptRuleLines(string.Empty, string.Empty, resolvedLanguage, objective, requestedPaths))
         {
             builder.AppendLine(rule);
         }
         builder.AppendLine("스키마:");
-        builder.AppendLine("{\"language\":\"python\",\"files\":[{\"path\":\"calculator.py\",\"content\":\"...\"}],\"run\":\"python3 calculator.py\"}");
+        builder.AppendLine("{\"language\":\"python\",\"projectProfile\":\"python-package\",\"files\":[{\"path\":\"pyproject.toml\",\"content\":\"...\"},{\"path\":\"src/app.py\",\"content\":\"...\"}],\"entry\":[\"src/app.py\"],\"build\":\"python3 -m compileall -q .\",\"test\":\"python3 -m pytest -q\",\"run\":\"python3 -m app\",\"notes\":\"\"}");
         builder.AppendLine($"언어 힌트: {resolvedLanguage}");
+        builder.AppendLine($"프로젝트 프로파일: {projectProfile.ProjectKind}");
+        builder.AppendLine($"권장 엔트리: {string.Join(", ", projectProfile.EntryFiles)}");
+        builder.AppendLine($"권장 빌드 도구: {projectProfile.BuildTool}");
+        builder.AppendLine($"권장 테스트 도구: {projectProfile.TestTool}");
+        if (projectProfile.RunCommands.Count > 0)
+        {
+            builder.AppendLine("권장 실행 명령:");
+            foreach (var command in projectProfile.RunCommands.Take(3))
+            {
+                builder.AppendLine($"- {command}");
+            }
+        }
         if (requestedPaths != null && requestedPaths.Count > 0)
         {
             builder.AppendLine("우선 파일 후보:");
@@ -4517,6 +4542,10 @@ public sealed partial class CommandService
                 }
 
                 var language = NormalizeLanguageForCode(GetStringProperty(doc.RootElement, "language") ?? initialLanguage);
+                if (language == "auto")
+                {
+                    language = ResolveCodingProjectProfile(objective, languageHint).Language;
+                }
                 var runCommand = GetStringProperty(doc.RootElement, "run")
                     ?? GetStringProperty(doc.RootElement, "command")
                     ?? string.Empty;
@@ -4700,6 +4729,13 @@ public sealed partial class CommandService
             "html" => $"{projectFolder}/index.html",
             "css" => $"{projectFolder}/styles.css",
             "javascript" => $"{projectFolder}/app.js",
+            "typescript" => $"{projectFolder}/src/index.ts",
+            "react-vite" => $"{projectFolder}/src/main.tsx",
+            "go" => $"{projectFolder}/main.go",
+            "rust" => $"{projectFolder}/src/main.rs",
+            "php" => $"{projectFolder}/index.php",
+            "ruby" => $"{projectFolder}/app.rb",
+            "swift" => $"{projectFolder}/Sources/App/main.swift",
             "c" => $"{projectFolder}/main.c",
             "cpp" => $"{projectFolder}/main.cpp",
             "csharp" => $"{projectFolder}/Program.cs",
@@ -4732,17 +4768,47 @@ public sealed partial class CommandService
         builder.AppendLine("- 문자열 리터럴을 불필요한 줄바꿈으로 끊지 말 것");
         builder.AppendLine("- 실패 원인을 실제로 해결한 뒤 최종 검증까지 끝낼 것");
         builder.AppendLine("- 최종 검증에서 생성 파일 존재와 stdout 조건까지 다시 만족할 것");
-        if (ShouldRequireDependencyFreePythonGame(objective ?? string.Empty, languageHint))
+        if (NormalizeLanguageForCode(languageHint) == "python"
+            && IsInteractiveProgramObjective(objective ?? string.Empty, "python"))
         {
-            builder.AppendLine("- 이번 수정에서는 pygame, pyglet, arcade 같은 외부 패키지와 pip install 시도를 금지한다");
-            builder.AppendLine("- curses를 우선 사용하고, tkinter가 꼭 필요할 때만 선택하라");
-            builder.AppendLine("- print 문만 반복하는 텍스트 시뮬레이션은 금지하고 실제 입력 처리와 화면 갱신이 있는 게임 루프를 구현하라");
+            builder.AppendLine("- 요청한 게임 라이브러리를 제거하지 말고 필요한 외부 패키지는 import/requirements.txt에 유지하라");
+            builder.AppendLine("- OMNI_HEADLESS_TEST=1 smoke 실행이 통과하도록 짧은 테스트 분기를 추가하라");
+            builder.AppendLine("- print 문만 반복하는 텍스트 시뮬레이션은 금지하고 실제 입력 처리, 렌더링, 상태 갱신이 있는 게임 루프를 구현하라");
             var stderr = lastExecution.StdErr ?? string.Empty;
             if (stderr.Contains("_tkinter", StringComparison.OrdinalIgnoreCase)
                 || stderr.Contains("tkinter", StringComparison.OrdinalIgnoreCase))
             {
-                builder.AppendLine("- 현재 환경에서는 tkinter 계열 import가 실패했으므로 이번 수정에서는 tkinter를 제거하고 curses 기반으로 바꿔라");
+                builder.AppendLine("- tkinter 계열 import가 실패했으면 pygame 등 설치 가능한 게임 라이브러리로 전환하라");
             }
+        }
+        var finalStdErr = lastExecution.StdErr ?? string.Empty;
+        if ((lastExecution.Status ?? string.Empty).Equals("quality_failed", StringComparison.OrdinalIgnoreCase)
+            || finalStdErr.Contains("[quality-gate]", StringComparison.OrdinalIgnoreCase))
+        {
+            builder.AppendLine("- 품질 게이트 실패다. stderr의 [quality-gate] 미충족 항목을 모두 실제 코드로 해결하라.");
+            builder.AppendLine("- 실행만 통과하는 껍데기 구현이 아니라 원본 요청의 기능 요구사항을 빠짐없이 구현하라.");
+        }
+        if (finalStdErr.Contains("Module not found", StringComparison.OrdinalIgnoreCase)
+            || finalStdErr.Contains("Cannot find module", StringComparison.OrdinalIgnoreCase)
+            || finalStdErr.Contains("ERR_MODULE_NOT_FOUND", StringComparison.OrdinalIgnoreCase))
+        {
+            builder.AppendLine("- Node/TypeScript 의존성 오류는 라이브러리를 제거하지 말고 package.json 의 dependencies/devDependencies 또는 import 경로를 수정하라");
+        }
+        if (finalStdErr.Contains("CS0246", StringComparison.OrdinalIgnoreCase)
+            || finalStdErr.Contains("are you missing a using directive", StringComparison.OrdinalIgnoreCase))
+        {
+            builder.AppendLine("- C# 타입/네임스페이스 오류는 using, namespace, csproj PackageReference를 맞춰 해결하라");
+        }
+        if (finalStdErr.Contains("cannot find symbol", StringComparison.OrdinalIgnoreCase)
+            || finalStdErr.Contains("package ", StringComparison.OrdinalIgnoreCase))
+        {
+            builder.AppendLine("- Java/Kotlin 심볼 또는 package 오류는 파일 경로, package 선언, build.gradle/pom 설정을 일치시켜 해결하라");
+        }
+        if (finalStdErr.Contains("undefined reference", StringComparison.OrdinalIgnoreCase)
+            || finalStdErr.Contains("ld:", StringComparison.OrdinalIgnoreCase)
+            || finalStdErr.Contains("ld returned", StringComparison.OrdinalIgnoreCase))
+        {
+            builder.AppendLine("- C/C++ 링커 오류는 모든 소스 파일, 헤더, 라이브러리 링크 옵션, Makefile/CMakeLists.txt를 맞춰 해결하라");
         }
         foreach (var rule in BuildLanguagePromptRuleLines(string.Empty, string.Empty, languageHint, objective ?? string.Empty))
         {
@@ -5133,6 +5199,11 @@ public sealed partial class CommandService
             return true;
         }
 
+        if (IsExplicitSingleFileSimpleTask(objective, "auto", requestedPaths))
+        {
+            return false;
+        }
+
         var text = ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty)).ToLowerInvariant();
         return ContainsAny(
             text,
@@ -5141,7 +5212,7 @@ public sealed partial class CommandService
             "여러 파일",
             "multi-file",
             "multiple files"
-        );
+        ) || ResolveCodingProjectProfile(objective, "auto", requestedPaths).PrefersMultiFile;
     }
 
     private static string BuildPythonStringLiteral(string value)
@@ -5199,7 +5270,15 @@ public sealed partial class CommandService
         }
 
         var requestedPath = requestedPaths[0];
-        var fullPath = ResolveWorkspacePath(workspaceRoot, requestedPath);
+        string fullPath;
+        try
+        {
+            fullPath = ResolveWorkspacePath(workspaceRoot, requestedPath);
+        }
+        catch
+        {
+            return (false, string.Empty, string.Empty, new CodeExecutionResult("bash", workspaceRoot, "-", "(blocked unsafe path)", 1, string.Empty, "workspace 밖 경로는 코딩탭 자동 작업에서 사용할 수 없습니다.", "error"));
+        }
         var directory = Path.GetDirectoryName(fullPath);
         if (!string.IsNullOrWhiteSpace(directory))
         {
@@ -5924,6 +6003,17 @@ public sealed partial class CommandService
                || value == "run";
     }
 
+    private static bool IsDangerousGeneratedRunCommand(string? command)
+    {
+        var normalized = NormalizeGeneratedRunCommand(command);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return false;
+        }
+
+        return DangerousGeneratedRunCommandRegex.IsMatch(normalized);
+    }
+
     private static string NormalizeCodingActionType(string? rawType, string? path, string? content, string? command)
     {
         var raw = (rawType ?? string.Empty).Trim().ToLowerInvariant();
@@ -6042,6 +6132,23 @@ public sealed partial class CommandService
 
     private const int VisibleCodingStageTotal = 6;
     private const int MaxCodingRepairPasses = 1;
+
+    private static int ResolveMaxCodingRepairPasses(string objective, string languageHint)
+    {
+        var language = ResolveInitialCodingLanguage(languageHint, objective);
+        if (IsGameLikeCodingTask(objective, language) || IsFrontendLikeCodingTask(objective, language))
+        {
+            return 3;
+        }
+
+        var requestedPaths = ExtractRequestedCodingPaths(objective ?? string.Empty, language);
+        if (requestedPaths.Count > 1 || LooksLikeBrowserAppObjective(objective ?? string.Empty))
+        {
+            return 2;
+        }
+
+        return MaxCodingRepairPasses;
+    }
 
     private static CodingProgressUpdate BuildCodingProgressUpdate(
         string progressMode,
@@ -6342,6 +6449,8 @@ public sealed partial class CommandService
         builder.AppendLine("- 빌드/컴파일/실행/테스트 수행");
         builder.AppendLine("- 오류 발생 시 원인 분석 후 수정 반복");
         builder.AppendLine("- 더미 구현, TODO만 남기는 미완성 결과, 가짜 성공 보고 금지");
+        builder.AppendLine("- 테스트용 초기화 로그, 빈 함수, 껍데기 UI, placeholder 데이터만으로 완료 처리 금지");
+        builder.AppendLine("- 외부 라이브러리가 필요하면 제거하지 말고 해당 언어의 표준 의존성 파일에 명시");
         builder.AppendLine("- 실패한 명령을 같은 형태로 반복하지 말고 원인을 바꿔 수정");
         builder.AppendLine("- 완료 보고 전에 최종 실행 1회와 생성/수정 파일 존재 여부를 확인");
         builder.AppendLine("- 요청에 출력값이 있으면 stdout도 실제 결과로 확인");
@@ -6439,13 +6548,20 @@ public sealed partial class CommandService
         {
             ".py" => "python",
             ".js" or ".mjs" => "javascript",
-            ".ts" => "javascript",
+            ".jsx" => "javascript",
+            ".ts" or ".tsx" => "typescript",
             ".c" => "c",
             ".cpp" or ".cc" or ".cxx" => "cpp",
             ".cs" => "csharp",
             ".java" => "java",
-            ".kt" => "kotlin",
+            ".kt" or ".kts" => "kotlin",
+            ".go" => "go",
+            ".rs" => "rust",
+            ".php" => "php",
+            ".rb" => "ruby",
+            ".swift" => "swift",
             ".html" or ".htm" => "html",
+            ".vue" or ".svelte" => "html",
             ".css" => "css",
             ".sh" => "bash",
             _ => fallback
@@ -6589,12 +6705,17 @@ public sealed partial class CommandService
         {
             "py" or "python3" => "python",
             "js" or "node" => "javascript",
+            "ts" or "tsx" => "typescript",
+            "react" or "vite" or "react-vite" or "react_vite" => "react-vite",
+            "golang" => "go",
+            "rs" or "cargo" => "rust",
+            "rb" => "ruby",
             "sh" or "shell" => "bash",
             "c++" or "cc" => "cpp",
             "cs" or "c#" => "csharp",
             "kt" => "kotlin",
             "htm" => "html",
-            "" or "auto" => "python",
+            "" or "auto" => "auto",
             _ => value
         };
     }
@@ -6621,6 +6742,16 @@ public sealed partial class CommandService
         if (ContainsAny(text, "파이썬", "python"))
         {
             return "python";
+        }
+
+        if (ContainsAny(text, "react", "vite", "리액트"))
+        {
+            return "react-vite";
+        }
+
+        if (ContainsAny(text, "typescript", "타입스크립트", "tsx"))
+        {
+            return "typescript";
         }
 
         if (ContainsAny(text, "자바스크립트", "javascript", "node.js", "nodejs"))
@@ -6651,6 +6782,31 @@ public sealed partial class CommandService
         if (ContainsAny(text, "코틀린", "kotlin", "안드로이드"))
         {
             return "kotlin";
+        }
+
+        if (ContainsAny(text, "golang", " go ", "go언어", "go 언어"))
+        {
+            return "go";
+        }
+
+        if (ContainsAny(text, "rust", "러스트", "cargo"))
+        {
+            return "rust";
+        }
+
+        if (ContainsAny(text, "php", "laravel"))
+        {
+            return "php";
+        }
+
+        if (ContainsAny(text, "ruby", "rails"))
+        {
+            return "ruby";
+        }
+
+        if (ContainsAny(text, "swift", "스위프트"))
+        {
+            return "swift";
         }
 
         if (Regex.IsMatch(text, @"(?<![a-z])java(?!script)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
@@ -6688,7 +6844,17 @@ public sealed partial class CommandService
         }
 
         var text = ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty)).ToLowerInvariant();
-        if (ContainsAny(text, "html", "css", "javascript", "js", "ui", "웹", "frontend", "react", "vue", "next", "클론"))
+        if (ContainsAny(text, "react", "vite", "리액트"))
+        {
+            return "react-vite";
+        }
+
+        if (ContainsAny(text, "typescript", "타입스크립트", "tsx"))
+        {
+            return "typescript";
+        }
+
+        if (ContainsAny(text, "html", "css", "javascript", "js", "ui", "웹", "frontend", "vue", "next", "클론"))
         {
             return "html";
         }
@@ -6701,6 +6867,31 @@ public sealed partial class CommandService
         if (ContainsAny(text, "kotlin", "안드로이드"))
         {
             return "kotlin";
+        }
+
+        if (ContainsAny(text, "golang", " go ", "go언어", "go 언어"))
+        {
+            return "go";
+        }
+
+        if (ContainsAny(text, "rust", "러스트", "cargo"))
+        {
+            return "rust";
+        }
+
+        if (ContainsAny(text, "php", "laravel"))
+        {
+            return "php";
+        }
+
+        if (ContainsAny(text, "ruby", "rails"))
+        {
+            return "ruby";
+        }
+
+        if (ContainsAny(text, "swift", "스위프트"))
+        {
+            return "swift";
         }
 
         if (ContainsAny(text, "java", "spring"))
@@ -6723,6 +6914,6 @@ public sealed partial class CommandService
             return "bash";
         }
 
-        return "python";
+        return "auto";
     }
 }

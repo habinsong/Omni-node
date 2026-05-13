@@ -96,6 +96,7 @@ public sealed partial class CommandService
                     weekdays: null,
                     dayOfMonth: null,
                     timezoneId: null,
+                    runImmediately: true,
                     source: source,
                     cancellationToken: cancellationToken
                 );
@@ -473,15 +474,32 @@ public sealed partial class CommandService
                 {
                     try
                     {
+                        await _routineSchedulerDispatchGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
                         var result = await RunRoutineNowAsync(id, "scheduler", CancellationToken.None);
                         if (!result.Ok)
                         {
-                            Console.Error.WriteLine($"[routine] scheduler run skipped ({id}): {result.Message}");
+                            _routineSchedulerLastError = $"scheduler run skipped ({id}): {result.Message}";
+                            Console.Error.WriteLine($"[routine] {_routineSchedulerLastError}");
+                        }
+                        else
+                        {
+                            _routineSchedulerLastError = null;
                         }
                     }
                     catch (Exception ex)
                     {
-                        Console.Error.WriteLine($"[routine] scheduler run failed ({id}): {ex.Message}");
+                        _routineSchedulerLastError = $"scheduler run failed ({id}): {ex.Message}";
+                        Console.Error.WriteLine($"[routine] {_routineSchedulerLastError}");
+                    }
+                    finally
+                    {
+                        try
+                        {
+                            _routineSchedulerDispatchGate.Release();
+                        }
+                        catch
+                        {
+                        }
                     }
                 }, CancellationToken.None);
             }
@@ -627,19 +645,6 @@ public sealed partial class CommandService
             3
         );
 
-        if (!_llmRouter.HasGroqApiKey())
-        {
-            var fallbackCode = BuildFallbackRoutineCode(request, schedule);
-            return new RoutineGenerationResult(
-                PlannerProvider: "local",
-                PlannerModel: "none",
-                CoderModel: "local-fallback",
-                Plan: "Groq API 키가 없어 로컬 기본 템플릿으로 생성했습니다.",
-                Language: "bash",
-                Code: fallbackCode
-            );
-        }
-
         if (strategy.Mode == "split")
         {
             var chunks = new List<string>();
@@ -656,7 +661,7 @@ public sealed partial class CommandService
             var parsed = ParseCodeCandidate(merged, "bash");
             var language = parsed.Language is "bash" or "python" ? parsed.Language : "bash";
             var code = string.IsNullOrWhiteSpace(parsed.Code)
-                ? BuildFallbackRoutineCode(request, schedule)
+                ? string.Empty
                 : EnsureRoutineShebang(parsed.Code, language);
             if (!string.IsNullOrWhiteSpace(parsed.Code) && RoutineCodeNeedsRepair(language, code))
             {
@@ -675,13 +680,16 @@ public sealed partial class CommandService
                 merged = repaired.RawText;
             }
 
+            var quality = ValidateRoutineGeneratedCode(language, code, request);
             return new RoutineGenerationResult(
                 PlannerProvider: "groq",
                 PlannerModel: "split",
                 CoderModel: string.Join(",", strategy.Models),
                 Plan: ExtractPlanText(merged),
                 Language: language,
-                Code: code
+                Code: code,
+                QualityStatus: quality.Ok ? "ok" : "quality_failed",
+                QualityWarnings: quality.Warnings
             );
         }
 
@@ -689,7 +697,7 @@ public sealed partial class CommandService
         var singleParsed = ParseCodeCandidate(single.Text, "bash");
         var singleLanguage = singleParsed.Language is "bash" or "python" ? singleParsed.Language : "bash";
         var singleCode = string.IsNullOrWhiteSpace(singleParsed.Code)
-            ? BuildFallbackRoutineCode(request, schedule)
+            ? string.Empty
             : EnsureRoutineShebang(singleParsed.Code, singleLanguage);
         if (!string.IsNullOrWhiteSpace(singleParsed.Code) && RoutineCodeNeedsRepair(singleLanguage, singleCode))
         {
@@ -707,13 +715,16 @@ public sealed partial class CommandService
             singleCode = repaired.Code;
             single = single with { Text = repaired.RawText };
         }
+        var singleQuality = ValidateRoutineGeneratedCode(singleLanguage, singleCode, request);
         return new RoutineGenerationResult(
             PlannerProvider: "groq",
             PlannerModel: strategy.Models[0],
             CoderModel: strategy.Models[0],
             Plan: ExtractPlanText(single.Text),
             Language: singleLanguage,
-            Code: singleCode
+            Code: singleCode,
+            QualityStatus: singleQuality.Ok ? "ok" : "quality_failed",
+            QualityWarnings: singleQuality.Warnings
         );
     }
 
@@ -1298,8 +1309,45 @@ public sealed partial class CommandService
             timeOfDay,
             dayOfMonth,
             weekdays,
+            string.IsNullOrWhiteSpace(routine.QualityStatus) ? "unknown" : routine.QualityStatus,
+            routine.QualityWarnings ?? new List<string>(),
+            BuildRoutineRunCommand(routine),
             BuildRoutineRunSummaries(routine)
         );
+    }
+
+    private static string BuildRoutineRunCommand(RoutineDefinition routine)
+    {
+        var resolvedMode = ResolveRoutineExecutionMode(
+            ResolveRoutineExecutionRequestText(routine.Request, routine.Title, routine.ScheduleSourceMode),
+            routine.ExecutionMode
+        );
+        if (resolvedMode == "browser_agent")
+        {
+            return "브라우저 에이전트 테스트 버튼으로 실행";
+        }
+
+        if (resolvedMode == "web" || resolvedMode == "url")
+        {
+            return "웹 테스트 버튼으로 실행";
+        }
+
+        if (ShouldRunCronAgentTurnBridge(routine))
+        {
+            return "cron agentTurn bridge";
+        }
+
+        if (string.IsNullOrWhiteSpace(routine.ScriptPath))
+        {
+            return "실행 파일 없음";
+        }
+
+        var quoted = routine.ScriptPath.Contains(' ')
+            ? $"\"{routine.ScriptPath}\""
+            : routine.ScriptPath;
+        return NormalizeRoutineScriptLanguage(routine.Language) == "python"
+            ? $"python3 {quoted}"
+            : $"bash {quoted}";
     }
 
     private static bool TryResolveRoutineScheduleConfig(
@@ -2040,15 +2088,58 @@ public sealed partial class CommandService
         var reparsed = ParseCodeCandidate(regenerated.Text, "bash");
         var repairedLanguage = reparsed.Language is "bash" or "python" ? reparsed.Language : "bash";
         var repairedCode = string.IsNullOrWhiteSpace(reparsed.Code)
-            ? BuildFallbackRoutineCode(request, schedule)
+            ? string.Empty
             : EnsureRoutineShebang(reparsed.Code, repairedLanguage);
 
         if (string.IsNullOrWhiteSpace(reparsed.Code) || RoutineCodeNeedsRepair(repairedLanguage, repairedCode))
         {
-            return ("bash", BuildFallbackRoutineCode(request, schedule), regenerated.Text);
+            return (repairedLanguage, repairedCode, regenerated.Text);
         }
 
         return (repairedLanguage, repairedCode, regenerated.Text);
+    }
+
+    private sealed record RoutineCodeValidation(bool Ok, IReadOnlyList<string> Warnings);
+
+    private static RoutineCodeValidation ValidateRoutineGeneratedCode(string language, string code, string request)
+    {
+        var warnings = new List<string>();
+        var normalizedLanguage = NormalizeRoutineScriptLanguage(language);
+        var normalizedCode = (code ?? string.Empty).Trim();
+        var loweredCode = normalizedCode.ToLowerInvariant();
+        var loweredRequest = (request ?? string.Empty).Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(normalizedCode))
+        {
+            warnings.Add("생성된 실행 코드가 비어 있습니다.");
+        }
+
+        if (RoutineCodeNeedsRepair(normalizedLanguage, normalizedCode))
+        {
+            warnings.Add("루틴 스케줄러가 담당해야 할 시간 판단/대기 로직이 있거나 출력이 부족합니다.");
+        }
+
+        if (loweredCode.Contains("실제 작업 로직은 루틴 수정 저장으로 재생성", StringComparison.Ordinal)
+            || loweredCode.Contains("자동 생성 코드가 유효하지 않아 기본 템플릿", StringComparison.Ordinal)
+            || loweredCode.Contains("todo", StringComparison.Ordinal)
+            || loweredCode.Contains("pass  #", StringComparison.Ordinal)
+            || loweredCode.Contains("not implemented", StringComparison.Ordinal))
+        {
+            warnings.Add("실제 작업 대신 템플릿/TODO/미구현 코드가 포함되어 있습니다.");
+        }
+
+        if (ContainsAny(loweredRequest, "http", "url", "뉴스", "news", "api", "웹", "사이트")
+            && !ContainsAny(loweredCode, "curl", "http", "requests", "urllib", "fetch", "invoke-webrequest"))
+        {
+            warnings.Add("요청은 웹/URL/API 작업처럼 보이지만 코드에 네트워크 접근 로직이 없습니다.");
+        }
+
+        if (ContainsAny(loweredRequest, "파일", "저장", "csv", "json", "다운로드")
+            && !ContainsAny(loweredCode, "open(", "write", "cat >", "tee ", "download", "curl -o", "out-file"))
+        {
+            warnings.Add("요청은 파일 생성/저장 작업처럼 보이지만 파일 출력 로직이 부족합니다.");
+        }
+
+        return new RoutineCodeValidation(warnings.Count == 0, warnings);
     }
 
     private static bool RoutineCodeNeedsRepair(string language, string code)

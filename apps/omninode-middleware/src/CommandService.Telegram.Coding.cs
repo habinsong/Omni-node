@@ -872,6 +872,76 @@ public sealed partial class CommandService
         return BuildTelegramCodingResultText(result.Conversation, snapshot, heading);
     }
 
+    private string? TryBuildLatestTelegramCodingNotebookAppend()
+    {
+        var latest = GetLatestTelegramCodingConversation();
+        var result = latest?.LatestCodingResult;
+        if (latest == null || result == null)
+        {
+            return null;
+        }
+
+        var snapshot = result;
+        var lines = new List<string>
+        {
+            "텔레그램 코딩 결과에서 저장한 검증 기록",
+            "",
+            $"대화: {latest.Title}",
+            $"모드: {FormatModeDisplayName(snapshot.Mode)}",
+            $"모델: {FormatProviderWithModel(snapshot.Provider, snapshot.Model, allowAuto: true)}",
+            $"언어: {snapshot.Language}",
+            $"작업 폴더: {snapshot.Execution.RunDirectory}",
+            $"상태: {snapshot.Execution.Status} (exit={snapshot.Execution.ExitCode})",
+            $"실행 명령: {TrimForOutput(snapshot.Execution.Command, 180)}",
+            "",
+            $"변경 파일: {snapshot.ChangedFiles.Count}개"
+        };
+        lines.AddRange(snapshot.ChangedFiles.Take(12).Select(path => $"- {ToTelegramRelativePath(snapshot.Execution.RunDirectory, path)}"));
+        if (!string.IsNullOrWhiteSpace(snapshot.Summary))
+        {
+            lines.Add("");
+            lines.Add("요약:");
+            lines.Add(TrimForOutput(snapshot.Summary, 1600));
+        }
+
+        return "/notebook append verification " + string.Join("\n", lines).Trim();
+    }
+
+    private string? TryBuildLatestTelegramCodingPlanCreate()
+    {
+        var latest = GetLatestTelegramCodingConversation();
+        var result = latest?.LatestCodingResult;
+        if (latest == null || result == null)
+        {
+            return null;
+        }
+
+        var snapshot = result;
+        var lines = new List<string>
+        {
+            "최근 텔레그램 코딩 결과를 이어서 완성하기 위한 작업계획 작성",
+            "",
+            $"대화: {latest.Title}",
+            $"모드: {FormatModeDisplayName(snapshot.Mode)}",
+            $"모델: {FormatProviderWithModel(snapshot.Provider, snapshot.Model, allowAuto: true)}",
+            $"언어: {snapshot.Language}",
+            $"작업 폴더: {snapshot.Execution.RunDirectory}",
+            $"상태: {snapshot.Execution.Status} (exit={snapshot.Execution.ExitCode})",
+            $"실행 명령: {TrimForOutput(snapshot.Execution.Command, 180)}",
+            "",
+            $"변경 파일: {snapshot.ChangedFiles.Count}개"
+        };
+        lines.AddRange(snapshot.ChangedFiles.Take(12).Select(path => $"- {ToTelegramRelativePath(snapshot.Execution.RunDirectory, path)}"));
+        if (!string.IsNullOrWhiteSpace(snapshot.Summary))
+        {
+            lines.Add("");
+            lines.Add("요약:");
+            lines.Add(TrimForOutput(snapshot.Summary, 2000));
+        }
+
+        return "/plan create --constraint 현재 산출물을 무시하고 새로 시작하지 않기 --constraint 실패 로그와 미검증 항목을 먼저 해소하기 " + string.Join("\n", lines).Trim();
+    }
+
     private string BuildTelegramCodingResultText(
         ConversationThreadView conversation,
         ConversationCodingResultSnapshot result,

@@ -7,6 +7,8 @@ namespace OmniNode.Middleware;
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
 )]
 [JsonSerializable(typeof(WorkPlan))]
+[JsonSerializable(typeof(PlanDraft))]
+[JsonSerializable(typeof(PlanDraftStep))]
 [JsonSerializable(typeof(PlanReviewResult))]
 [JsonSerializable(typeof(PlanExecutionRecord))]
 [JsonSerializable(typeof(PlanSnapshot))]

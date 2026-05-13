@@ -117,7 +117,9 @@ export function renderChatComposerPanel(props) {
   const {
     sendChatSingle,
     sendChatOrchestration,
-    sendChatMulti
+    sendChatMulti,
+    createRoutineFromCurrentInput,
+    createPlanFromCurrentInput
   } = actions;
 
   if (mode === "single") {
@@ -194,6 +196,8 @@ export function renderChatComposerPanel(props) {
         value: chatInputSingle,
         onChange: (event) => setChatInputSingle(event.target.value),
         onSend: sendChatSingle,
+        onCreateRoutine: () => createRoutineFromCurrentInput("chat:single"),
+        onCreatePlan: () => createPlanFromCurrentInput("chat:single"),
         pendingKey: "chat:single",
         placeholder: "질문 입력"
       })
@@ -317,6 +321,8 @@ export function renderChatComposerPanel(props) {
         value: chatInputOrch,
         onChange: (event) => setChatInputOrch(event.target.value),
         onSend: sendChatOrchestration,
+        onCreateRoutine: () => createRoutineFromCurrentInput("chat:orchestration"),
+        onCreatePlan: () => createPlanFromCurrentInput("chat:orchestration"),
         pendingKey: "chat:orchestration",
         placeholder: "병렬 통합 질문 입력"
       })
@@ -375,6 +381,8 @@ export function renderChatComposerPanel(props) {
       value: chatInputMulti,
       onChange: (event) => setChatInputMulti(event.target.value),
       onSend: sendChatMulti,
+      onCreateRoutine: () => createRoutineFromCurrentInput("chat:multi"),
+      onCreatePlan: () => createPlanFromCurrentInput("chat:multi"),
       pendingKey: "chat:multi",
       placeholder: "다중 LLM 비교 질문 입력"
     })
@@ -477,7 +485,9 @@ export function renderCodingComposerPanel(props) {
   const {
     sendCodingSingle,
     sendCodingOrchestration,
-    sendCodingMulti
+    sendCodingMulti,
+    createRoutineFromCurrentInput,
+    createPlanFromCurrentInput
   } = actions;
 
   if (mode === "single") {
@@ -563,6 +573,8 @@ export function renderCodingComposerPanel(props) {
         value: codingInputSingle,
         onChange: (event) => setCodingInputSingle(event.target.value),
         onSend: sendCodingSingle,
+        onCreateRoutine: () => createRoutineFromCurrentInput("coding:single"),
+        onCreatePlan: () => createPlanFromCurrentInput("coding:single"),
         pendingKey: "coding:single",
         placeholder: "처음부터 끝까지 구현할 요구사항 입력"
       })
@@ -692,6 +704,8 @@ export function renderCodingComposerPanel(props) {
         value: codingInputOrch,
         onChange: (event) => setCodingInputOrch(event.target.value),
         onSend: sendCodingOrchestration,
+        onCreateRoutine: () => createRoutineFromCurrentInput("coding:orchestration"),
+        onCreatePlan: () => createPlanFromCurrentInput("coding:orchestration"),
         pendingKey: "coding:orchestration",
         placeholder: "기획부터 수정까지 역할 분담할 요구사항 입력"
       })
@@ -816,6 +830,8 @@ export function renderCodingComposerPanel(props) {
       value: codingInputMulti,
       onChange: (event) => setCodingInputMulti(event.target.value),
       onSend: sendCodingMulti,
+      onCreateRoutine: () => createRoutineFromCurrentInput("coding:multi"),
+      onCreatePlan: () => createPlanFromCurrentInput("coding:multi"),
       pendingKey: "coding:multi",
       placeholder: "여러 모델이 각각 끝까지 구현할 요구사항 입력"
     })

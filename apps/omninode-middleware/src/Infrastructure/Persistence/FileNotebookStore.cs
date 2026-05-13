@@ -74,24 +74,27 @@ public sealed class FileNotebookStore
     {
         if (!File.Exists(path))
         {
-            return new NotebookDocumentSnapshot(path, false, 0, string.Empty, string.Empty);
+            return new NotebookDocumentSnapshot(path, false, 0, string.Empty, string.Empty, string.Empty, false);
         }
 
         try
         {
             var content = File.ReadAllText(path, Encoding.UTF8);
             var info = new FileInfo(path);
+            var contentForUi = BuildContent(content);
             return new NotebookDocumentSnapshot(
                 path,
                 true,
                 info.Exists ? info.Length : Encoding.UTF8.GetByteCount(content),
                 info.Exists ? info.LastWriteTimeUtc.ToString("O") : string.Empty,
-                BuildPreview(content)
+                BuildPreview(content),
+                contentForUi.Content,
+                contentForUi.Truncated
             );
         }
         catch
         {
-            return new NotebookDocumentSnapshot(path, true, 0, string.Empty, string.Empty);
+            return new NotebookDocumentSnapshot(path, true, 0, string.Empty, string.Empty, string.Empty, false);
         }
     }
 
@@ -104,5 +107,16 @@ public sealed class FileNotebookStore
         }
 
         return "...(truncated)\n" + normalized[^maxChars..].TrimStart();
+    }
+
+    private static (string Content, bool Truncated) BuildContent(string content, int maxChars = 20000)
+    {
+        var normalized = (content ?? string.Empty).Trim();
+        if (normalized.Length <= maxChars)
+        {
+            return (normalized, false);
+        }
+
+        return (normalized[^maxChars..].TrimStart(), true);
     }
 }

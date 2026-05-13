@@ -88,7 +88,8 @@ public sealed record LogicGraphSummary(
     string LastRunLocal,
     string LastStatus,
     int NodeCount,
-    int EdgeCount
+    int EdgeCount,
+    string ActiveRunId = ""
 );
 
 public sealed record LogicGraphActionResult(

@@ -47,6 +47,15 @@ internal sealed class WsNotebookCommandDispatcher
         {
             var kind = (message.Kind ?? string.Empty).Trim().ToLowerInvariant();
             var content = message.Text ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(message.Source)
+                || !string.IsNullOrWhiteSpace(message.ConversationId)
+                || !string.IsNullOrWhiteSpace(message.Provider)
+                || !string.IsNullOrWhiteSpace(message.Model)
+                || !string.IsNullOrWhiteSpace(message.Language)
+                || !string.IsNullOrWhiteSpace(message.FilePath))
+            {
+                content = BuildMetadataEntry(message, content);
+            }
             var result = kind switch
             {
                 "learning" => await _notebookService.AppendLearningAsync(message.ProjectKey, content, cancellationToken),
@@ -71,5 +80,38 @@ internal sealed class WsNotebookCommandDispatcher
         }
 
         return false;
+    }
+
+    private static string BuildMetadataEntry(WebSocketGateway.ClientMessage message, string content)
+    {
+        var lines = new List<string>();
+        AddMeta(lines, "source", message.Source);
+        AddMeta(lines, "conversation", message.ConversationId);
+        AddMeta(lines, "provider", message.Provider);
+        AddMeta(lines, "model", message.Model);
+        AddMeta(lines, "language", message.Language);
+        AddMeta(lines, "file", message.FilePath);
+        if (message.Tags.Count > 0)
+        {
+            AddMeta(lines, "tags", string.Join(", ", message.Tags));
+        }
+
+        if (lines.Count == 0)
+        {
+            return content;
+        }
+
+        return string.Join("\n", lines) + "\n\n" + (content ?? string.Empty).Trim();
+    }
+
+    private static void AddMeta(List<string> lines, string label, string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim();
+        if (normalized.Length == 0)
+        {
+            return;
+        }
+
+        lines.Add($"- {label}: {normalized}");
     }
 }

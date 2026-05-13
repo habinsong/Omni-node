@@ -21,9 +21,11 @@ export function createRoutineCreateWizard({ React, e }) {
   const RoutineCreateWizard = memo(function RoutineCreateWizard(props) {
     const {
       routineCreateForm,
+      routinePreview,
       patchRoutineForm,
       toggleRoutineWeekday,
       createRoutineFromUi,
+      requestRoutinePreview,
       onInputKeyDown,
       isRoutineCreatePending,
       routineAgentProviderOptions,
@@ -131,6 +133,7 @@ export function createRoutineCreateWizard({ React, e }) {
       );
     } else {
       stepBody = e("div", { className: "routine-section-card" },
+        e("p", { className: "hint routine-panel-hint" }, "기본값은 저장만입니다. 실제 실행 확인이 필요할 때만 생성 후 테스트 실행을 켜세요."),
         renderRoutineRetryAndNotifyFields({
           e,
           form: routineCreateForm,
@@ -139,6 +142,24 @@ export function createRoutineCreateWizard({ React, e }) {
         })
       );
     }
+
+    const previewPanel = routinePreview
+      ? e("div", { className: `routine-preview-panel ${(routinePreview.warnings || []).length > 0 ? "has-warning" : ""}` },
+        e("div", { className: "routine-preview-row" },
+          e("span", null, "실행"),
+          e("strong", null, `${routinePreview.resolvedExecutionMode || "-"} / ${routinePreview.executionRoute || "-"}`)
+        ),
+        e("div", { className: "routine-preview-row" },
+          e("span", null, "스케줄"),
+          e("strong", null, routinePreview.scheduleText || "-")
+        ),
+        (routinePreview.warnings || []).length > 0
+          ? e("ul", { className: "routine-preview-warnings" },
+            ...(routinePreview.warnings || []).map((warning, index) => e("li", { key: `preview-warning-${index}` }, warning))
+          )
+          : e("div", { className: "routine-preview-ok" }, "사전 확인에서 즉시 막을 항목은 없습니다.")
+      )
+      : null;
 
     const submitNow = currentStep === STEPS.length - 1;
     const navRow = e("div", { className: "routine-wizard-navrow" },
@@ -154,7 +175,7 @@ export function createRoutineCreateWizard({ React, e }) {
           className: "btn primary routine-submit-btn",
           onClick: createRoutineFromUi,
           disabled: isRoutineCreatePending || !step1Valid
-        }, isRoutineCreatePending ? "생성 중..." : "루틴 생성")
+        }, isRoutineCreatePending ? "생성 중..." : (routineCreateForm.runImmediately ? "루틴 생성 + 테스트" : "루틴 저장"))
         : e("button", {
           type: "button",
           className: "btn primary",
@@ -169,7 +190,13 @@ export function createRoutineCreateWizard({ React, e }) {
           onClick: createRoutineFromUi,
           disabled: isRoutineCreatePending || !step1Valid,
           title: "고급 옵션 기본값으로 바로 생성"
-        }, "건너뛰고 생성")
+        }, "저장"),
+      e("button", {
+        type: "button",
+        className: "btn secondary",
+        onClick: () => requestRoutinePreview(routineCreateForm),
+        disabled: isRoutineCreatePending || !step1Valid
+      }, "미리보기")
     );
 
     return e("section", { className: "routine-list-panel routine-create-panel routine-wizard" },
@@ -183,6 +210,7 @@ export function createRoutineCreateWizard({ React, e }) {
       stepNav,
       stepHeader,
       stepBody,
+      previewPanel,
       navRow
     );
   });

@@ -634,6 +634,7 @@ export function handleDashboardServerMessage(msg, context) {
     const items = Array.isArray(msg.items) ? msg.items : []
     const currentSelectedGraphId = `${state.logicSelectedGraphId || ""}`.trim()
     const currentDraftGraphId = `${state.logicDraftGraph?.graphId || ""}`.trim()
+    const activeItem = items.find((item) => `${item?.activeRunId || ""}`.trim())
     const nextSelectedGraphId = items.some((item) => item.graphId === currentSelectedGraphId)
       ? currentSelectedGraphId
       : (items.some((item) => item.graphId === currentDraftGraphId)
@@ -658,6 +659,10 @@ export function handleDashboardServerMessage(msg, context) {
 
     if (nextSelectedGraphId !== currentSelectedGraphId || currentDraftGraphId !== nextSelectedGraphId) {
       actions.requestLogicGraphGet(actions.send, nextSelectedGraphId, { silent: true, queueIfClosed: false })
+    }
+    if (activeItem?.activeRunId) {
+      setters.setLogicActiveRunId(activeItem.activeRunId)
+      actions.requestLogicGraphRunGet(actions.send, activeItem.activeRunId, { silent: true, queueIfClosed: false })
     }
     return true
   }
@@ -1211,6 +1216,8 @@ export function handleDashboardServerMessage(msg, context) {
     setRoutines: setters.setRoutines,
     setRoutineSelectedId: setters.setRoutineSelectedId,
     setRoutineProgress: setters.setRoutineProgress,
+    setRoutinePreview: setters.setRoutinePreview,
+    setRoutineSchedulerStatus: setters.setRoutineSchedulerStatus,
     isPortraitMobileLayout: state.isPortraitMobileLayout,
     setResponsivePane: actions.setResponsivePane,
     log: actions.log,

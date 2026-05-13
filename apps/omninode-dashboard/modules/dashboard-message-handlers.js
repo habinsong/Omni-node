@@ -519,6 +519,8 @@ export function handleRoutineMessage(msg, context) {
     setRoutines,
     setRoutineSelectedId,
     setRoutineProgress,
+    setRoutinePreview,
+    setRoutineSchedulerStatus,
     isPortraitMobileLayout,
     setResponsivePane,
     log,
@@ -539,6 +541,37 @@ export function handleRoutineMessage(msg, context) {
     })
     if (isPortraitMobileLayout && items.length === 0) {
       setResponsivePane("routine", "overview")
+    }
+    return true
+  }
+
+  if (msg.type === "routine_preview") {
+    if (typeof setRoutinePreview === "function") {
+      setRoutinePreview({
+        request: msg.request || "",
+        scheduleSourceMode: msg.scheduleSourceMode || "",
+        scheduleText: msg.scheduleText || "",
+        scheduleKind: msg.scheduleKind || "",
+        timezoneId: msg.timezoneId || "",
+        resolvedExecutionMode: msg.resolvedExecutionMode || "",
+        executionRoute: msg.executionRoute || "",
+        warnings: Array.isArray(msg.warnings) ? msg.warnings : []
+      })
+    }
+    return true
+  }
+
+  if (msg.type === "routine_scheduler_status") {
+    if (typeof setRoutineSchedulerStatus === "function") {
+      setRoutineSchedulerStatus({
+        enabled: msg.enabled !== false,
+        totalRoutines: Number(msg.totalRoutines || 0),
+        enabledRoutines: Number(msg.enabledRoutines || 0),
+        runningRoutines: Number(msg.runningRoutines || 0),
+        dueRoutines: Number(msg.dueRoutines || 0),
+        nextRunAtMs: Number.isFinite(Number(msg.nextRunAtMs)) ? Number(msg.nextRunAtMs) : null,
+        lastError: msg.lastError || ""
+      })
     }
     return true
   }

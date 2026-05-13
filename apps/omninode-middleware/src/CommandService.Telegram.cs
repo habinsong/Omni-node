@@ -443,6 +443,38 @@ public sealed partial class CommandService
         }
 
         var lowered = normalized.ToLowerInvariant();
+        if (ContainsAny(lowered, "최근 답변 노트북", "마지막 답변 노트북", "최근 응답 노트북", "save last answer to notebook"))
+        {
+            var latest = TryBuildLastTelegramAssistantNotebookAppend();
+            return string.IsNullOrWhiteSpace(latest)
+                ? "저장할 최근 텔레그램 답변이 없습니다."
+                : await ExecuteTelegramPseudoCommandAsync(latest, attachments, webUrls, webSearchEnabled, cancellationToken);
+        }
+
+        if (ContainsAny(lowered, "최근 코딩 결과 노트북", "코딩 결과 노트북", "save coding result to notebook"))
+        {
+            var latestCoding = TryBuildLatestTelegramCodingNotebookAppend();
+            return string.IsNullOrWhiteSpace(latestCoding)
+                ? "저장할 최근 텔레그램 코딩 결과가 없습니다."
+                : await ExecuteTelegramPseudoCommandAsync(latestCoding, attachments, webUrls, webSearchEnabled, cancellationToken);
+        }
+
+        if (ContainsAny(lowered, "최근 답변 계획", "마지막 답변 계획", "최근 응답 계획", "최근 답변으로 계획", "마지막 답변으로 계획", "plan from last answer"))
+        {
+            var latestPlan = TryBuildLastTelegramAssistantPlanCreate();
+            return string.IsNullOrWhiteSpace(latestPlan)
+                ? "계획으로 만들 최근 텔레그램 답변이 없습니다."
+                : await ExecuteTelegramPseudoCommandAsync(latestPlan, attachments, webUrls, webSearchEnabled, cancellationToken);
+        }
+
+        if (ContainsAny(lowered, "최근 코딩 결과 계획", "코딩 결과 계획", "최근 코딩 결과로 계획", "plan from coding result"))
+        {
+            var latestCodingPlan = TryBuildLatestTelegramCodingPlanCreate();
+            return string.IsNullOrWhiteSpace(latestCodingPlan)
+                ? "계획으로 만들 최근 텔레그램 코딩 결과가 없습니다."
+                : await ExecuteTelegramPseudoCommandAsync(latestCodingPlan, attachments, webUrls, webSearchEnabled, cancellationToken);
+        }
+
         var pseudoCommand = TryBuildTelegramNaturalPseudoCommand(normalized, lowered);
         if (!string.IsNullOrWhiteSpace(pseudoCommand))
         {
@@ -1760,6 +1792,7 @@ public sealed partial class CommandService
         }
 
         var telegramThread = EnsureTelegramLinkedConversation();
+        var telegramStateKey = ResolveTelegramStateKey(telegramThread);
         var session = PrepareSessionContext(
             "chat",
             "single",
@@ -1786,17 +1819,17 @@ public sealed partial class CommandService
         var hasDeactivationKeyword = LooksLikeThinkPlusDeactivation(rawIncomingText);
         if (hasActivationKeyword && !hasDeactivationKeyword)
         {
-            if (!IsThinkPlusActiveForThread(session.SessionId))
+            if (!IsThinkPlusActiveForThread(telegramStateKey))
             {
-                SetThinkPlusForThread(session.SessionId, true);
+                SetThinkPlusForThread(telegramStateKey, true);
                 thinkPlusToggleNote = "[추론 모드 활성화] 지금부터 모든 메시지에 대해 최신 웹 검색 결과를 참고해 답변합니다. 끄려면 \"추론 모드 꺼\"라고 말하세요.";
             }
         }
         else if (hasDeactivationKeyword)
         {
-            if (IsThinkPlusActiveForThread(session.SessionId))
+            if (IsThinkPlusActiveForThread(telegramStateKey))
             {
-                SetThinkPlusForThread(session.SessionId, false);
+                SetThinkPlusForThread(telegramStateKey, false);
                 thinkPlusToggleNote = "[추론 모드 비활성화] 일반 모드로 돌아갑니다.";
             }
         }
@@ -1818,8 +1851,8 @@ public sealed partial class CommandService
                 _auditLogger.Log(
                     "telegram",
                     "think_plus_toggle",
-                    IsThinkPlusActiveForThread(session.SessionId) ? "on" : "off",
-                    $"thread={session.Thread.Id} bare_toggle=true"
+                    IsThinkPlusActiveForThread(telegramStateKey) ? "on" : "off",
+                    $"thread={session.Thread.Id} stateKey={telegramStateKey} bare_toggle=true"
                 );
                 return note;
             }
@@ -1833,7 +1866,7 @@ public sealed partial class CommandService
         {
             var allowMarkdownTable = LooksLikeTableRenderRequest(effectiveTopicInput);
             var memoryHint = BuildSafeWebMemoryPreferenceHint(
-                session.SessionId,
+                telegramStateKey,
                 effectiveTopicInput,
                 session.LinkedMemoryNotes
             );
@@ -1855,7 +1888,7 @@ public sealed partial class CommandService
                 FormatTelegramResponse(urlSingle.Response.Text, TelegramMaxResponseChars),
                 urlSingle.Response.Provider,
                 urlSingle.Response.Model,
-                session.SessionId,
+                telegramStateKey,
                 "url"
             );
             var urlAssistantMeta = $"telegram-single:{urlSingle.Response.Provider}:{urlSingle.Response.Model}:gemini-url-single";
@@ -1869,9 +1902,9 @@ public sealed partial class CommandService
         }
 
         var skillQueryText = requestText;
-        var hasStickyActiveSkillForTelegram = !string.IsNullOrWhiteSpace(session.SessionId)
-            && _activeSkillByThread.ContainsKey(session.SessionId);
-        var thinkPlusActiveForTelegram = IsThinkPlusActiveForThread(session.SessionId);
+        var hasStickyActiveSkillForTelegram = !string.IsNullOrWhiteSpace(telegramStateKey)
+            && _activeSkillByThread.ContainsKey(telegramStateKey);
+        var thinkPlusActiveForTelegram = IsThinkPlusActiveForThread(telegramStateKey);
 
         var isSkillContextQuery = LooksLikeProjectContextRequest(skillQueryText)
             || LooksLikeSkillCreationRequest(skillQueryText)
@@ -1879,7 +1912,12 @@ public sealed partial class CommandService
             || Regex.IsMatch(skillQueryText, @"(?i)(스킬|skill|skills|skill\.md).*(목록|리스트|뭐|보여|알려|어떤|종류|있어|있니|돼)")
             || hasStickyActiveSkillForTelegram;
 
-        if (webSearchEnabled && snapshot.Mode == "single" && !isSkillContextQuery && !thinkPlusActiveForTelegram)
+        var shouldAllowFastWeb = webSearchEnabled
+            && snapshot.Mode == "single"
+            && !thinkPlusActiveForTelegram
+            && (!isSkillContextQuery || LooksLikeExplicitWebLookupQuestion(effectiveTopicInput) || LooksLikeRealtimeQuestion(effectiveTopicInput));
+
+        if (shouldAllowFastWeb)
         {
             var decisionPath = "heuristic_no_web";
             var shouldUseGeminiWeb = false;
@@ -1912,7 +1950,7 @@ public sealed partial class CommandService
             {
                 var allowMarkdownTable = LooksLikeTableRenderRequest(effectiveTopicInput);
                 var memoryHint = BuildSafeWebMemoryPreferenceHint(
-                    session.SessionId,
+                    telegramStateKey,
                     effectiveTopicInput,
                     session.LinkedMemoryNotes
                 );
@@ -1935,7 +1973,7 @@ public sealed partial class CommandService
                     FormatTelegramResponse(webSingle.Response.Text, TelegramMaxResponseChars),
                     webSingle.Response.Provider,
                     webSingle.Response.Model,
-                    session.SessionId,
+                    telegramStateKey,
                     "web"
                 );
                 var webAssistantMeta = $"telegram-single:{webSingle.Response.Provider}:{webSingle.Response.Model}:{webSingle.Route}";
@@ -1949,7 +1987,9 @@ public sealed partial class CommandService
             }
         }
 
-        var effectiveWebSearchEnabled = snapshot.Mode == "single" ? false : webSearchEnabled;
+        var effectiveWebSearchEnabled = snapshot.Mode == "single"
+            ? webSearchEnabled && (thinkPlusActiveForTelegram || isSkillContextQuery || LooksLikeExplicitWebLookupQuestion(effectiveTopicInput) || LooksLikeRealtimeQuestion(effectiveTopicInput))
+            : webSearchEnabled;
         var normalizedAttachments = NormalizeAttachments(attachments);
         var sharedPrepared = await PrepareSharedInputAsync(
             effectiveTopicInput,
@@ -1959,7 +1999,7 @@ public sealed partial class CommandService
             cancellationToken,
             "telegram",
             session.SessionKey,
-            session.SessionId
+            telegramStateKey
         );
         if (!string.IsNullOrWhiteSpace(sharedPrepared.UnsupportedMessage))
         {
@@ -1986,10 +2026,15 @@ public sealed partial class CommandService
             return blockedResponseText;
         }
 
-        // 스킬·프로젝트 컨텍스트 또는 Think+ 가 들어간 입력은 압축 우회 (압축 시 컨텍스트가 사라짐).
-        var preparedInput = (isSkillContextQuery || hasStickyActiveSkillForTelegram || thinkPlusActiveForTelegram)
-            ? sharedPrepared.Text
-            : await PrepareTelegramInputAsync(sharedPrepared.Text, cancellationToken);
+        var preparedInput = await PrepareTelegramInputAsync(
+            sharedPrepared.Text,
+            cancellationToken,
+            preserveContext: isSkillContextQuery
+                             || hasStickyActiveSkillForTelegram
+                             || thinkPlusActiveForTelegram
+                             || effectiveWebSearchEnabled
+                             || normalizedAttachments.Count > 0
+        );
 
         var requestedSkillName = TryExtractInlineSkillName(requestText);
         preparedInput = ApplySelectedSkillToPrompt(
@@ -2001,7 +2046,7 @@ public sealed partial class CommandService
         // Think+ 활성이면 sharedPrepared 앞에 web context prepend
         if (thinkPlusActiveForTelegram)
         {
-            var effectiveSkillForThinkPlus = ResolveEffectiveSkillNameForThread(requestedSkillName, session.SessionId);
+            var effectiveSkillForThinkPlus = ResolveEffectiveSkillNameForThread(requestedSkillName, telegramStateKey);
             var thinkPlusContext = await BuildThinkPlusContextAsync(
                 requestText,
                 "telegram",
@@ -2017,6 +2062,7 @@ public sealed partial class CommandService
         var thinkingLevel = ResolveTelegramThinkingLevel(snapshot, requestText);
         var profiledInput = BuildTelegramProfilePrompt(preparedInput, snapshot.Profile, thinkingLevel);
         var contextualProfiledInput = BuildContextualInput(session.SessionId, profiledInput, session.LinkedMemoryNotes);
+        var shouldSkipDriftRecovery = ShouldSkipTelegramDriftRecovery(contextualProfiledInput, effectiveTopicInput, preparedInput);
 
         string responseText;
         string providerForMemory;
@@ -2077,7 +2123,7 @@ public sealed partial class CommandService
                 FormatTelegramResponse(orchestratedValidated, TelegramMaxResponseChars),
                 "orchestration",
                 orchestrated.Route,
-                session.SessionId
+                telegramStateKey
             );
             providerForMemory = NormalizeProvider(snapshot.OrchestrationProvider, allowAuto: true);
             if (providerForMemory is "auto" or "none")
@@ -2132,7 +2178,7 @@ public sealed partial class CommandService
                 FormatTelegramResponse(multiSummaryValidated, TelegramMaxResponseChars),
                 "multi",
                 "summary",
-                session.SessionId
+                telegramStateKey
             );
             providerForMemory = NormalizeProvider(multi.ResolvedSummaryProvider, allowAuto: true);
             if (providerForMemory is "auto" or "none")
@@ -2182,7 +2228,7 @@ public sealed partial class CommandService
                     providerPrepared.UnsupportedMessage,
                     "groq",
                     preferredModel,
-                    session.SessionId
+                    telegramStateKey
                 );
                 responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
                 providerForMemory = "groq";
@@ -2204,7 +2250,7 @@ public sealed partial class CommandService
                 streamCallback,
                 cancellationToken
             );
-            if (!_config.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(requestText, singleGroq.Text))
+            if (!shouldSkipDriftRecovery && !_config.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(requestText, singleGroq.Text))
             {
                 var historyBypassInput = BuildHistoryBypassInput(providerPrepared.Text);
                 var recovered = await ExecuteTelegramGroqSingleAsync(
@@ -2250,7 +2296,7 @@ public sealed partial class CommandService
                 FormatTelegramResponse(singleGroqText, TelegramMaxResponseChars),
                 singleGroq.Provider,
                 singleGroq.Model,
-                session.SessionId
+                telegramStateKey
             );
             responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
             providerForMemory = singleGroq.Provider;
@@ -2282,7 +2328,7 @@ public sealed partial class CommandService
                 providerInput.UnsupportedMessage,
                 snapshot.SingleProvider,
                 singleModel,
-                session.SessionId
+                telegramStateKey
             );
             responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
             providerForMemory = snapshot.SingleProvider;
@@ -2305,7 +2351,7 @@ public sealed partial class CommandService
             ResolveSingleChatMaxOutputTokens(requestText),
             streamCallback
         );
-        if (!_config.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(requestText, single.Text))
+        if (!shouldSkipDriftRecovery && !_config.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(requestText, single.Text))
         {
             var historyBypassInput = BuildHistoryBypassInput(providerInput.Text);
             var recovered = await ChatSingleAsync(
@@ -2353,7 +2399,7 @@ public sealed partial class CommandService
             FormatTelegramResponse(singleText, TelegramMaxResponseChars),
             single.Provider,
             single.Model,
-            session.SessionId
+            telegramStateKey
         );
         responseText = ApplyThinkPlusToggleNoteIfAny(thinkPlusToggleNote, responseText);
         providerForMemory = single.Provider;
@@ -2499,6 +2545,70 @@ public sealed partial class CommandService
         );
     }
 
+    private string? TryBuildLastTelegramAssistantNotebookAppend()
+    {
+        var thread = EnsureTelegramLinkedConversation();
+        var assistant = thread.Messages
+            .Where(message => message.Role.Equals("assistant", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(message => message.CreatedUtc)
+            .FirstOrDefault();
+        if (assistant == null || string.IsNullOrWhiteSpace(assistant.Text))
+        {
+            return null;
+        }
+
+        var lines = new[]
+        {
+            "텔레그램 답변에서 저장한 내용",
+            "",
+            $"대화: {thread.Title}",
+            $"응답: {assistant.Meta}",
+            "",
+            TrimForOutput(assistant.Text, 2200)
+        };
+        return "/notebook append learning " + string.Join("\n", lines).Trim();
+    }
+
+    private string? TryBuildLastTelegramAssistantPlanCreate()
+    {
+        var thread = EnsureTelegramLinkedConversation();
+        var assistant = thread.Messages
+            .Where(message => message.Role.Equals("assistant", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(message => message.CreatedUtc)
+            .FirstOrDefault();
+        if (assistant == null || string.IsNullOrWhiteSpace(assistant.Text))
+        {
+            return null;
+        }
+
+        var lines = new[]
+        {
+            "아래 텔레그램 답변을 실제 실행 가능한 작업계획으로 정리",
+            "",
+            $"대화: {thread.Title}",
+            $"응답: {assistant.Meta}",
+            "",
+            TrimForOutput(assistant.Text, 2600)
+        };
+        return "/plan create --constraint 답변의 의도와 범위를 유지하기 --constraint 실행 가능한 단계와 검증 기준을 분리하기 " + string.Join("\n", lines).Trim();
+    }
+
+    private string ResolveTelegramStateKey(ConversationThreadView? thread = null)
+    {
+        var contextualKey = (_telegramTurnContext.Value?.SessionKey ?? string.Empty).Trim();
+        if (!string.IsNullOrWhiteSpace(contextualKey))
+        {
+            return contextualKey;
+        }
+
+        if (thread != null && !string.IsNullOrWhiteSpace(thread.Id))
+        {
+            return thread.Id;
+        }
+
+        return EnsureTelegramLinkedConversation().Id;
+    }
+
     private string BuildTelegramFollowupAwareInput(ConversationThreadView thread, string input)
     {
         var normalized = (input ?? string.Empty).Trim();
@@ -2507,17 +2617,25 @@ public sealed partial class CommandService
             return string.Empty;
         }
 
-        var anchor = FindTelegramAnchorUserMessage(thread, normalized);
-        if (string.IsNullOrWhiteSpace(anchor))
+        var anchorTurn = FindTelegramAnchorTurn(thread, normalized);
+        if (string.IsNullOrWhiteSpace(anchorTurn.User))
         {
             return normalized;
         }
+        var anchor = anchorTurn.User!;
+        var assistantContext = string.IsNullOrWhiteSpace(anchorTurn.Assistant)
+            ? string.Empty
+            : $"""
+
+              [직전 답변]
+              {anchorTurn.Assistant}
+              """;
 
         if (LooksLikeExplicitWebLookupQuestion(normalized) && IsTelegramWeakFollowupInput(normalized))
         {
             return $"""
                     [직전 주제]
-                    {anchor}
+                    {anchor}{assistantContext}
 
                     [현재 요청]
                     위 주제에 대해 웹에서 검색해서 근거 중심으로 다시 설명해줘.
@@ -2529,7 +2647,7 @@ public sealed partial class CommandService
         {
             return $"""
                     [직전 주제]
-                    {anchor}
+                    {anchor}{assistantContext}
 
                     [정정 요청]
                     {normalized}
@@ -2562,40 +2680,67 @@ public sealed partial class CommandService
                     """;
         }
 
+        if (IsTelegramContextualFollowup(normalized))
+        {
+            return $"""
+                    [직전 주제]
+                    {anchor}{assistantContext}
+
+                    [현재 후속 질문]
+                    {normalized}
+
+                    위 직전 주제와 답변을 기준으로, 현재 후속 질문에만 직접 답해줘.
+                    """;
+        }
+
         return normalized;
     }
 
-    private static string? FindTelegramAnchorUserMessage(ConversationThreadView thread, string currentInput)
+    private static (string? User, string? Assistant) FindTelegramAnchorTurn(ConversationThreadView thread, string currentInput)
     {
         if (thread.Messages.Count == 0)
         {
-            return null;
+            return (null, null);
         }
 
-        foreach (var message in thread.Messages
-                     .Where(msg => msg.Role.Equals("user", StringComparison.OrdinalIgnoreCase))
-                     .Reverse())
+        string? latestAssistant = null;
+        foreach (var message in thread.Messages.AsEnumerable().Reverse())
         {
             var text = (message.Text ?? string.Empty).Trim();
-            if (text.Length == 0 || text.Equals(currentInput, StringComparison.Ordinal))
+            if (text.Length == 0)
+            {
+                continue;
+            }
+
+            if (message.Role.Equals("assistant", StringComparison.OrdinalIgnoreCase))
+            {
+                latestAssistant ??= text.Length > 1000 ? text[..1000] + "..." : text;
+                continue;
+            }
+
+            if (!message.Role.Equals("user", StringComparison.OrdinalIgnoreCase)
+                || text.Equals(currentInput, StringComparison.Ordinal))
             {
                 continue;
             }
 
             if (IsTelegramWeakFollowupInput(text)
                 || IsTelegramCorrectionFollowup(text)
-                || IsTelegramExhaustedFeedback(text))
+                || IsTelegramExhaustedFeedback(text)
+                || IsTelegramContextualFollowup(text))
             {
                 continue;
             }
 
-            return text;
+            var cappedUser = text.Length > 800 ? text[..800] + "..." : text;
+            return (cappedUser, latestAssistant);
         }
 
-        return thread.Messages
+        var fallbackUser = thread.Messages
             .Where(msg => msg.Role.Equals("user", StringComparison.OrdinalIgnoreCase))
             .Select(msg => (msg.Text ?? string.Empty).Trim())
             .LastOrDefault(text => text.Length > 0 && !text.Equals(currentInput, StringComparison.Ordinal));
+        return (fallbackUser, latestAssistant);
     }
 
     private static bool IsTelegramWeakFollowupInput(string input)
@@ -2620,6 +2765,32 @@ public sealed partial class CommandService
             or "웹에서 말해줘"
             or "그거 검색해줘"
             or "그거 검색해서 말해줘";
+    }
+
+    private static bool IsTelegramContextualFollowup(string input)
+    {
+        var normalized = Regex.Replace((input ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+
+        return LooksLikeStrongFollowupQuestion(normalized)
+               || (normalized.Length <= 24
+                   && ContainsAny(
+                       normalized,
+                       "왜",
+                       "그럼",
+                       "그래서",
+                       "근데",
+                       "예시",
+                       "근거",
+                       "차이",
+                       "장점",
+                       "단점",
+                       "문제",
+                       "해결",
+                       "다시"));
     }
 
     private static bool IsTelegramCorrectionFollowup(string input)
@@ -2691,9 +2862,18 @@ public sealed partial class CommandService
         return new LlmSingleChatResult(generated.Provider, generated.Model, SanitizeChatOutput(generated.Text));
     }
 
-    private async Task<string> PrepareTelegramInputAsync(string input, CancellationToken cancellationToken)
+    private async Task<string> PrepareTelegramInputAsync(
+        string input,
+        CancellationToken cancellationToken,
+        bool preserveContext = false
+    )
     {
         var text = (input ?? string.Empty).Trim();
+        if (preserveContext)
+        {
+            return BuildTelegramFullFidelityPrompt(text);
+        }
+
         if (text.Length <= TelegramLongContextThresholdChars)
         {
             return BuildTelegramConcisePrompt(text);
@@ -2732,6 +2912,27 @@ public sealed partial class CommandService
         }
 
         return BuildTelegramConcisePrompt($"[긴 입력 자동 요약]\n{compressed}");
+    }
+
+    private static bool ShouldSkipTelegramDriftRecovery(
+        string contextualInput,
+        string effectiveTopicInput,
+        string preparedInput
+    )
+    {
+        var combined = $"{contextualInput}\n{effectiveTopicInput}\n{preparedInput}";
+        return combined.Contains("[최근 대화]", StringComparison.Ordinal)
+               || combined.Contains("[직전 주제]", StringComparison.Ordinal)
+               || combined.Contains("[정정 요청]", StringComparison.Ordinal)
+               || combined.Contains("[사용자 추가 피드백]", StringComparison.Ordinal)
+               || combined.Contains("[Project Context]", StringComparison.Ordinal)
+               || combined.Contains("[Active Skill", StringComparison.Ordinal)
+               || combined.Contains("[Think+ 참고 자료", StringComparison.Ordinal)
+               || combined.Contains("[첨부 텍스트 파일]", StringComparison.Ordinal)
+               || combined.Contains("[첨부 이미지/파일 분석 요약]", StringComparison.Ordinal)
+               || combined.Contains("[웹 컨텍스트]", StringComparison.Ordinal)
+               || combined.Contains("[검색 컨텍스트]", StringComparison.Ordinal)
+               || combined.Contains("[Forced", StringComparison.Ordinal);
     }
 
     private static string BuildTelegramCompressionPrompt(string input)
@@ -3097,6 +3298,25 @@ public sealed partial class CommandService
                 """;
     }
 
+    private static string BuildTelegramFullFidelityPrompt(string input)
+    {
+        var localNow = BuildLocalNowText();
+        return $"""
+                아래 요청에 한국어로 답하세요.
+                규칙:
+                - 사용자의 원 요구사항, 개수, 형식, 코드블록, 표, 첨부/검색/스킬 컨텍스트를 임의로 줄이지 마세요.
+                - 답변은 결론부터 시작하되, 필요한 설명과 근거는 충분히 포함하세요.
+                - 내부 컨텍스트 마커는 답변에 노출하지 말고, 사용자에게 필요한 내용만 자연스럽게 정리하세요.
+                - 시간 관련 질문은 아래 로컬 시간을 기준으로 답변하세요.
+
+                로컬 시간:
+                {localNow}
+
+                요청:
+                {input}
+                """;
+    }
+
     // 응답 본문 끝에 provider·model·active skill 정보를 짧은 footer로 붙인다.
     // 기존의 `[Single groq:gpt-...]` 헤더 대신 본문이 먼저 보이도록 하단으로 이동.
     private string AppendTelegramResponseFooter(
@@ -3146,11 +3366,12 @@ public sealed partial class CommandService
         normalized = MergeDetachedTelegramNumberLines(normalized);
         normalized = AddTelegramClaimSpacing(normalized);
         var safeMaxChars = Math.Max(0, maxChars);
-        var lines = normalized
-            .Split('\n')
-            .Take(safeMaxChars == 0 ? 200 : Math.Clamp(safeMaxChars / 16, 200, 400))
-            .ToArray();
-        return lines.Length == 0 ? normalized : string.Join('\n', lines).Trim();
+        if (safeMaxChars > 0 && normalized.Length > safeMaxChars)
+        {
+            return normalized[..safeMaxChars].TrimEnd() + "\n...(telegram_response_truncated)";
+        }
+
+        return normalized.Trim();
     }
 
     private static string ConvertMarkdownToTelegramPlainText(string text, bool keepMarkdownTables = false)

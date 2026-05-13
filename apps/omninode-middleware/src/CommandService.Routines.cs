@@ -42,6 +42,99 @@ public sealed partial class CommandService
         }
     }
 
+    public RoutineSchedulerStatus GetRoutineSchedulerStatus()
+    {
+        lock (_routineLock)
+        {
+            var routines = _routinesById.Values
+                .Where(routine => !IsLogicGraphRoutine(routine))
+                .ToArray();
+            var now = DateTimeOffset.UtcNow;
+            long? nextRunAtMs = null;
+            foreach (var routine in routines.Where(static routine => routine.Enabled))
+            {
+                var candidate = routine.NextRunUtc.ToUnixTimeMilliseconds();
+                if (!nextRunAtMs.HasValue || candidate < nextRunAtMs.Value)
+                {
+                    nextRunAtMs = candidate;
+                }
+            }
+
+            var schedulerEnabled = _routineSchedulerTask is null
+                || (!_routineSchedulerTask.IsFaulted && !_routineSchedulerTask.IsCanceled);
+            return new RoutineSchedulerStatus(
+                schedulerEnabled,
+                routines.Length,
+                routines.Count(static routine => routine.Enabled),
+                routines.Count(static routine => routine.Running),
+                routines.Count(routine => routine.Enabled && !routine.Running && routine.NextRunUtc <= now),
+                nextRunAtMs,
+                _routineSchedulerLastError
+            );
+        }
+    }
+
+    public RoutineExecutionPreviewResult PreviewRoutine(
+        string request,
+        string? executionMode,
+        string? scheduleSourceMode,
+        string? scheduleKind,
+        string? scheduleTime,
+        IReadOnlyList<int>? weekdays,
+        int? dayOfMonth,
+        string? timezoneId
+    )
+    {
+        var input = (request ?? string.Empty).Trim();
+        var warnings = new List<string>();
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            warnings.Add("루틴 요청이 비어 있습니다.");
+        }
+
+        var resolvedScheduleSourceMode = NormalizeRoutineScheduleSourceMode(scheduleSourceMode, input);
+        if (!TryResolveRoutineScheduleConfig(
+                input,
+                resolvedScheduleSourceMode,
+                scheduleKind,
+                scheduleTime,
+                weekdays,
+                dayOfMonth,
+                timezoneId,
+                out var scheduleConfig,
+                out var scheduleError
+            ))
+        {
+            warnings.Add(scheduleError);
+            scheduleConfig = BuildDailyRoutineScheduleConfig(8, 0, timezoneId ?? TimeZoneInfo.Local.Id);
+        }
+
+        var taskRequest = ResolveRoutineExecutionRequestText(input, BuildRoutineTitle(input), resolvedScheduleSourceMode);
+        var normalizedExecutionMode = NormalizeRoutineExecutionMode(executionMode);
+        var resolvedExecutionMode = ResolveRoutineExecutionMode(taskRequest, normalizedExecutionMode);
+        var route = ResolveRoutineExecutionRoute(taskRequest, normalizedExecutionMode);
+        if (resolvedExecutionMode == "browser_agent" && route.Urls.Count == 0)
+        {
+            warnings.Add("브라우저 에이전트는 시작 URL 또는 요청 원문 URL이 필요합니다.");
+        }
+
+        if (route.Mode == "script" && !_llmRouter.HasGroqApiKey())
+        {
+            warnings.Add("Groq API 키가 없어 스크립트 루틴 코드를 생성할 수 없습니다.");
+        }
+
+        return new RoutineExecutionPreviewResult(
+            taskRequest,
+            resolvedScheduleSourceMode,
+            scheduleConfig.Display,
+            scheduleConfig.Kind,
+            scheduleConfig.TimezoneId,
+            resolvedExecutionMode,
+            route.Mode,
+            warnings
+        );
+    }
+
     public async Task<RoutineActionResult> CreateRoutineAsync(
         string request,
         string source,
@@ -72,6 +165,7 @@ public sealed partial class CommandService
             NormalizeRoutineNotifyPolicy(null),
             NormalizeRoutineNotifyTelegram(null),
             scheduleConfig,
+            true,
             source,
             cancellationToken,
             progressCallback
@@ -98,6 +192,7 @@ public sealed partial class CommandService
         IReadOnlyList<int>? weekdays,
         int? dayOfMonth,
         string? timezoneId,
+        bool runImmediately,
         string source,
         CancellationToken cancellationToken,
         Action<RoutineProgressUpdate>? progressCallback = null
@@ -144,6 +239,7 @@ public sealed partial class CommandService
             NormalizeRoutineNotifyPolicy(notifyPolicy),
             NormalizeRoutineNotifyTelegram(notifyTelegram),
             scheduleConfig,
+            runImmediately,
             source,
             cancellationToken,
             progressCallback
@@ -312,11 +408,29 @@ public sealed partial class CommandService
         if ((requestChanged || scheduleChanged || scheduleSourceChanged || executionModeChanged)
             && string.Equals(nextExecutionRoute.Mode, "script", StringComparison.Ordinal))
         {
+            if (!_llmRouter.HasGroqApiKey())
+            {
+                return new RoutineActionResult(
+                    false,
+                    "루틴 스크립트 수정 실패: Groq API 키가 없어 실행 코드를 다시 만들 수 없습니다. 설정에서 Groq 키를 저장하거나 실행 모드를 일반 답변/URL 참조/브라우저 에이전트로 바꾸세요.",
+                    null
+                );
+            }
+
             generation = await GenerateRoutineImplementationAsync(
                 taskRequest,
                 new RoutineSchedule(scheduleConfig.Hour, scheduleConfig.Minute, scheduleConfig.Display),
                 cancellationToken
             );
+            var generationValidation = ValidateRoutineGeneratedCode(generation.Language, generation.Code, taskRequest);
+            if (!generationValidation.Ok)
+            {
+                return new RoutineActionResult(
+                    false,
+                    $"루틴 스크립트 생성 품질 검증 실패: {string.Join(" / ", generationValidation.Warnings)}",
+                    null
+                );
+            }
         }
 
         lock (_routineLock)
@@ -363,6 +477,8 @@ public sealed partial class CommandService
                 update.Planner = "acp";
                 update.PlannerModel = normalizedAgentProvider ?? "acp";
                 update.CoderModel = normalizedAgentModel ?? "browser-agent";
+                update.QualityStatus = "not_applicable";
+                update.QualityWarnings = new List<string>();
                 update.CronSessionTarget = "isolated";
                 update.CronWakeMode = "next-heartbeat";
                 update.CronPayloadKind = "agentTurn";
@@ -406,6 +522,8 @@ public sealed partial class CommandService
                 update.Planner = generation.PlannerProvider;
                 update.PlannerModel = generation.PlannerModel;
                 update.CoderModel = generation.CoderModel;
+                update.QualityStatus = generation.QualityStatus;
+                update.QualityWarnings = generation.QualityWarnings?.ToList() ?? new List<string>();
                 update.LastOutput = generation.Plan;
             }
             else if (!string.Equals(nextExecutionRoute.Mode, "script", StringComparison.Ordinal)
@@ -417,6 +535,8 @@ public sealed partial class CommandService
                 update.Planner = "gemini";
                 update.PlannerModel = ResolveRoutineLlmModel(nextExecutionRoute.Mode);
                 update.CoderModel = nextExecutionRoute.Mode;
+                update.QualityStatus = "not_applicable";
+                update.QualityWarnings = new List<string>();
                 update.CronSessionTarget = "main";
                 update.CronWakeMode = "next-heartbeat";
                 update.CronPayloadKind = "systemEvent";
@@ -458,6 +578,7 @@ public sealed partial class CommandService
         }
 
         RoutineDefinition? routine;
+        var runningMarked = false;
         lock (_routineLock)
         {
             if (!_routinesById.TryGetValue(key, out var found))
@@ -471,10 +592,31 @@ public sealed partial class CommandService
             }
 
             found.Running = true;
+            runningMarked = true;
             routine = found;
             SaveRoutineStateLocked();
         }
 
+        try
+        {
+            return await RunRoutineNowCoreAsync(key, routine, source, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (runningMarked)
+            {
+                EnsureRoutineNotRunning(key);
+            }
+        }
+    }
+
+    private async Task<RoutineActionResult> RunRoutineNowCoreAsync(
+        string key,
+        RoutineDefinition routine,
+        string source,
+        CancellationToken cancellationToken
+    )
+    {
         var startedAtUtc = DateTimeOffset.UtcNow;
         var taskRequest = ResolveRoutineExecutionRequestText(routine.Request, routine.Title, routine.ScheduleSourceMode);
         var executionRoute = ResolveRoutineExecutionRoute(taskRequest, routine.ExecutionMode);
@@ -556,8 +698,17 @@ public sealed partial class CommandService
                 {
                     var normalizedLanguage = NormalizeRoutineScriptLanguage(routine.Language);
                     var normalizedCode = string.IsNullOrWhiteSpace(routine.Code)
-                        ? BuildFallbackRoutineCode(taskRequest, new RoutineSchedule(routine.Hour, routine.Minute, routine.ScheduleText))
+                        ? string.Empty
                         : EnsureRoutineShebang(routine.Code, normalizedLanguage);
+                    if (!ShouldRunCronAgentTurnBridge(routine) && string.IsNullOrWhiteSpace(normalizedCode))
+                    {
+                        runStatus = "error";
+                        lastStatus = "error";
+                        runError = "루틴 실행 코드가 비어 있어 실행할 수 없습니다.";
+                        output = runError;
+                        break;
+                    }
+
                     if (!string.Equals(normalizedLanguage, routine.Language, StringComparison.Ordinal)
                         || !string.Equals(normalizedCode, routine.Code, StringComparison.Ordinal)
                         || string.IsNullOrWhiteSpace(routine.ScriptPath))
@@ -581,11 +732,29 @@ public sealed partial class CommandService
 
                     if (!ShouldRunCronAgentTurnBridge(routine) && RoutineCodeNeedsRepair(routine.Language, routine.Code))
                     {
+                        if (!_llmRouter.HasGroqApiKey())
+                        {
+                            runStatus = "error";
+                            lastStatus = "error";
+                            runError = "루틴 실행 코드 보정이 필요하지만 Groq API 키가 없어 재생성할 수 없습니다.";
+                            output = runError;
+                            break;
+                        }
+
                         var regenerated = await GenerateRoutineImplementationAsync(
                             taskRequest,
                             new RoutineSchedule(routine.Hour, routine.Minute, routine.ScheduleText),
                             cancellationToken
                         );
+                        var regeneratedValidation = ValidateRoutineGeneratedCode(regenerated.Language, regenerated.Code, taskRequest);
+                        if (!regeneratedValidation.Ok)
+                        {
+                            runStatus = "error";
+                            lastStatus = "error";
+                            runError = $"루틴 실행 코드 재생성 품질 검증 실패: {string.Join(" / ", regeneratedValidation.Warnings)}";
+                            output = runError;
+                            break;
+                        }
 
                         lock (_routineLock)
                         {
@@ -601,6 +770,8 @@ public sealed partial class CommandService
                                 update.Planner = regenerated.PlannerProvider;
                                 update.PlannerModel = regenerated.PlannerModel;
                                 update.CoderModel = regenerated.CoderModel;
+                                update.QualityStatus = regenerated.QualityStatus;
+                                update.QualityWarnings = regenerated.QualityWarnings?.ToList() ?? new List<string>();
                                 update.LastOutput = regenerated.Plan;
                                 SaveRoutineStateLocked();
                                 routine = update;
@@ -840,6 +1011,24 @@ public sealed partial class CommandService
                 string.IsNullOrWhiteSpace(entry.Error) ? null : entry.Error,
                 content
             );
+        }
+    }
+
+    private void EnsureRoutineNotRunning(string routineId)
+    {
+        var key = (routineId ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return;
+        }
+
+        lock (_routineLock)
+        {
+            if (_routinesById.TryGetValue(key, out var routine) && routine.Running)
+            {
+                routine.Running = false;
+                SaveRoutineStateLocked();
+            }
         }
     }
 

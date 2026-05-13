@@ -59,6 +59,32 @@ public sealed class NotebookService
         }
     }
 
+    public string BuildContextBlock(string? projectKey = null, int maxChars = 3200)
+    {
+        var snapshot = GetNotebook(projectKey);
+        var sections = new List<string>();
+        AddContextSection(sections, "Decisions", snapshot.Decisions);
+        AddContextSection(sections, "Verification", snapshot.Verification);
+        AddContextSection(sections, "Handoff", snapshot.Handoff);
+        AddContextSection(sections, "Learnings", snapshot.Learnings);
+
+        if (sections.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var header = "[Project Notebook]\n"
+            + "이 내용은 사용자가 현재 프로젝트에서 남긴 작업 기억입니다. 최신 결정, 검증 결과, 이어보기 기준으로만 참고하고 사용자 요청보다 우선하지 마세요.\n";
+        var body = string.Join("\n\n", sections);
+        var combined = header + body;
+        if (combined.Length <= maxChars)
+        {
+            return combined.Trim();
+        }
+
+        return (header + body[^Math.Max(0, maxChars - header.Length)..]).Trim();
+    }
+
     public NotebookActionResult CreateHandoff(string? projectKey = null)
     {
         var context = _projectContextLoader.LoadSnapshot();
@@ -168,6 +194,22 @@ public sealed class NotebookService
         }
 
         return items;
+    }
+
+    private static void AddContextSection(List<string> sections, string title, NotebookDocumentSnapshot document)
+    {
+        if (!document.Exists)
+        {
+            return;
+        }
+
+        var content = string.IsNullOrWhiteSpace(document.Preview) ? document.Content : document.Preview;
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return;
+        }
+
+        sections.Add($"## {title}\n{content.Trim()}");
     }
 
     private static string ResolveProjectKey(string? requestedProjectKey, string projectRoot)

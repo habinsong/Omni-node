@@ -88,6 +88,19 @@ public sealed class TelegramUpdateLoop
 
                     if (hasCallback)
                     {
+                        if (!TryBuildTelegramTurnContext(update, isCallback: true, out var callbackContext))
+                        {
+                            await _telegramClient.AnswerCallbackQueryAsync(update.CallbackQueryId!, "컨텍스트 오류", cancellationToken);
+                            continue;
+                        }
+                        if (!IsAllowedCallbackCommand(update.CallbackData))
+                        {
+                            await _telegramClient.AnswerCallbackQueryAsync(update.CallbackQueryId!, "허용되지 않은 버튼입니다.", cancellationToken);
+                            await TrySendOrQueueStandaloneMessageAsync("허용되지 않은 버튼 요청입니다.", "callback_forbidden_failed", cancellationToken);
+                            TryPersistOffset();
+                            continue;
+                        }
+
                         // callback_data 자체를 사용자 입력처럼 취급해 명령 흐름으로 흘려보낸다.
                         await _telegramClient.AnswerCallbackQueryAsync(update.CallbackQueryId!, "처리 중…", cancellationToken);
                         var callbackInput = update.CallbackData!.Trim();
@@ -100,7 +113,8 @@ public sealed class TelegramUpdateLoop
                                 Array.Empty<InputAttachment>(),
                                 null,
                                 true,
-                                null
+                                null,
+                                callbackContext
                             );
                             await SendTelegramReplyAsync(null, callbackResult, cancellationToken);
                         }
@@ -125,6 +139,7 @@ public sealed class TelegramUpdateLoop
                     }
 
                     var input = hasText ? update.Text!.Trim() : "첨부 파일을 분석해줘";
+                    TryBuildTelegramTurnContext(update, isCallback: false, out var telegramContext);
                     var showProgressMessage = ShouldShowProgressMessage(input, hasAttachments);
                     int? progressMessageId = null;
                     CancellationTokenSource? progressCts = null;
@@ -149,7 +164,8 @@ public sealed class TelegramUpdateLoop
                             update.Attachments ?? Array.Empty<InputAttachment>(),
                             null,
                             true,
-                            progressStream
+                            progressStream,
+                            telegramContext
                         );
                         perfStopwatch.Stop();
                         var resultWithPerf = AppendElapsedTimeToFooter(result, perfStopwatch.ElapsedMilliseconds);
@@ -205,15 +221,22 @@ public sealed class TelegramUpdateLoop
 
         if (progressMessageId.HasValue && progressMessageId.Value > 0)
         {
-            var replaceResult = await _telegramClient.ReplaceMessageAsync(progressMessageId.Value, cleanedText, cancellationToken);
-            if (replaceResult.Success)
+            if (cleanedText.Length > 3800)
             {
-                if (buttonRows != null && buttonRows.Count > 0)
+                await _telegramClient.ReplaceMessageAsync(progressMessageId.Value, "응답이 길어 별도 메시지로 나눠 보냅니다.", cancellationToken);
+            }
+            else
+            {
+                var replaceResult = await _telegramClient.ReplaceMessageAsync(progressMessageId.Value, cleanedText, cancellationToken);
+                if (replaceResult.Success)
                 {
-                    // 본문은 이미 progress 메시지를 통해 갱신됐으므로 버튼만 짧은 후속 메시지로 전송.
-                    await _telegramClient.SendMessageWithButtonsAsync("⤵ 빠른 작업", buttonRows, cancellationToken);
+                    if (buttonRows != null && buttonRows.Count > 0)
+                    {
+                        // 본문은 이미 progress 메시지를 통해 갱신됐으므로 버튼만 짧은 후속 메시지로 전송.
+                        await _telegramClient.SendMessageWithButtonsAsync("⤵ 빠른 작업", buttonRows, cancellationToken);
+                    }
+                    return;
                 }
-                return;
             }
         }
 
@@ -230,6 +253,45 @@ public sealed class TelegramUpdateLoop
         {
             QueueReplyForRetry(cleanedText, progressMessageId.HasValue ? "reply_replace_and_send_failed" : "reply_send_failed");
         }
+    }
+
+    private static bool TryBuildTelegramTurnContext(TelegramUpdate update, bool isCallback, out TelegramTurnContext? context)
+    {
+        context = null;
+        var chatId = (update.ChatId ?? string.Empty).Trim();
+        var fromUserId = (update.FromUserId ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(chatId) && string.IsNullOrWhiteSpace(fromUserId))
+        {
+            return false;
+        }
+
+        var binding = !string.IsNullOrWhiteSpace(fromUserId)
+            ? $"telegram:user:{fromUserId}"
+            : $"telegram:chat:{chatId}";
+        context = new TelegramTurnContext(chatId, fromUserId, binding, isCallback);
+        return true;
+    }
+
+    private static bool IsAllowedCallbackCommand(string? callbackData)
+    {
+        var normalized = (callbackData ?? string.Empty).Trim();
+        if (normalized.Length == 0 || normalized.Length > 96 || !normalized.StartsWith("/", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var firstLine = normalized.Split('\n', 2)[0].Trim();
+        return firstLine.StartsWith("/skill ", StringComparison.OrdinalIgnoreCase)
+               || firstLine.Equals("/skill", StringComparison.OrdinalIgnoreCase)
+               || firstLine.StartsWith("/think ", StringComparison.OrdinalIgnoreCase)
+               || firstLine.Equals("/think", StringComparison.OrdinalIgnoreCase)
+               || firstLine.StartsWith("/web ", StringComparison.OrdinalIgnoreCase)
+               || firstLine.Equals("/web", StringComparison.OrdinalIgnoreCase)
+               || firstLine.StartsWith("/help", StringComparison.OrdinalIgnoreCase)
+               || firstLine.StartsWith("/history", StringComparison.OrdinalIgnoreCase)
+               || firstLine.StartsWith("/log", StringComparison.OrdinalIgnoreCase)
+               || firstLine.StartsWith("/coding ", StringComparison.OrdinalIgnoreCase)
+               || firstLine.Equals("/coding", StringComparison.OrdinalIgnoreCase);
     }
 
     // 응답 본문이 footer("\n\n— provider·model · ...")를 가지고 있으면 그 끝에 ⏱ 시간을 append.

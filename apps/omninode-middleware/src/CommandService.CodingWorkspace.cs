@@ -279,7 +279,6 @@ public sealed partial class CommandService
         }
 
         normalized = CollapseKnownCodingRootPrefixes(normalized);
-        normalized = TryRestoreUnixAbsolutePath(normalized);
         if (!Path.IsPathRooted(normalized))
         {
             normalized = normalized.Replace('\\', '/').Trim('/');
@@ -294,11 +293,11 @@ public sealed partial class CommandService
                 return Path.GetRelativePath(workspaceRoot, fullPath).Replace('\\', '/');
             }
 
-            return fullPath;
+            return string.Empty;
         }
         catch
         {
-            return normalized.Replace('\\', '/');
+            return string.Empty;
         }
     }
 
@@ -517,10 +516,22 @@ public sealed partial class CommandService
 
         if (Path.IsPathRooted(raw))
         {
-            return Path.GetFullPath(raw);
+            var fullPath = Path.GetFullPath(raw);
+            if (!IsPathUnderRoot(fullPath, workspaceRoot))
+            {
+                throw new InvalidOperationException("workspace 밖 경로는 코딩탭 자동 작업에서 사용할 수 없습니다.");
+            }
+
+            return fullPath;
         }
 
-        return Path.GetFullPath(Path.Combine(workspaceRoot, raw));
+        var resolved = Path.GetFullPath(Path.Combine(workspaceRoot, raw));
+        if (!IsPathUnderRoot(resolved, workspaceRoot))
+        {
+            throw new InvalidOperationException("workspace 밖 경로는 코딩탭 자동 작업에서 사용할 수 없습니다.");
+        }
+
+        return resolved;
     }
 
     private static string TryBuildExplicitVerificationCommand(
@@ -626,9 +637,17 @@ public sealed partial class CommandService
         var preferredNames = normalizedLanguage switch
         {
             "javascript" => new[] { "index.js", "main.js", "app.js", "server.js", "cli.js" },
+            "typescript" => new[] { "index.ts", "main.ts", "app.ts", "server.ts", "cli.ts", "main.tsx", "App.tsx" },
+            "react-vite" => new[] { "main.tsx", "main.jsx", "App.tsx", "App.jsx", "index.html" },
             "python" => new[] { "main.py", "app.py", "run.py", "cli.py" },
             "java" => new[] { "Main.java", "App.java", "Run.java" },
+            "go" => new[] { "main.go" },
+            "rust" => new[] { "main.rs", "lib.rs" },
+            "php" => new[] { "index.php", "app.php" },
+            "ruby" => new[] { "app.rb", "main.rb" },
+            "swift" => new[] { "main.swift" },
             "c" => new[] { "main.c", "app.c" },
+            "cpp" => new[] { "main.cpp", "app.cpp" },
             "bash" => new[] { "run.sh", "main.sh" },
             _ => Array.Empty<string>()
         };
@@ -660,7 +679,7 @@ public sealed partial class CommandService
             return false;
         }
 
-        if (normalizedLanguage is not ("python" or "javascript" or "bash"))
+        if (normalizedLanguage is not ("python" or "javascript" or "typescript" or "react-vite" or "go" or "rust" or "php" or "ruby" or "swift" or "bash"))
         {
             return false;
         }

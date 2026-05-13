@@ -305,12 +305,19 @@ export function renderRoutineTab(props) {
     routineCreateForm,
     routineEditForm,
     routineProgress,
+    routinePreview,
+    routineSchedulerStatus,
+    routineListQuery,
+    routineListFilter,
+    setRoutineListQuery,
+    setRoutineListFilter,
     routineAgentProviderOptions,
     routineAgentModelOptions,
     patchRoutineForm,
     toggleRoutineWeekday,
     createRoutineFromUi,
     updateRoutineFromUi,
+    requestRoutinePreview,
     onInputKeyDown,
     refreshRoutines,
     setRoutineSelectedId,
@@ -333,6 +340,31 @@ export function renderRoutineTab(props) {
   const selectedRuns = Array.isArray(selected?.runs) ? selected.runs : [];
   const isRoutineCreatePending = !!(routineProgress && routineProgress.active && routineProgress.operation === "create");
   const stats = computeRoutineStats(routines);
+  const normalizedQuery = `${routineListQuery || ""}`.trim().toLowerCase();
+  const activeFilter = `${routineListFilter || "all"}`.trim().toLowerCase() || "all";
+  const visibleRoutines = routines.filter((item) => {
+    if (!item) return false;
+    const mode = normalizeRoutineExecutionModeValue(item.resolvedExecutionMode || item.executionMode);
+    const statusText = `${item.lastStatus || ""}`.toLowerCase();
+    const qualityStatus = `${item.qualityStatus || ""}`.toLowerCase();
+    const matchesFilter = activeFilter === "all"
+      || (activeFilter === "enabled" && item.enabled)
+      || (activeFilter === "disabled" && !item.enabled)
+      || (activeFilter === "failed" && /error|fail|timeout|blocked/i.test(statusText))
+      || (activeFilter === "quality" && qualityStatus === "quality_failed")
+      || (activeFilter === "browser" && mode === "browser_agent");
+    if (!matchesFilter) return false;
+    if (!normalizedQuery) return true;
+    return [
+      item.title,
+      item.id,
+      item.request,
+      item.scheduleText,
+      item.lastStatus,
+      item.resolvedExecutionMode,
+      item.executionMode
+    ].some((value) => `${value || ""}`.toLowerCase().includes(normalizedQuery));
+  });
   const enabledCount = stats.enabled;
   const browserAgentCount = stats.browserAgent;
   const failedCount = stats.failed;
@@ -393,6 +425,15 @@ export function renderRoutineTab(props) {
       e("div", { className: "routine-overview-value" }, `${failedCount}`),
       e("div", { className: "routine-overview-note" }, "마지막 실행 기준 오류/타임아웃")
     ),
+    e("div", { className: "routine-overview-card" },
+      e("div", { className: "routine-overview-label" }, "스케줄러"),
+      e("div", { className: "routine-overview-value" }, routineSchedulerStatus?.enabled === false ? "중지" : "동작"),
+      e("div", { className: "routine-overview-note" },
+        routineSchedulerStatus
+          ? `실행 중 ${routineSchedulerStatus.runningRoutines || 0} · 대기 ${routineSchedulerStatus.dueRoutines || 0}`
+          : "상태 확인 전"
+      )
+    ),
     e("button", {
       type: "button",
       className: "routine-overview-card routine-overview-action-card",
@@ -407,9 +448,11 @@ export function renderRoutineTab(props) {
   const RoutineCreateWizard = ensureWizardComponent(e);
   const createPanel = e(RoutineCreateWizard, {
     routineCreateForm,
+    routinePreview,
     patchRoutineForm,
     toggleRoutineWeekday,
     createRoutineFromUi,
+    requestRoutinePreview,
     onInputKeyDown,
     isRoutineCreatePending,
     routineAgentProviderOptions,
@@ -427,10 +470,35 @@ export function renderRoutineTab(props) {
       ),
       e("div", { className: "routine-library-meta" }, `${enabledCount}개 활성`)
     ),
+    e("div", { className: "routine-list-tools" },
+      e("input", {
+        className: "input routine-list-search",
+        value: routineListQuery || "",
+        onChange: (event) => setRoutineListQuery(event.target.value),
+        placeholder: "루틴 검색"
+      }),
+      e("div", { className: "routine-filter-strip" },
+        [
+          ["all", "전체"],
+          ["enabled", "활성"],
+          ["disabled", "비활성"],
+          ["failed", "오류"],
+          ["quality", "품질"],
+          ["browser", "브라우저"]
+        ].map(([key, label]) => e("button", {
+          key,
+          type: "button",
+          className: `routine-filter-chip ${activeFilter === key ? "active" : ""}`,
+          onClick: () => setRoutineListFilter(key)
+        }, label))
+      )
+    ),
     e("div", { className: "routine-list" },
       routines.length === 0
         ? e("div", { className: "empty routine-empty-state" }, "등록된 루틴이 없습니다.")
-        : routines.map((item) => e(
+        : visibleRoutines.length === 0
+          ? e("div", { className: "empty routine-empty-state" }, "검색/필터 조건에 맞는 루틴이 없습니다.")
+          : visibleRoutines.map((item) => e(
           "button",
           {
             key: item.id,
@@ -452,6 +520,9 @@ export function renderRoutineTab(props) {
               ? e("span", { className: "meta-chip neutral" }, formatRoutineAgentToolProfileLabel(item.agentToolProfile))
               : null,
             e("span", { className: "meta-chip neutral" }, normalizeRoutineScheduleSourceMode(item.scheduleSourceMode, "manual") === "auto" ? "자동" : "수동"),
+            item.qualityStatus === "quality_failed"
+              ? e("span", { className: "meta-chip danger" }, "품질 확인 필요")
+              : null,
             e("span", { className: "meta-chip neutral" }, item.scheduleText || "-"),
             e("span", { className: "meta-chip neutral" }, item.lastRunLocal ? `최근 ${item.lastRunLocal}` : "실행 전")
           ),
@@ -524,6 +595,14 @@ export function renderRoutineTab(props) {
           ),
           e("div", { className: "routine-request-preview" }, selectedRequestPreview)
         ),
+        selected.qualityStatus === "quality_failed" || (Array.isArray(selected.qualityWarnings) && selected.qualityWarnings.length > 0)
+          ? e("div", { className: "routine-quality-panel" },
+            e("strong", null, "품질 확인 필요"),
+            e("ul", null, ...(selected.qualityWarnings || ["품질 검증을 통과하지 못했습니다."]).map((warning, index) =>
+              e("li", { key: `quality-${index}` }, warning)
+            ))
+          )
+          : null,
         e("div", { className: "routine-stats-grid" },
           e("div", { className: "routine-stat-card" },
             e("span", { className: "routine-stat-label" }, "다음 실행"),
@@ -558,6 +637,10 @@ export function renderRoutineTab(props) {
           e("div", { className: "routine-stat-card" },
             e("span", { className: "routine-stat-label" }, "알림 정책"),
             e("strong", null, normalizeRoutineNotifyPolicy(selected.notifyPolicy, "always"))
+          ),
+          e("div", { className: "routine-stat-card routine-stat-card-wide" },
+            e("span", { className: "routine-stat-label" }, "실행 명령"),
+            e("strong", null, selected.runCommand || "-")
           )
         ),
         e("div", { className: "routine-detail-grid" },

@@ -27,8 +27,18 @@ export function requestLogicGraphDelete(send, graphId, options = {}) {
   return send({ type: "logic_graph_delete", graphId }, options)
 }
 
-export function requestLogicGraphRun(send, graphId, runInput, options = {}) {
-  return send({ type: "logic_graph_run", graphId, logicRunInput: runInput || "" }, options)
+export function requestLogicGraphRun(send, graphId, runInput, graphOrOptions = null, maybeOptions = {}) {
+  const hasGraphPayload = graphOrOptions
+    && typeof graphOrOptions === "object"
+    && !("silent" in graphOrOptions)
+    && !("queueIfClosed" in graphOrOptions)
+  const options = hasGraphPayload ? maybeOptions : (graphOrOptions || {})
+  return send({
+    type: "logic_graph_run",
+    graphId,
+    logicRunInput: runInput || "",
+    ...(hasGraphPayload ? { logicGraph: graphOrOptions } : {})
+  }, options)
 }
 
 export function requestLogicGraphRunGet(send, runId, options = {}) {

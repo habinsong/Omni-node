@@ -3557,6 +3557,7 @@ public sealed partial class WebSocketGateway
             long? timestamp = null;
             bool? enabled = null;
             bool? agentUsePlaywright = null;
+            bool? runImmediately = null;
             bool? overwrite = null;
             bool? compactConversation = null;
             bool? includeDisabled = null;
@@ -4357,6 +4358,18 @@ public sealed partial class WebSocketGateway
                 }
             }
 
+            if (doc.RootElement.TryGetProperty("runImmediately", out var runImmediatelyElement))
+            {
+                if (runImmediatelyElement.ValueKind == JsonValueKind.True)
+                {
+                    runImmediately = true;
+                }
+                else if (runImmediatelyElement.ValueKind == JsonValueKind.False)
+                {
+                    runImmediately = false;
+                }
+            }
+
             if (doc.RootElement.TryGetProperty("overwrite", out var overwriteElement))
             {
                 if (overwriteElement.ValueKind == JsonValueKind.True)
@@ -4737,6 +4750,7 @@ public sealed partial class WebSocketGateway
                 Timestamp = timestamp,
                 Enabled = enabled,
                 AgentUsePlaywright = agentUsePlaywright,
+                RunImmediately = runImmediately,
                 Overwrite = overwrite,
                 CompactConversation = compactConversation,
                 IncludeDisabled = includeDisabled,

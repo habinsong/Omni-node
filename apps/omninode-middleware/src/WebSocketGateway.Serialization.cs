@@ -176,6 +176,9 @@ public sealed partial class WebSocketGateway
         builder.Append($"\"timezoneId\":\"{EscapeJson(routine.TimezoneId)}\",");
         builder.Append($"\"timeOfDay\":\"{EscapeJson(routine.TimeOfDay)}\",");
         builder.Append($"\"dayOfMonth\":{(routine.DayOfMonth.HasValue ? routine.DayOfMonth.Value.ToString(CultureInfo.InvariantCulture) : "null")},");
+        builder.Append($"\"qualityStatus\":\"{EscapeJson(routine.QualityStatus)}\",");
+        builder.Append($"\"qualityWarnings\":{BuildStringArrayJson(routine.QualityWarnings)},");
+        builder.Append($"\"runCommand\":\"{EscapeJson(routine.RunCommand)}\",");
         builder.Append("\"weekdays\":[");
         for (var i = 0; i < routine.Weekdays.Count; i++)
         {

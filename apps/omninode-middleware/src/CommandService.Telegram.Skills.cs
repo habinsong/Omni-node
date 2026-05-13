@@ -418,11 +418,11 @@ public sealed partial class CommandService
             return $"스킬을 찾지 못했습니다: {name}";
         }
 
-        var session = SessionContext.Create(EnsureTelegramLinkedConversation(), "telegram");
-        if (!string.IsNullOrWhiteSpace(session.SessionId))
+        var key = ResolveTelegramStateKey();
+        if (!string.IsNullOrWhiteSpace(key))
         {
-            _activeSkillByThread[session.SessionId] = skill.Name;
-            PersistActiveSkillForThread(session.SessionId, skill.Name);
+            _activeSkillByThread[key] = skill.Name;
+            PersistActiveSkillForThread(key, skill.Name);
         }
 
         _auditLogger.Log("telegram", "skill_activate", "ok", $"name={skill.Name} scope={skill.Scope}");
@@ -444,9 +444,9 @@ public sealed partial class CommandService
     // 현재 텔레그램 thread에 활성화된 스킬 정보를 반환. 없으면 안내.
     private string BuildTelegramSkillStatusResponse()
     {
-        var session = SessionContext.Create(EnsureTelegramLinkedConversation(), "telegram");
-        if (string.IsNullOrWhiteSpace(session.SessionId)
-            || !_activeSkillByThread.TryGetValue(session.SessionId, out var active)
+        var key = ResolveTelegramStateKey();
+        if (string.IsNullOrWhiteSpace(key)
+            || !_activeSkillByThread.TryGetValue(key, out var active)
             || string.IsNullOrWhiteSpace(active))
         {
             return AppendTelegramInlineButtons(
@@ -485,11 +485,11 @@ public sealed partial class CommandService
 
     private string DeactivateTelegramSkill()
     {
-        var session = SessionContext.Create(EnsureTelegramLinkedConversation(), "telegram");
-        if (!string.IsNullOrWhiteSpace(session.SessionId)
-            && _activeSkillByThread.TryRemove(session.SessionId, out var skillName))
+        var key = ResolveTelegramStateKey();
+        if (!string.IsNullOrWhiteSpace(key)
+            && _activeSkillByThread.TryRemove(key, out var skillName))
         {
-            PersistActiveSkillForThread(session.SessionId, null);
+            PersistActiveSkillForThread(key, null);
             _auditLogger.Log("telegram", "skill_deactivate", "ok", $"name={skillName}");
             return $"`{skillName}` 스킬을 해제했습니다.";
         }

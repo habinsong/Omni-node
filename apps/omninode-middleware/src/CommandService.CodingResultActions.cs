@@ -235,19 +235,67 @@ public sealed partial class CommandService
 
         if (string.Equals(normalizedLanguage, "javascript", StringComparison.OrdinalIgnoreCase))
         {
+            var projectCommand = TryBuildNodeProjectRerunCommand(target.RunDirectory, availableFiles);
+            if (!string.IsNullOrWhiteSpace(projectCommand))
+            {
+                return new LatestCodingExecutionCommandPlan(projectCommand, projectCommand);
+            }
+
             var displayCommand = $"node {EscapeShellArg(entryPath)}";
             return new LatestCodingExecutionCommandPlan(displayCommand, displayCommand);
         }
 
+        if (string.Equals(normalizedLanguage, "csharp", StringComparison.OrdinalIgnoreCase))
+        {
+            var projectCommand = TryBuildDotnetProjectRerunCommand(target.RunDirectory, availableFiles);
+            if (!string.IsNullOrWhiteSpace(projectCommand))
+            {
+                return new LatestCodingExecutionCommandPlan(projectCommand, projectCommand);
+            }
+        }
+
         if (string.Equals(normalizedLanguage, "java", StringComparison.OrdinalIgnoreCase))
         {
+            var projectCommand = TryBuildJvmProjectRerunCommand(target.RunDirectory, availableFiles);
+            if (!string.IsNullOrWhiteSpace(projectCommand))
+            {
+                return new LatestCodingExecutionCommandPlan(projectCommand, projectCommand);
+            }
+
             var actualCommand = BuildJavaFallbackCommand(target.RunDirectory, entryPath);
             return new LatestCodingExecutionCommandPlan(actualCommand, actualCommand);
         }
 
+        if (string.Equals(normalizedLanguage, "kotlin", StringComparison.OrdinalIgnoreCase))
+        {
+            var projectCommand = TryBuildJvmProjectRerunCommand(target.RunDirectory, availableFiles);
+            if (!string.IsNullOrWhiteSpace(projectCommand))
+            {
+                return new LatestCodingExecutionCommandPlan(projectCommand, projectCommand);
+            }
+        }
+
         if (string.Equals(normalizedLanguage, "c", StringComparison.OrdinalIgnoreCase))
         {
+            var projectCommand = TryBuildNativeProjectRerunCommand(target.RunDirectory, availableFiles);
+            if (!string.IsNullOrWhiteSpace(projectCommand))
+            {
+                return new LatestCodingExecutionCommandPlan(projectCommand, projectCommand);
+            }
+
             var actualCommand = BuildCFallbackCommand(entryPath, availableFiles);
+            return new LatestCodingExecutionCommandPlan(actualCommand, actualCommand);
+        }
+
+        if (string.Equals(normalizedLanguage, "cpp", StringComparison.OrdinalIgnoreCase))
+        {
+            var projectCommand = TryBuildNativeProjectRerunCommand(target.RunDirectory, availableFiles);
+            if (!string.IsNullOrWhiteSpace(projectCommand))
+            {
+                return new LatestCodingExecutionCommandPlan(projectCommand, projectCommand);
+            }
+
+            var actualCommand = BuildCppFallbackCommand(entryPath, availableFiles);
             return new LatestCodingExecutionCommandPlan(actualCommand, actualCommand);
         }
 
@@ -315,13 +363,14 @@ public sealed partial class CommandService
         var workspaceSafe = EscapeShellArg(runDirectory);
         var moduleCheckCommand = BuildInteractivePythonModuleAvailabilityCommand(interactiveModules);
         var launchCommand = $"python3 {EscapeShellArg(entryPath)}";
+        var runtimeLaunchCommand = $"python {EscapeShellArg(entryPath)}";
         if (ShouldLaunchInteractivePythonInTerminal(interactiveModules))
         {
             return BuildInteractivePythonTerminalLaunchCommand(
                 runDirectory,
                 sourceArgs,
                 moduleCheckCommand,
-                launchCommand
+                runtimeLaunchCommand
             );
         }
 
@@ -329,7 +378,7 @@ public sealed partial class CommandService
             runDirectory,
             sourceArgs,
             moduleCheckCommand,
-            launchCommand
+            runtimeLaunchCommand
         );
     }
 
@@ -514,12 +563,94 @@ public sealed partial class CommandService
         var safeEntry = EscapeShellArg(entryPath);
         return normalizedLanguage switch
         {
-            "python" => $"python3 {safeEntry}",
-            "javascript" => $"if command -v node >/dev/null 2>&1; then node {safeEntry}; else echo 'node 없음'; exit 1; fi",
+            "python" => OperatingSystem.IsWindows() ? $"python {safeEntry}" : $"python3 {safeEntry}",
+            "javascript" => TryBuildNodeProjectRerunCommand(runDirectory, availableFiles) is { Length: > 0 } nodeCommand ? nodeCommand : BuildRequiredProgramCommand("node", $"node {safeEntry}", "node 없음"),
+            "csharp" => TryBuildDotnetProjectRerunCommand(runDirectory, availableFiles),
             "java" => BuildJavaFallbackCommand(runDirectory, entryPath),
+            "kotlin" => TryBuildJvmProjectRerunCommand(runDirectory, availableFiles),
             "c" => BuildCFallbackCommand(entryPath, availableFiles),
+            "cpp" => BuildCppFallbackCommand(entryPath, availableFiles),
             _ => string.Empty
         };
+    }
+
+    private static string TryBuildNodeProjectRerunCommand(string runDirectory, IReadOnlyList<string> changedFiles)
+    {
+        var root = FindNearestRerunRootWithFile(runDirectory, changedFiles, "package.json");
+        if (string.IsNullOrWhiteSpace(root))
+        {
+            return string.Empty;
+        }
+
+        var packageText = SafeReadAllText(Path.Combine(root, "package.json"));
+        var rootSafe = EscapeShellArg(root);
+        var cdRoot = OperatingSystem.IsWindows() ? $"cd /d {rootSafe}" : $"cd {rootSafe}";
+        if (packageText.Contains("\"start\"", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{cdRoot} && npm install --no-fund --no-audit && npm start";
+        }
+
+        if (packageText.Contains("\"build\"", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{cdRoot} && npm install --no-fund --no-audit && npm run build";
+        }
+
+        return $"{cdRoot} && npm install --no-fund --no-audit";
+    }
+
+    private static string TryBuildDotnetProjectRerunCommand(string runDirectory, IReadOnlyList<string> changedFiles)
+    {
+        var projectFile = (changedFiles ?? Array.Empty<string>())
+            .FirstOrDefault(path => path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) && File.Exists(path))
+            ?? Directory.EnumerateFiles(runDirectory, "*.csproj", SearchOption.AllDirectories).FirstOrDefault();
+        return string.IsNullOrWhiteSpace(projectFile)
+            ? string.Empty
+            : $"dotnet restore {EscapeShellArg(projectFile)} && dotnet run --project {EscapeShellArg(projectFile)} --no-launch-profile";
+    }
+
+    private static string TryBuildJvmProjectRerunCommand(string runDirectory, IReadOnlyList<string> changedFiles)
+    {
+        var root = FindNearestRerunRootWithFile(runDirectory, changedFiles, "gradlew")
+            ?? FindNearestRerunRootWithFile(runDirectory, changedFiles, "build.gradle")
+            ?? FindNearestRerunRootWithFile(runDirectory, changedFiles, "build.gradle.kts");
+        if (!string.IsNullOrWhiteSpace(root))
+        {
+            var cdRoot = OperatingSystem.IsWindows() ? $"cd /d {EscapeShellArg(root)}" : $"cd {EscapeShellArg(root)}";
+            if (File.Exists(Path.Combine(root, "gradlew")))
+            {
+                var gradlew = OperatingSystem.IsWindows() ? "gradlew.bat" : "chmod +x ./gradlew && ./gradlew";
+                return $"{cdRoot} && {gradlew} --no-daemon run";
+            }
+
+            return $"{cdRoot} && {BuildRequiredProgramCommand("gradle", "gradle --no-daemon run", "gradle 없음")}";
+        }
+
+        return string.Empty;
+    }
+
+    private static string TryBuildNativeProjectRerunCommand(string runDirectory, IReadOnlyList<string> changedFiles)
+    {
+        var root = FindNearestRerunRootWithFile(runDirectory, changedFiles, "CMakeLists.txt");
+        if (!string.IsNullOrWhiteSpace(root))
+        {
+            var cdRoot = OperatingSystem.IsWindows() ? $"cd /d {EscapeShellArg(root)}" : $"cd {EscapeShellArg(root)}";
+            var runCommand = OperatingSystem.IsWindows()
+                ? "for /r build %f in (*.exe) do (%f & exit /b %ERRORLEVEL%) & echo 실행 파일을 찾지 못했습니다. 1>&2 & exit /b 1"
+                : "__omni_bin=$(find build -type f -perm -111 | head -1); if [ -n \"$__omni_bin\" ]; then \"$__omni_bin\"; else echo '실행 파일을 찾지 못했습니다.'; exit 1; fi";
+            return $"{cdRoot} && cmake -S . -B build && cmake --build build && {runCommand}";
+        }
+
+        root = FindNearestRerunRootWithFile(runDirectory, changedFiles, "Makefile");
+        if (!string.IsNullOrWhiteSpace(root))
+        {
+            var cdRoot = OperatingSystem.IsWindows() ? $"cd /d {EscapeShellArg(root)}" : $"cd {EscapeShellArg(root)}";
+            var runCommand = OperatingSystem.IsWindows()
+                ? "for /r . %f in (*.exe) do (%f & exit /b %ERRORLEVEL%) & echo 실행 파일을 찾지 못했습니다. 1>&2 & exit /b 1"
+                : "__omni_bin=$(find . -maxdepth 2 -type f -perm -111 | grep -v '/\\.' | head -1); if [ -n \"$__omni_bin\" ]; then \"$__omni_bin\"; else echo '실행 파일을 찾지 못했습니다.'; exit 1; fi";
+            return $"{cdRoot} && make && {runCommand}";
+        }
+
+        return string.Empty;
     }
 
     private string BuildJavaFallbackCommand(string runDirectory, string entryPath)
@@ -548,7 +679,58 @@ public sealed partial class CommandService
             cSources = new[] { EscapeShellArg(entryPath) };
         }
 
-        return $"cc -std=c11 -O2 {string.Join(" ", cSources)} -o app && ./app";
+        var output = OperatingSystem.IsWindows() ? "app.exe" : "app";
+        var run = OperatingSystem.IsWindows() ? ".\\app.exe" : "./app";
+        return $"cc -std=c11 -O2 {string.Join(" ", cSources)} -o {output} && {run}";
+    }
+
+    private string BuildCppFallbackCommand(string entryPath, IReadOnlyList<string> changedFiles)
+    {
+        var cppSources = (changedFiles ?? Array.Empty<string>())
+            .Where(path => (path.EndsWith(".cpp", StringComparison.OrdinalIgnoreCase)
+                            || path.EndsWith(".cc", StringComparison.OrdinalIgnoreCase)
+                            || path.EndsWith(".cxx", StringComparison.OrdinalIgnoreCase))
+                           && File.Exists(path))
+            .Select(EscapeShellArg)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (cppSources.Length == 0)
+        {
+            cppSources = new[] { EscapeShellArg(entryPath) };
+        }
+
+        var output = OperatingSystem.IsWindows() ? "app.exe" : "app";
+        var run = OperatingSystem.IsWindows() ? ".\\app.exe" : "./app";
+        if (OperatingSystem.IsWindows())
+        {
+            return $"(where c++ >NUL 2>NUL && c++ -std=c++17 -O2 {string.Join(" ", cppSources)} -o {output}) || (where g++ >NUL 2>NUL && g++ -std=c++17 -O2 {string.Join(" ", cppSources)} -o {output}) && {run}";
+        }
+
+        return $"compiler=$(command -v c++ || command -v g++ || true); if [ -n \"$compiler\" ]; then \"$compiler\" -std=c++17 -O2 {string.Join(" ", cppSources)} -o {output} && {run}; else echo 'c++ 없음'; exit 1; fi";
+    }
+
+    private static string? FindNearestRerunRootWithFile(string runDirectory, IReadOnlyList<string> changedFiles, string fileName)
+    {
+        foreach (var changedFile in changedFiles ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(changedFile))
+            {
+                continue;
+            }
+
+            var dir = File.Exists(changedFile) ? Path.GetDirectoryName(changedFile) : changedFile;
+            while (!string.IsNullOrWhiteSpace(dir) && IsPathUnderRoot(dir, runDirectory))
+            {
+                if (File.Exists(Path.Combine(dir, fileName)))
+                {
+                    return dir;
+                }
+
+                dir = Path.GetDirectoryName(dir);
+            }
+        }
+
+        return File.Exists(Path.Combine(runDirectory, fileName)) ? runDirectory : null;
     }
 
     private static string ResolveHtmlPreviewEntryPath(

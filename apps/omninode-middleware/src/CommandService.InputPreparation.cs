@@ -79,6 +79,7 @@ public sealed partial class CommandService
                 || isSkillCreationRequested
                 || isSkillDeactivationRequested
                 || hasActiveSkill);
+        var notebookContext = BuildNotebookPromptContext(normalizedInput, sessionKey);
 
         if (shouldIncludeProjectContext)
         {
@@ -263,6 +264,13 @@ public sealed partial class CommandService
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(notebookContext))
+        {
+            builder.AppendLine(notebookContext);
+            builder.AppendLine("--------------------------------------------------");
+            builder.AppendLine();
+        }
+
         builder.AppendLine(normalizedInput);
 
         var textAttachmentBlock = BuildTextAttachmentBlock(normalizedAttachments);
@@ -397,36 +405,52 @@ public sealed partial class CommandService
 
         var resolvedProvider = NormalizeProvider(provider, allowAuto: false);
         var resolvedModel = ResolveModel(resolvedProvider, model);
-        if (!CanProviderHandleAttachments(resolvedProvider, resolvedModel, nonTextAttachments))
-        {
-            return new InputPreparationResult(
-                shared.Text,
-                $"현재 선택 모델({resolvedProvider}:{resolvedModel})은 이미지/파일을 확인할 수 없습니다.",
-                shared.GuardFailure,
-                shared.Citations,
-                shared.RetryAttempt,
-                shared.RetryMaxAttempts,
-                shared.RetryStopReason
-            );
-        }
-
         var summaryPrompt = BuildAttachmentSummaryPrompt(input ?? string.Empty, nonTextAttachments);
         string summary;
-        if (resolvedProvider == "gemini")
+        var attachmentProvider = resolvedProvider;
+        var attachmentModel = resolvedModel;
+        var canSelectedProviderHandleAttachments = CanProviderHandleAttachments(resolvedProvider, resolvedModel, nonTextAttachments);
+        if (!canSelectedProviderHandleAttachments)
+        {
+            if (_llmRouter.HasGeminiApiKey())
+            {
+                attachmentProvider = "gemini";
+                attachmentModel = ResolveModel("gemini", null);
+            }
+            else if (_llmRouter.HasGroqApiKey() && nonTextAttachments.All(IsImageAttachment))
+            {
+                attachmentProvider = "groq";
+                attachmentModel = DefaultGroqPrimaryModel;
+            }
+            else
+            {
+                return new InputPreparationResult(
+                    shared.Text,
+                    $"현재 선택 모델({resolvedProvider}:{resolvedModel})은 이미지/파일을 확인할 수 없습니다. Gemini 또는 Groq vision 모델 API 키가 있으면 첨부 요약 후 전달할 수 있습니다.",
+                    shared.GuardFailure,
+                    shared.Citations,
+                    shared.RetryAttempt,
+                    shared.RetryMaxAttempts,
+                    shared.RetryStopReason
+                );
+            }
+        }
+
+        if (attachmentProvider == "gemini")
         {
             summary = await _llmRouter.GenerateGeminiMultimodalChatAsync(
                 summaryPrompt,
-                resolvedModel,
+                attachmentModel,
                 nonTextAttachments,
                 Math.Min(_config.ChatMaxOutputTokens, 1400),
                 cancellationToken
             );
         }
-        else if (resolvedProvider == "groq")
+        else if (attachmentProvider == "groq")
         {
             summary = await _llmRouter.GenerateGroqMultimodalChatAsync(
                 summaryPrompt,
-                resolvedModel,
+                attachmentModel,
                 nonTextAttachments,
                 Math.Min(_config.ChatMaxOutputTokens, 1400),
                 cancellationToken
@@ -455,6 +479,10 @@ public sealed partial class CommandService
         merged.AppendLine(shared.Text);
         merged.AppendLine();
         merged.AppendLine("[첨부 이미지/파일 분석 요약]");
+        if (!canSelectedProviderHandleAttachments)
+        {
+            merged.AppendLine($"선택 모델({resolvedProvider}:{resolvedModel})이 첨부를 직접 볼 수 없어 {attachmentProvider}:{attachmentModel}로 먼저 요약했습니다.");
+        }
         merged.AppendLine(cleanedSummary);
         return new InputPreparationResult(
             merged.ToString().Trim(),
@@ -835,6 +863,42 @@ public sealed partial class CommandService
                 "이전 대화",
                 "대화 기록",
                 "최근 대화");
+    }
+
+    private string BuildNotebookPromptContext(string input, string? sessionKey)
+    {
+        var normalized = (input ?? string.Empty).Trim().ToLowerInvariant();
+        var scope = TryExtractSessionScope(sessionKey);
+        var shouldUseNotebook =
+            scope == "coding"
+            || ContainsAny(
+                normalized,
+                "노트북",
+                "notebook",
+                "handoff",
+                "인수인계",
+                "이전 결정",
+                "결정한 것",
+                "검증한 것",
+                "이어",
+                "계속",
+                "방금",
+                "전에",
+                "아까"
+            );
+        if (!shouldUseNotebook)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            return _notebookService.BuildContextBlock();
+        }
+        catch
+        {
+            return string.Empty;
+        }
     }
 
     private static bool HasRelevantMemorySearchResults(

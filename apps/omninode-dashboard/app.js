@@ -975,6 +975,10 @@ import {
     const [routineSelectedId, setRoutineSelectedId] = useState(ROUTINE_STATE_DEFAULTS.routineSelectedId);
     const [routineDetailSubPane, setRoutineDetailSubPane] = useState("history");
     const [routineProgress, setRoutineProgress] = useState(() => createRoutineProgressState(ROUTINE_STATE_DEFAULTS.progress));
+    const [routinePreview, setRoutinePreview] = useState(ROUTINE_STATE_DEFAULTS.preview);
+    const [routineSchedulerStatus, setRoutineSchedulerStatus] = useState(ROUTINE_STATE_DEFAULTS.schedulerStatus);
+    const [routineListQuery, setRoutineListQuery] = useState(ROUTINE_STATE_DEFAULTS.listQuery);
+    const [routineListFilter, setRoutineListFilter] = useState(ROUTINE_STATE_DEFAULTS.listFilter);
     const [logicGraphs, setLogicGraphs] = useState(() => [...LOGIC_STATE_DEFAULTS.graphs]);
     const [logicSelectedGraphId, setLogicSelectedGraphId] = useState(LOGIC_STATE_DEFAULTS.selectedGraphId);
     const [logicDraftGraph, setLogicDraftGraph] = useState(() => cloneLogicGraph(LOGIC_STATE_DEFAULTS.draftGraph));
@@ -2050,6 +2054,14 @@ import {
       setNotebooksState((prev) => ({ ...prev, appendText: value }));
     }
 
+    function setNotebookFilterText(value) {
+      setNotebooksState((prev) => ({ ...prev, filterText: value }));
+    }
+
+    function setNotebookExpandedDocument(value) {
+      setNotebooksState((prev) => ({ ...prev, expandedDocument: value }));
+    }
+
     function refreshNotebook(options = {}) {
       if (!ensureAuthed()) {
         return false;
@@ -2106,7 +2118,14 @@ import {
       const ok = requestNotebookAppend(send, {
         projectKey,
         kind,
-        content
+        content,
+        source: override && override.source,
+        conversationId: override && override.conversationId,
+        provider: override && override.provider,
+        model: override && override.model,
+        language: override && override.language,
+        filePath: override && override.filePath,
+        tags: override && override.tags
       });
       if (!ok) {
         setNotebooksState((prev) => ({
@@ -2206,6 +2225,145 @@ import {
       return appendNotebook({
         kind: "verification",
         content
+      });
+    }
+
+    function appendAssistantMessageToNotebook(message, index) {
+      const text = `${message && message.text ? message.text : ""}`.trim();
+      if (!text) {
+        setNotebooksState((prev) => ({
+          ...prev,
+          lastError: "저장할 답변 내용이 없습니다."
+        }));
+        return false;
+      }
+
+      const meta = `${message.meta || ""}`;
+      return appendNotebook({
+        kind: "learning",
+        content: [
+          "대화 답변에서 저장한 내용",
+          "",
+          meta ? `응답: ${meta}` : "",
+          `메시지: ${index + 1}`,
+          "",
+          trimNotebookEntry(text, 2200)
+        ].filter(Boolean).join("\n"),
+        source: rootTab === "coding" ? "coding-chat" : "chat",
+        conversationId: currentConversationId,
+        tags: [rootTab, "assistant-response"].filter(Boolean)
+      });
+    }
+
+    function createPlanFromAssistantMessage(message, index) {
+      const text = `${message && message.text ? message.text : ""}`.trim();
+      if (!text) {
+        setPlansState((prev) => ({
+          ...prev,
+          lastError: "계획으로 만들 답변 내용이 없습니다."
+        }));
+        return false;
+      }
+
+      const meta = `${message.meta || ""}`.trim();
+      return openPlanCreateDraft(
+        buildPlanObjectiveFromSource("아래 답변을 실제 작업계획으로 정리", [
+          meta ? `응답: ${meta}` : "",
+          `메시지: ${index + 1}`,
+          "",
+          text
+        ].filter(Boolean).join("\n")),
+        "대화 답변",
+        {
+          constraints: [
+            "답변의 의도와 범위를 유지하기",
+            "실행 가능한 단계와 검증 기준을 분리하기",
+            "추가 확인이 필요한 부분은 첫 단계에 배치하기"
+          ]
+        }
+      );
+    }
+
+    function appendLatestCodingResultToNotebook() {
+      const result = currentConversationId ? codingResultByConversation[currentConversationId] : null;
+      if (!result) {
+        setNotebooksState((prev) => ({
+          ...prev,
+          lastError: "저장할 최근 코딩 결과가 없습니다."
+        }));
+        return false;
+      }
+
+      const execution = result.execution || {};
+      const changedFiles = Array.isArray(result.changedFiles) ? result.changedFiles : [];
+      const lines = [
+        "코딩 결과에서 저장한 검증 기록",
+        "",
+        `모드: ${result.mode || "-"}`,
+        `제공자: ${result.provider || "-"}`,
+        `모델: ${result.model || "-"}`,
+        `언어: ${result.language || "-"}`,
+        `상태: ${execution.status || "-"} (exit=${execution.exitCode ?? "-"})`,
+        `실행 명령: ${execution.command || "(none)"}`,
+        `작업 폴더: ${execution.runDirectory || "-"}`,
+        "",
+        `변경 파일: ${changedFiles.length}개`,
+        ...changedFiles.slice(0, 20).map((path) => `- ${humanPath(path, execution.runDirectory || "")}`),
+        "",
+        "요약:",
+        trimNotebookEntry(result.summary || result.code || "", 2200)
+      ];
+      return appendNotebook({
+        kind: "verification",
+        content: lines.join("\n").trim(),
+        source: "coding-result",
+        conversationId: result.conversationId || currentConversationId,
+        provider: result.provider,
+        model: result.model,
+        language: result.language,
+        filePath: execution.runDirectory,
+        tags: ["coding", "verification"]
+      });
+    }
+
+    function buildLatestCodingResultPlanObjective(result) {
+      const execution = result?.execution || {};
+      const changedFiles = Array.isArray(result?.changedFiles) ? result.changedFiles : [];
+      return [
+        "최근 코딩 결과를 이어서 완성하기 위한 작업계획 작성",
+        "",
+        `모드: ${result?.mode || "-"}`,
+        `제공자: ${result?.provider || "-"}`,
+        `모델: ${result?.model || "-"}`,
+        `언어: ${result?.language || "-"}`,
+        `상태: ${execution.status || "-"} (exit=${execution.exitCode ?? "-"})`,
+        `실행 명령: ${execution.command || "(none)"}`,
+        `작업 폴더: ${execution.runDirectory || "-"}`,
+        "",
+        `변경 파일: ${changedFiles.length}개`,
+        ...changedFiles.slice(0, 20).map((path) => `- ${humanPath(path, execution.runDirectory || "")}`),
+        "",
+        "요약:",
+        `${result?.summary || result?.code || ""}`.trim()
+      ].join("\n").trim();
+    }
+
+    function createPlanFromLatestCodingResult() {
+      const result = currentConversationId ? codingResultByConversation[currentConversationId] : null;
+      if (!result) {
+        setPlansState((prev) => ({
+          ...prev,
+          lastError: "계획으로 만들 최근 코딩 결과가 없습니다."
+        }));
+        return false;
+      }
+
+      return openPlanCreateDraft(buildLatestCodingResultPlanObjective(result), "최근 코딩 결과", {
+        constraints: [
+          "현재 산출물을 무시하고 새로 시작하지 않기",
+          "실패 로그와 미검증 항목을 먼저 해소하기",
+          "재실행 명령과 수동 확인 방법을 마지막 단계에 포함하기"
+        ]
       });
     }
 
@@ -4212,6 +4370,98 @@ import {
       }
     }
 
+    function buildRoutineTitleFromPrompt(prompt, sourceKey) {
+      const compact = `${prompt || ""}`.replace(/\s+/g, " ").trim();
+      if (compact) {
+        return compact.length <= 26 ? compact : `${compact.slice(0, 26).trimEnd()}...`;
+      }
+      return sourceKey?.startsWith("coding:") ? "코딩 작업 루틴" : "대화 작업 루틴";
+    }
+
+    function buildPlanObjectiveFromSource(title, text) {
+      const heading = `${title || ""}`.trim();
+      const body = `${text || ""}`.trim();
+      if (!heading) {
+        return body;
+      }
+      return `${heading}\n\n${body}`.trim();
+    }
+
+    function openPlanCreateDraft(objective, sourceLabel = "현재 입력", options = {}) {
+      if (!ensureAuthed()) {
+        return false;
+      }
+
+      const normalizedObjective = `${objective || ""}`.trim();
+      if (!normalizedObjective) {
+        setError(currentKey, "계획으로 만들 내용이 없습니다.");
+        return false;
+      }
+
+      const defaultConstraints = options.constraints || [
+        "사용자가 요청한 범위 외 변경 금지",
+        "기존 기능과 데이터 보존",
+        "실행 또는 검증 결과를 마지막에 확인"
+      ];
+      setPlansState((prev) => ({
+        ...prev,
+        createObjective: normalizedObjective,
+        createConstraintsText: Array.isArray(defaultConstraints) ? defaultConstraints.join("\n") : `${defaultConstraints || ""}`,
+        createMode: options.mode === "interview" ? "interview" : "fast",
+        lastError: "",
+        lastAction: "draft"
+      }));
+      setRootTab("automation");
+      setResponsivePane("automation", "plans");
+      log(`${sourceLabel}을 작업계획 생성폼으로 옮겼습니다.`, "info");
+      return true;
+    }
+
+    function createRoutineFromCurrentInput(sourceKey = currentKey) {
+      if (!ensureAuthed()) {
+        return;
+      }
+
+      const targetKey = `${sourceKey || currentKey || ""}`.trim();
+      const text = `${getComposerTextByKey(targetKey) || ""}`.trim();
+      if (!text) {
+        setError(targetKey || currentKey, "루틴으로 저장할 입력이 없습니다.");
+        return;
+      }
+
+      setRoutineCreateForm((prev) => createRoutineFormState({
+        ...prev,
+        title: buildRoutineTitleFromPrompt(text, targetKey),
+        request: text,
+        scheduleSourceMode: "auto",
+        runImmediately: false
+      }));
+      setRoutinePreview(null);
+      setError("routine:main", "");
+      setRootTab("routine");
+      setResponsivePane("routine", "create");
+      log("현재 입력을 루틴 생성폼으로 옮겼습니다.", "info");
+    }
+
+    function createPlanFromCurrentInput(sourceKey = currentKey) {
+      const targetKey = `${sourceKey || currentKey || ""}`.trim();
+      const text = `${getComposerTextByKey(targetKey) || ""}`.trim();
+      if (!text) {
+        setError(targetKey || currentKey, "계획으로 만들 입력이 없습니다.");
+        return false;
+      }
+
+      return openPlanCreateDraft(text, "현재 입력", {
+        constraints: targetKey.startsWith("coding:")
+          ? [
+              "요구사항을 구현 가능한 작업 단위로 나누기",
+              "파일 변경, 실행 명령, 검증 기준을 포함하기",
+              "기존 기능을 깨뜨리지 않기"
+            ]
+          : undefined
+      });
+    }
+
     function buildSpeechComposerText(baseText, transcript) {
       const base = `${baseText || ""}`.trimEnd();
       const spoken = `${transcript || ""}`.trim();
@@ -5218,6 +5468,8 @@ import {
           setRoutines,
           setRoutineSelectedId,
           setRoutineProgress,
+          setRoutinePreview,
+          setRoutineSchedulerStatus,
           setRoutineOutputPreview,
           setLogicGraphs,
           setLogicSelectedGraphId: (value) => {
@@ -5273,6 +5525,7 @@ import {
           requestTaskOutput,
           requestLogicGraphList,
           requestLogicGraphGet,
+          requestLogicGraphRunGet,
           requestRefactorRead,
           setResponsivePane
         },
@@ -5692,8 +5945,20 @@ import {
       setRoutineEditForm(hydrateRoutineFormFromRoutine(selected));
     }, [routines, routineSelectedId]);
 
+    useEffect(() => {
+      if (rootTab === "routine" && authed) {
+        send({ type: "get_routine_scheduler_status" });
+      }
+    }, [rootTab, authed, routines.length]);
+
     function refreshRoutines() {
       send({ type: "get_routines" });
+      send({ type: "get_routine_scheduler_status" });
+    }
+
+    function requestRoutinePreview(form = routineCreateForm) {
+      const payload = buildRoutinePayloadFromForm(form);
+      send({ type: "preview_routine", ...payload });
     }
 
     function refreshLogicGraphs() {
@@ -6600,17 +6865,26 @@ import {
       });
     }
 
-    function saveLogicGraph() {
+    function saveLogicGraph(options = {}) {
       if (!ensureAuthed()) {
-        return;
+        return false;
       }
       setError("logic:main", "");
       const draftGraph = logicDraftGraphRef.current;
       const targetGraphId = logicSelectedGraphIdRef.current || draftGraph?.graphId || "";
+      if (!targetGraphId && options.reason === "before_run") {
+        setError("logic:main", "먼저 작업 흐름을 저장한 뒤 실행하세요.");
+        return false;
+      }
       const ok = requestLogicGraphSave(send, targetGraphId, draftGraph);
       if (!ok) {
         setError("logic:main", "오류: WebSocket 연결이 끊어졌습니다.");
+        return false;
       }
+      if (options.reason === "before_run") {
+        setLogicLastMessage("실행 전 최신 흐름을 저장하고 실행을 요청했습니다.");
+      }
+      return true;
     }
 
     function runLogicGraph() {
@@ -6619,17 +6893,21 @@ import {
       }
       const draftGraph = logicDraftGraphRef.current;
       const targetGraphId = logicSelectedGraphIdRef.current || draftGraph?.graphId || "";
-      if (!targetGraphId) {
-        setError("logic:main", "먼저 저장된 작업 흐름을 선택하거나 저장하세요.");
+      if (!targetGraphId && !draftGraph) {
+        setError("logic:main", "먼저 작업 흐름을 만들거나 선택하세요.");
         return;
       }
       setError("logic:main", "");
       const startNode = (draftGraph?.nodes || []).find((n) => n.type === "start");
       const runInput = (startNode?.config?.input || "").trim();
-      const ok = requestLogicGraphRun(send, targetGraphId, runInput);
+      const graphPayload = logicDirty || !targetGraphId ? draftGraph : null;
+      const ok = requestLogicGraphRun(send, targetGraphId, runInput, graphPayload);
       if (!ok) {
         setError("logic:main", "오류: WebSocket 연결이 끊어졌습니다.");
         return;
+      }
+      if (graphPayload) {
+        setLogicLastMessage("최신 초안을 검증한 뒤 실행합니다.");
       }
       setLogicRunOutputExpanded(true);
     }
@@ -6640,10 +6918,16 @@ import {
         return;
       }
       setError("logic:main", "");
-      const ok = requestLogicGraphRun(send, targetGraphId, ((logicDraftGraphRef.current?.nodes || []).find((n) => n.type === "start")?.config?.input || "").trim());
+      const draftGraph = logicDraftGraphRef.current;
+      const selectedGraphId = logicSelectedGraphIdRef.current || draftGraph?.graphId || "";
+      const graphPayload = logicDirty && targetGraphId === selectedGraphId ? draftGraph : null;
+      const ok = requestLogicGraphRun(send, targetGraphId, ((logicDraftGraphRef.current?.nodes || []).find((n) => n.type === "start")?.config?.input || "").trim(), graphPayload);
       if (!ok) {
         setError("logic:main", "오류: WebSocket 연결이 끊어졌습니다.");
         return;
+      }
+      if (graphPayload) {
+        setLogicLastMessage("최신 초안을 검증한 뒤 실행합니다.");
       }
       setLogicRunOutputExpanded(true);
     }
@@ -6756,6 +7040,7 @@ import {
           scheduleSourceMode: normalizeRoutineScheduleSourceMode(prev.scheduleSourceMode, "auto"),
           maxRetries: Math.min(5, Math.max(0, Number(prev.maxRetries ?? 1) || 0)),
           retryDelaySeconds: Math.min(300, Math.max(0, Number(prev.retryDelaySeconds ?? 15) || 0)),
+          runImmediately: prev.runImmediately === true,
           notifyPolicy: normalizeRoutineNotifyPolicy(prev.notifyPolicy, "always"),
           notifyTelegram: normalizeRoutineNotifyTelegram(prev.notifyTelegram, true),
           scheduleKind: prev.scheduleKind,
@@ -7351,7 +7636,10 @@ import {
         parseCodingMultiComparisonMessage: chatMultiUtils.parseCodingMultiComparisonMessage,
         ttsSupported: isSpeechSynthesisSupported(),
         speakingMessageId,
-        onToggleSpeakMessage: (id, text) => speakMessageById(id, text)
+        onToggleSpeakMessage: (id, text) => speakMessageById(id, text),
+        onSaveAssistantMessageToNotebook: appendAssistantMessageToNotebook,
+        onCreatePlanFromAssistantMessage: createPlanFromAssistantMessage,
+        notebookPending: notebooksState.pending
       });
     }
 
@@ -7372,7 +7660,10 @@ import {
         requestLatestCodingResultExecution,
         humanPath,
         setCodingExecutionInputByConversation,
-        setShowExecutionLogsByConversation
+        setShowExecutionLogsByConversation,
+        appendLatestCodingResultToNotebook,
+        createPlanFromLatestCodingResult,
+        notebookPending: notebooksState.pending
       });
     }
 
@@ -7394,6 +7685,9 @@ import {
         humanPath,
         setCodingExecutionInputByConversation,
         setShowExecutionLogsByConversation,
+        appendLatestCodingResultToNotebook,
+        createPlanFromLatestCodingResult,
+        notebookPending: notebooksState.pending,
         actions: {
           openOverlay: () => {
             setSafeRefactorOverlayOpen(false);
@@ -7535,7 +7829,7 @@ import {
       });
     }
 
-    function renderComposerInputBar({ value, onChange, onSend, pendingKey, placeholder }) {
+    function renderComposerInputBar({ value, onChange, onSend, onCreateRoutine, onCreatePlan, pendingKey, placeholder }) {
       const thinkPlusVisible = pendingKey?.startsWith("chat:") || pendingKey?.startsWith("coding:");
       const thinkPlusReady = !!geminiUsage?.totals || true; // Gemini API 키 가용 여부는 백엔드가 더 정확히 알지만 UI는 일단 활성화 후 백엔드에서 fallback
       return renderComposerInputBarShell({
@@ -7565,7 +7859,9 @@ import {
         thinkPlusReady,
         onToggleThinkPlus: thinkPlusVisible
           ? () => setThinkPlusModeByKey((prev) => ({ ...prev, [pendingKey]: !prev[pendingKey] }))
-          : undefined
+          : undefined,
+        onCreateRoutine,
+        onCreatePlan
       });
     }
 
@@ -7674,7 +7970,9 @@ import {
         actions: {
           sendChatSingle,
           sendChatOrchestration,
-          sendChatMulti
+          sendChatMulti,
+          createRoutineFromCurrentInput,
+          createPlanFromCurrentInput
         }
       });
     }
@@ -7768,7 +8066,9 @@ import {
         actions: {
           sendCodingSingle,
           sendCodingOrchestration,
-          sendCodingMulti
+          sendCodingMulti,
+          createRoutineFromCurrentInput,
+          createPlanFromCurrentInput
         }
       });
     }
@@ -7810,12 +8110,19 @@ import {
         routineCreateForm,
         routineEditForm,
         routineProgress,
+        routinePreview,
+        routineSchedulerStatus,
+        routineListQuery,
+        routineListFilter,
+        setRoutineListQuery,
+        setRoutineListFilter,
         routineAgentProviderOptions,
         routineAgentModelOptions,
         patchRoutineForm,
         toggleRoutineWeekday,
         createRoutineFromUi,
         updateRoutineFromUi,
+        requestRoutinePreview,
         onInputKeyDown,
         refreshRoutines,
         setRoutineSelectedId,
@@ -8637,6 +8944,8 @@ import {
         setNotebookProjectKey,
         setNotebookAppendKind,
         setNotebookAppendText,
+        setNotebookFilterText,
+        setNotebookExpandedDocument,
         refreshNotebook,
         appendNotebook,
         createNotebookHandoff,
@@ -8667,6 +8976,8 @@ import {
         setNotebookProjectKey,
         setNotebookAppendKind,
         setNotebookAppendText,
+        setNotebookFilterText,
+        setNotebookExpandedDocument,
         refreshNotebook,
         appendNotebook,
         createNotebookHandoff,

@@ -33,4 +33,9 @@ public sealed class NotebookApplicationService : INotebookApplicationService
     {
         return _inner.CreateHandoffAsync(projectKey, cancellationToken);
     }
+
+    public Task<string> BuildNotebookContextBlockAsync(string? projectKey, CancellationToken cancellationToken)
+    {
+        return _inner.BuildNotebookContextBlockAsync(projectKey, cancellationToken);
+    }
 }

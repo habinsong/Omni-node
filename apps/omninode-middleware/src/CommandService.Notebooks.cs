@@ -50,6 +50,12 @@ public sealed partial class CommandService
         return Task.FromResult(_notebookService.CreateHandoff(projectKey));
     }
 
+    public Task<string> BuildNotebookContextBlockAsync(string? projectKey, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(_notebookService.BuildContextBlock(projectKey));
+    }
+
     private async Task<string> ExecuteNotebookSlashCommandAsync(
         IReadOnlyList<string> tokens,
         string source,

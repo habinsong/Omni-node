@@ -90,6 +90,78 @@ function renderThinkPlusIcon(e) {
   );
 }
 
+function renderRoutineIcon(e) {
+  return e(
+    "svg",
+    { viewBox: "0 0 24 24", className: "icon-svg", "aria-hidden": "true" },
+    e("path", {
+      d: "M8 3v3M16 3v3M4 8h16",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "1.9",
+      strokeLinecap: "round",
+      strokeLinejoin: "round"
+    }),
+    e("rect", {
+      x: "4",
+      y: "5",
+      width: "16",
+      height: "16",
+      rx: "2.5",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "1.9"
+    }),
+    e("path", {
+      d: "M9 13h6M9 17h3",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "1.9",
+      strokeLinecap: "round"
+    })
+  );
+}
+
+function renderPlanIcon(e) {
+  return e(
+    "svg",
+    { viewBox: "0 0 24 24", className: "icon-svg", "aria-hidden": "true" },
+    e("path", {
+      d: "M5 5h14M5 12h14M5 19h14",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "1.9",
+      strokeLinecap: "round"
+    }),
+    e("path", {
+      d: "M8 5v14M16 5v14",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "1.4",
+      strokeLinecap: "round",
+      opacity: "0.75"
+    }),
+    e("circle", {
+      cx: "5",
+      cy: "5",
+      r: "1.5",
+      fill: "currentColor"
+    }),
+    e("circle", {
+      cx: "5",
+      cy: "12",
+      r: "1.5",
+      fill: "currentColor"
+    }),
+    e("circle", {
+      cx: "5",
+      cy: "19",
+      r: "1.5",
+      fill: "currentColor"
+    })
+  );
+}
+
 function renderCloseIcon(e) {
   return e(
     "svg",
@@ -186,7 +258,9 @@ export function renderComposerInputBar(props) {
     thinkPlusVisible,
     thinkPlusEnabled,
     thinkPlusReady,
-    onToggleThinkPlus
+    onToggleThinkPlus,
+    onCreateRoutine,
+    onCreatePlan
   } = props;
   const skillName = `${selectedSkill?.name || ""}`.trim();
   const skillScope = `${selectedSkill?.scope || "project"}`.trim() || "project";
@@ -250,6 +324,24 @@ export function renderComposerInputBar(props) {
               disabled: thinkPlusReady === false,
               "aria-pressed": thinkPlusEnabled ? "true" : "false"
             }, renderThinkPlusIcon(e))
+          : null,
+        typeof onCreateRoutine === "function"
+          ? e("button", {
+              type: "button",
+              className: "composer-icon-btn routine",
+              title: "현재 입력을 루틴으로 저장",
+              onClick: onCreateRoutine,
+              disabled: pending || !`${value || ""}`.trim()
+            }, renderRoutineIcon(e))
+          : null,
+        typeof onCreatePlan === "function"
+          ? e("button", {
+              type: "button",
+              className: "composer-icon-btn plan",
+              title: "현재 입력으로 작업계획 만들기",
+              onClick: onCreatePlan,
+              disabled: pending || !`${value || ""}`.trim()
+            }, renderPlanIcon(e))
           : null,
         e("button", {
           type: "button",
@@ -646,7 +738,10 @@ function renderCodingResultCard(props) {
     setCodingExecutionInputByConversation,
     setShowExecutionLogsByConversation,
     panelClassName,
-    headerAction
+    headerAction,
+    appendLatestCodingResultToNotebook,
+    createPlanFromLatestCodingResult,
+    notebookPending
   } = props;
 
   const changedFiles = codingState.changedFiles;
@@ -675,6 +770,23 @@ function renderCodingResultCard(props) {
       onClick: () => requestLatestCodingResultExecution(currentConversationId, executionInput),
       disabled: runtime?.pending
     }, runtime?.pending ? "실행 중..." : "실행"));
+  }
+  if (typeof appendLatestCodingResultToNotebook === "function") {
+    actionButtons.push(e("button", {
+      key: "notebook",
+      type: "button",
+      className: "btn secondary",
+      disabled: !!notebookPending,
+      onClick: appendLatestCodingResultToNotebook
+    }, notebookPending ? "저장 중..." : "노트북 저장"));
+  }
+  if (typeof createPlanFromLatestCodingResult === "function") {
+    actionButtons.push(e("button", {
+      key: "plan",
+      type: "button",
+      className: "btn secondary",
+      onClick: createPlanFromLatestCodingResult
+    }, "계획 만들기"));
   }
   if (headerAction) {
     actionButtons.push(e("span", { key: "header-action", className: "coding-result-inline-action" }, headerAction));

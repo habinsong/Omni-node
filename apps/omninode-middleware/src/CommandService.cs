@@ -146,13 +146,16 @@ public sealed partial class CommandService :
     private readonly object _routineLock = new();
     private readonly object _planLock = new();
     private readonly AsyncLocal<TelegramExecutionMetadata?> _telegramExecutionMetadata = new();
+    private readonly AsyncLocal<TelegramTurnContext?> _telegramTurnContext = new();
     private readonly string _telegramUpgradeQuotaStatePath;
     private readonly string _routineStatePath;
     private readonly string _routinePromptDir;
     private readonly string[] _killAllowlist;
     private readonly Dictionary<string, RoutineDefinition> _routinesById = new(StringComparer.OrdinalIgnoreCase);
     private readonly CancellationTokenSource _routineSchedulerCts = new();
+    private readonly SemaphoreSlim _routineSchedulerDispatchGate = new(2, 2);
     private Task? _routineSchedulerTask;
+    private string? _routineSchedulerLastError;
     private string _telegramUpgradeQuotaDay = string.Empty;
     private int _telegramUpgradeQuotaCount;
     private TelegramLlmPreferences _telegramLlmPreferences;

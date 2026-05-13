@@ -11,14 +11,21 @@ export const CODING_MODES = [
 ];
 
 export const CODING_LANGUAGES = [
-  ["auto", "자동"],
+  ["auto", "자동 (언어/프로젝트 구조)"],
   ["python", "Python"],
   ["javascript", "JavaScript"],
+  ["typescript", "TypeScript"],
+  ["react-vite", "React/Vite"],
   ["c", "C"],
   ["cpp", "C++"],
   ["csharp", "C#"],
   ["java", "Java"],
   ["kotlin", "Kotlin"],
+  ["go", "Go"],
+  ["rust", "Rust"],
+  ["php", "PHP"],
+  ["ruby", "Ruby"],
+  ["swift", "Swift"],
   ["html", "HTML"],
   ["css", "CSS"],
   ["bash", "Bash"]

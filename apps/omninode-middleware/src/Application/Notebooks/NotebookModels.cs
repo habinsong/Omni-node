@@ -14,7 +14,9 @@ public sealed record NotebookDocumentSnapshot(
     bool Exists,
     long SizeBytes,
     string UpdatedAtUtc,
-    string Preview
+    string Preview,
+    string Content,
+    bool ContentTruncated
 );
 
 public sealed record ProjectNotebookSnapshot(

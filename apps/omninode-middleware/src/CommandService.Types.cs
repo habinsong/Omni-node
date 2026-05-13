@@ -362,6 +362,12 @@ public sealed record TelegramExecutionMetadata(
     int RetryMaxAttempts = 0,
     string RetryStopReason = "-"
 );
+public sealed record TelegramTurnContext(
+    string ChatId,
+    string FromUserId,
+    string SessionKey,
+    bool IsCallback = false
+);
 public sealed record RoutineSummary(
     string Id,
     string Title,
@@ -394,6 +400,9 @@ public sealed record RoutineSummary(
     string TimeOfDay,
     int? DayOfMonth,
     IReadOnlyList<int> Weekdays,
+    string QualityStatus,
+    IReadOnlyList<string> QualityWarnings,
+    string RunCommand,
     IReadOnlyList<RoutineRunSummary> Runs
 );
 public sealed record RoutineActionResult(bool Ok, string Message, RoutineSummary? Routine);
@@ -579,7 +588,28 @@ internal sealed record RoutineGenerationResult(
     string CoderModel,
     string Plan,
     string Language,
-    string Code
+    string Code,
+    string QualityStatus = "ok",
+    IReadOnlyList<string>? QualityWarnings = null
+);
+public sealed record RoutineExecutionPreviewResult(
+    string Request,
+    string ScheduleSourceMode,
+    string ScheduleText,
+    string ScheduleKind,
+    string TimezoneId,
+    string ResolvedExecutionMode,
+    string ExecutionRoute,
+    IReadOnlyList<string> Warnings
+);
+public sealed record RoutineSchedulerStatus(
+    bool Enabled,
+    int TotalRoutines,
+    int EnabledRoutines,
+    int RunningRoutines,
+    int DueRoutines,
+    long? NextRunAtMs,
+    string? LastError
 );
 internal sealed class RoutineState
 {
@@ -618,6 +648,8 @@ internal sealed class RoutineDefinition
     public string Planner { get; set; } = string.Empty;
     public string PlannerModel { get; set; } = string.Empty;
     public string CoderModel { get; set; } = string.Empty;
+    public string QualityStatus { get; set; } = "unknown";
+    public List<string> QualityWarnings { get; set; } = new();
     public bool NotifyTelegram { get; set; } = true;
     public LogicGraphDefinition? LogicGraph { get; set; }
     public string? CronDescription { get; set; }

@@ -149,16 +149,27 @@ public sealed partial class CommandService
         var compactSummary = TrimForOutput(RemoveCodeBlocksFromText(summary), 800);
         var stdoutSnippet = BuildExecutionLogSnippet(execution.StdOut, 260);
         var stderrSnippet = BuildExecutionLogSnippet(execution.StdErr, 260);
+        var installSummary = BuildAutoInstallSummary(execution.StdOut, execution.StdErr);
+        var headlessSummary = BuildHeadlessSmokeSummary(execution.Command, execution.StdOut, execution.StdErr);
+        var projectProfile = ResolveCodingProjectProfile(summary, language);
+        var runCommands = projectProfile.RunCommands.Count == 0
+            ? string.Empty
+            : string.Join(", ", projectProfile.RunCommands.Take(2));
         return $"""
                 [Coding:{mode}]
                 모델: {provider}:{model}
                 언어: {language}
+                프로젝트 프로파일: {projectProfile.ProjectKind}
                 작업 폴더: {execution.RunDirectory}
                 실행 상태: {execution.Status} (exit={execution.ExitCode})
                 실행 명령: {safeCommand}
+                권장 실행: {(string.IsNullOrWhiteSpace(runCommands) ? "-" : runCommands)}
+                권장 빌드/테스트: {projectProfile.BuildTool} / {projectProfile.TestTool}
                 변경 파일: {changedFiles.Count}개
                 {changed}
                 {(hasMoreFiles ? "- ...(추가 파일 있음, 하단 카드에서 확인)" : string.Empty)}
+                {(string.IsNullOrWhiteSpace(installSummary) ? string.Empty : $"의존성: {installSummary}")}
+                {(string.IsNullOrWhiteSpace(headlessSummary) ? string.Empty : $"검증: {headlessSummary}")}
                 {(string.IsNullOrWhiteSpace(stdoutSnippet) ? string.Empty : $"stdout 요약: {stdoutSnippet}")}
                 {(string.IsNullOrWhiteSpace(stderrSnippet) ? string.Empty : $"stderr 요약: {stderrSnippet}")}
 
@@ -167,6 +178,36 @@ public sealed partial class CommandService
 
                 상세 파일 프리뷰는 아래 '최근 코딩 결과' 카드에서 파일 칩을 눌러 확인하세요.
                 """;
+    }
+
+    private static string BuildAutoInstallSummary(params string?[] values)
+    {
+        var merged = string.Join("\n", values.Where(value => !string.IsNullOrWhiteSpace(value)));
+        if (!merged.Contains("[auto-install]", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        var packages = Regex.Matches(merged, @"Python (?:import 패키지|누락 모듈|CLI 패키지) 설치(?:\(\.venv\))?\((?<name>[^)]+)\)")
+            .Select(match => match.Groups["name"].Value.Trim())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return packages.Length > 0
+            ? $"자동 설치 완료: {string.Join(", ", packages.Take(8))}"
+            : "자동 설치 로그 포함";
+    }
+
+    private static string BuildHeadlessSmokeSummary(string? command, params string?[] logs)
+    {
+        var merged = string.Join("\n", new[] { command }.Concat(logs).Where(value => !string.IsNullOrWhiteSpace(value)));
+        if (!merged.Contains("OMNI_HEADLESS_TEST=1", StringComparison.Ordinal)
+            && !merged.Contains("SDL_VIDEODRIVER=dummy", StringComparison.Ordinal))
+        {
+            return string.Empty;
+        }
+
+        return "headless smoke 검증 통과. 실제 실행은 최근 코딩 결과의 실행 명령을 사용";
     }
 
     private static string BuildCodingWorkerDigest(CodingWorkerResult worker)

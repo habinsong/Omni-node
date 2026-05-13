@@ -1044,7 +1044,7 @@ function renderGraphList(props) {
           className: "btn primary",
           type: "button",
           onClick: onRun,
-          disabled: !draftGraph?.graphId
+          disabled: !draftGraph
         }, "실행"),
         e("button", {
           className: "btn ghost",
@@ -1083,7 +1083,7 @@ function renderGraphList(props) {
           className: "btn primary",
           type: "button",
           onClick: onRun,
-          disabled: !draftGraph?.graphId
+          disabled: !draftGraph
         }, "실행"),
         e("button", {
           className: "btn ghost",
