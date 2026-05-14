@@ -513,7 +513,7 @@ function createMarkdownRenderer(windowLike) {
     }
 
     const renderer = windowLike.markdownit({
-      html: true,
+      html: false,
       linkify: true,
       breaks: true,
       typographer: false
@@ -575,6 +575,8 @@ export function createMarkdownSupport({ React, window: windowLike }) {
         ADD_TAGS: ["table", "thead", "tbody", "tr", "th", "td", "img", "hr", "sup", "sub"],
         ADD_ATTR: ["target", "rel", "class", "id"]
       });
+    } else if (renderer) {
+      html = renderTableAwareFallbackHtml(text);
     }
 
     return html;

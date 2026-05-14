@@ -44,7 +44,13 @@ internal sealed class WsConversationMemoryDispatcher
         CancellationToken cancellationToken
     )
     {
-        if (RequiresAuthentication(message.Type ?? string.Empty) && !isAuthenticated)
+        var messageType = message.Type ?? string.Empty;
+        if (!IsConversationMemoryMessage(messageType))
+        {
+            return false;
+        }
+
+        if (!isAuthenticated)
         {
             await WebSocketGateway.SendTextAsync(socket, sendLock, "{\"type\":\"error\",\"message\":\"unauthorized\"}", cancellationToken);
             return true;
@@ -501,9 +507,19 @@ internal sealed class WsConversationMemoryDispatcher
         return false;
     }
 
-    private static bool RequiresAuthentication(string messageType)
+    private static bool IsConversationMemoryMessage(string messageType)
     {
-        return messageType is "memory_search"
+        return messageType is "list_conversations"
+            or "create_conversation"
+            or "get_conversation"
+            or "delete_conversation"
+            or "clear_memory"
+            or "list_memory_notes"
+            or "read_memory_note"
+            or "rename_memory_note"
+            or "delete_memory_notes"
+            or "create_memory_note"
+            or "memory_search"
             or "conversation_search"
             or "backup_export_prepare"
             or "backup_import_preview"

@@ -83,7 +83,6 @@ public interface IAuthSessionStore
     );
     bool TryResumeTrusted(string authToken, out DateTimeOffset expiresAtUtc);
     bool MarkAuthenticatedFromTrusted(string sessionId, DateTimeOffset expiresAtUtc);
-    bool MarkAuthenticatedForRemoteDashboard(string sessionId, TimeSpan ttl);
     bool TryGetOtp(string sessionId, out string otp);
     bool IsAuthenticated(string sessionId);
     void Remove(string sessionId);

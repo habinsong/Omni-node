@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
+using System.Text.Json;
 
 namespace OmniNode.Middleware;
 
@@ -16,6 +17,14 @@ public sealed partial class WebSocketGateway
 
         try
         {
+            if (!IsAllowedWebSocketOrigin(context))
+            {
+                context.Response.StatusCode = (int)HttpStatusCode.Forbidden;
+                context.Response.ContentLength64 = 0;
+                context.Response.OutputStream.Close();
+                return;
+            }
+
             var wsContext = await context.AcceptWebSocketAsync(subProtocol: null);
             socket = wsContext.WebSocket;
             var remoteDashboardClient = IsRemoteDashboardClient(context);
@@ -44,6 +53,17 @@ public sealed partial class WebSocketGateway
                 if (text == null)
                 {
                     break;
+                }
+
+                if (!TryValidateClientPayloadLimits(text, out var payloadError))
+                {
+                    await SendTextAsync(
+                        socket,
+                        sendLock,
+                        $"{{\"type\":\"error\",\"message\":\"{EscapeJson(payloadError)}\"}}",
+                        cancellationToken
+                    );
+                    continue;
                 }
 
                 var message = ParseClientMessage(text);
@@ -100,14 +120,15 @@ public sealed partial class WebSocketGateway
                     continue;
                 }
 
-                if (await _setupCommandDispatcher.TryHandleAsync(message, remoteDashboardClient, socket, sendLock, cancellationToken))
+                var authenticated = _sessionManager.IsAuthenticated(sessionId);
+                if (await _setupCommandDispatcher.TryHandleAsync(message, remoteDashboardClient, authenticated, socket, sendLock, cancellationToken))
                 {
                     continue;
                 }
 
                 if (await _conversationMemoryDispatcher.TryHandleAsync(
                         message,
-                        _sessionManager.IsAuthenticated(sessionId),
+                        authenticated,
                         socket,
                         sendLock,
                         cancellationToken
@@ -116,9 +137,15 @@ public sealed partial class WebSocketGateway
                     continue;
                 }
 
-                if (!_sessionManager.IsAuthenticated(sessionId))
+                if (!authenticated)
                 {
                     await SendTextAsync(socket, sendLock, "{\"type\":\"error\",\"message\":\"unauthorized\"}", cancellationToken);
+                    continue;
+                }
+
+                if (!AllowCommand(sessionId!))
+                {
+                    await SendTextAsync(socket, sendLock, "{\"type\":\"error\",\"message\":\"rate_limited\"}", cancellationToken);
                     continue;
                 }
 
@@ -391,6 +418,137 @@ public sealed partial class WebSocketGateway
         if (address.IsIPv4MappedToIPv6 && IPAddress.IsLoopback(address.MapToIPv4()))
         {
             return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsAllowedWebSocketOrigin(HttpListenerContext context)
+    {
+        var origin = context.Request.Headers["Origin"];
+        if (string.IsNullOrWhiteSpace(origin))
+        {
+            return true;
+        }
+
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri))
+        {
+            return false;
+        }
+
+        var requestHost = context.Request.Url?.Host;
+        var requestPort = context.Request.Url?.Port ?? -1;
+        if (string.IsNullOrWhiteSpace(requestHost) || requestPort <= 0)
+        {
+            var hostHeader = context.Request.Headers["Host"];
+            if (!string.IsNullOrWhiteSpace(hostHeader))
+            {
+                var parsed = hostHeader.Split(':', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                requestHost = parsed.Length > 0 ? parsed[0].Trim('[', ']') : requestHost;
+                if (parsed.Length > 1 && int.TryParse(parsed[^1], out var parsedPort))
+                {
+                    requestPort = parsedPort;
+                }
+            }
+        }
+
+        var originPort = originUri.IsDefaultPort
+            ? (originUri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase) ? 443 : 80)
+            : originUri.Port;
+        if (requestPort > 0 && originPort != requestPort)
+        {
+            return false;
+        }
+
+        var originHost = originUri.Host.Trim('[', ']');
+        var normalizedRequestHost = (requestHost ?? string.Empty).Trim('[', ']');
+        if (originHost.Equals(normalizedRequestHost, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return IsLoopbackHost(originHost) && IsLoopbackHost(normalizedRequestHost);
+    }
+
+    private static bool IsLoopbackHost(string host)
+    {
+        var normalized = (host ?? string.Empty).Trim().Trim('[', ']').ToLowerInvariant();
+        if (normalized is "localhost" or "::1")
+        {
+            return true;
+        }
+
+        if (!IPAddress.TryParse(normalized, out var address))
+        {
+            return false;
+        }
+
+        return IPAddress.IsLoopback(address)
+            || (address.IsIPv4MappedToIPv6 && IPAddress.IsLoopback(address.MapToIPv4()));
+    }
+
+    private static bool TryValidateClientPayloadLimits(string json, out string errorMessage)
+    {
+        errorMessage = string.Empty;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("attachments", out var attachmentsElement)
+                || attachmentsElement.ValueKind != JsonValueKind.Array)
+            {
+                return true;
+            }
+
+            var count = 0;
+            foreach (var item in attachmentsElement.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                count += 1;
+                if (count > MaxAttachmentCount)
+                {
+                    errorMessage = $"too many attachments (max={MaxAttachmentCount})";
+                    return false;
+                }
+
+                var name = item.TryGetProperty("name", out var nameElement) && nameElement.ValueKind == JsonValueKind.String
+                    ? nameElement.GetString() ?? "attachment"
+                    : "attachment";
+                if (item.TryGetProperty("sizeBytes", out var sizeElement))
+                {
+                    var sizeBytes = 0L;
+                    if (sizeElement.ValueKind == JsonValueKind.Number)
+                    {
+                        sizeElement.TryGetInt64(out sizeBytes);
+                    }
+                    else if (sizeElement.ValueKind == JsonValueKind.String)
+                    {
+                        long.TryParse(sizeElement.GetString(), out sizeBytes);
+                    }
+
+                    if (sizeBytes > MaxAttachmentBytes)
+                    {
+                        errorMessage = $"attachment too large: {name} (max={MaxAttachmentBytes} bytes)";
+                        return false;
+                    }
+                }
+
+                var dataBase64 = item.TryGetProperty("dataBase64", out var dataElement) && dataElement.ValueKind == JsonValueKind.String
+                    ? dataElement.GetString() ?? string.Empty
+                    : string.Empty;
+                if (dataBase64.Length > MaxAttachmentBase64Chars)
+                {
+                    errorMessage = $"attachment too large: {name} (max={MaxAttachmentBytes} bytes)";
+                    return false;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            return true;
         }
 
         return true;

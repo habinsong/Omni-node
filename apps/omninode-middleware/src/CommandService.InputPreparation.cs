@@ -1539,11 +1539,6 @@ public sealed partial class CommandService
                 continue;
             }
 
-            if (base64.Length > 700_000)
-            {
-                base64 = base64[..700_000];
-            }
-
             list.Add(new InputAttachment(name, mimeType, base64, item.SizeBytes, item.IsImage));
             if (list.Count >= 6)
             {

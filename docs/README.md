@@ -2,7 +2,7 @@
 
 [한국어](./README.md) · [English](./en/README.md)
 
-업데이트 기준: 2026-05-08
+업데이트 기준: 2026-05-14
 
 이 폴더는 Omni-node를 실제로 설치하고 운영할 때 필요한 문서만 앞에 둔다. 오래된 설계 기록은 `gemini-retriever-plan/` 아래에 따로 남겨 두었다.
 

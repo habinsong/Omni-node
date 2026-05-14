@@ -14,6 +14,9 @@ public sealed partial class WebSocketGateway
     private const int DefaultTrustedAuthTtlHours = 24;
     private const int MinTrustedAuthTtlHours = 1;
     private const int MaxTrustedAuthTtlHours = 168;
+    private const int MaxAttachmentCount = 6;
+    private const int MaxAttachmentBytes = 15 * 1024 * 1024;
+    private const int MaxAttachmentBase64Chars = ((MaxAttachmentBytes + 2) / 3) * 4;
     private const string WebSocketPath = "/ws/";
     private const string GuardRetryTimelineApiPath = "/api/guard/retry-timeline";
     private const string LocalImageApiPath = "/api/local-image";
@@ -163,7 +166,7 @@ public sealed partial class WebSocketGateway
         _guardRetryTimelineStore = guardRetryTimelineStore;
         _auditLogger = auditLogger;
         _staticFileEndpoint = new HttpStaticFileEndpoint(config.DashboardIndexPath);
-        _apiEndpoint = new GatewayApiEndpoint(guardRetryTimelineStore, conversationService);
+        _apiEndpoint = new GatewayApiEndpoint(guardRetryTimelineStore, conversationService, config);
         _authSessionGateway = new AuthSessionGateway(sessionManager, telegramClient, config.EnableLocalOtpFallback);
         _setupCommandDispatcher = new WsSetupCommandDispatcher(
             settingsService,
@@ -4282,13 +4285,8 @@ public sealed partial class WebSocketGateway
 
                     var isImage = item.TryGetProperty("isImage", out var isImageElement)
                                   && isImageElement.ValueKind == JsonValueKind.True;
-                    if (dataBase64.Length > 700_000)
-                    {
-                        dataBase64 = dataBase64[..700_000];
-                    }
-
                     attachments.Add(new InputAttachment(name, mimeType, dataBase64, sizeBytes, isImage));
-                    if (attachments.Count >= 6)
+                    if (attachments.Count >= MaxAttachmentCount)
                     {
                         break;
                     }

@@ -48,12 +48,36 @@ internal sealed class WsSetupCommandDispatcher
     public async Task<bool> TryHandleAsync(
         WebSocketGateway.ClientMessage message,
         bool remoteDashboardClient,
+        bool isAuthenticated,
         WebSocket socket,
         SemaphoreSlim sendLock,
         CancellationToken cancellationToken
     )
     {
-        if (remoteDashboardClient && IsRemoteRestrictedMessage(message.Type))
+        var messageType = message.Type ?? string.Empty;
+        if (!IsSetupMessage(messageType))
+        {
+            return false;
+        }
+
+        if (messageType == "get_settings" || messageType == "get_setup_state")
+        {
+            await _sendSettingsStateAsync(socket, sendLock, cancellationToken, remoteDashboardClient);
+            return true;
+        }
+
+        if (!isAuthenticated)
+        {
+            await WebSocketGateway.SendTextAsync(
+                socket,
+                sendLock,
+                "{\"type\":\"error\",\"message\":\"unauthorized\"}",
+                cancellationToken
+            );
+            return true;
+        }
+
+        if (remoteDashboardClient && IsRemoteRestrictedMessage(messageType))
         {
             await WebSocketGateway.SendTextAsync(
                 socket,
@@ -61,12 +85,6 @@ internal sealed class WsSetupCommandDispatcher
                 "{\"type\":\"error\",\"message\":\"forbidden_remote_dashboard\"}",
                 cancellationToken
             );
-            return true;
-        }
-
-        if (message.Type == "get_settings" || message.Type == "get_setup_state")
-        {
-            await _sendSettingsStateAsync(socket, sendLock, cancellationToken, remoteDashboardClient);
             return true;
         }
 
@@ -392,7 +410,6 @@ internal sealed class WsSetupCommandDispatcher
     private static bool IsRemoteRestrictedMessage(string? messageType)
     {
         return messageType is
-            "request_otp" or
             "set_external_dashboard_access" or
             "set_telegram_credentials" or
             "delete_telegram_credentials" or
@@ -404,5 +421,33 @@ internal sealed class WsSetupCommandDispatcher
             "start_copilot_login" or
             "start_codex_login" or
             "logout_codex";
+    }
+
+    private static bool IsSetupMessage(string messageType)
+    {
+        return messageType is
+            "get_settings" or
+            "get_setup_state" or
+            "set_external_dashboard_access" or
+            "routing_policy_get" or
+            "routing_policy_save" or
+            "routing_policy_reset" or
+            "routing_decision_get_last" or
+            "set_telegram_credentials" or
+            "delete_telegram_credentials" or
+            "set_llm_credentials" or
+            "delete_llm_credentials" or
+            "test_telegram" or
+            "get_copilot_status" or
+            "get_codex_status" or
+            "get_usage_stats" or
+            "start_copilot_login" or
+            "start_codex_login" or
+            "logout_codex" or
+            "get_copilot_models" or
+            "set_copilot_model" or
+            "get_groq_models" or
+            "get_cerebras_models" or
+            "set_groq_model";
     }
 }

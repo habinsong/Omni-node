@@ -49,6 +49,7 @@ apps/omninode-middleware/__pycache__/
 apps/omninode-middleware/app
 apps/omninode-middleware/app.js
 apps/omninode-middleware/main.*
+apps/omninode-middleware/gugudan.py
 apps/omninode-middleware/ledger.*
 apps/omninode-middleware/snapshot.*
 apps/omninode-middleware/planner.js

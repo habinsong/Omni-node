@@ -90,6 +90,11 @@ function main() {
     [toRelative(path.join(dashboardDir, "check-dashboard-server-message-router.mjs"))]
   );
   runStep(
+    "security boundary contract",
+    "node",
+    [toRelative(path.join(repoRoot, "scripts", "check-security-boundaries.mjs"))]
+  );
+  runStep(
     "coding python game contract",
     "node",
     [toRelative(path.join(repoRoot, "scripts", "check-coding-python-game-contract.mjs"))]

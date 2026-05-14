@@ -20,7 +20,8 @@ const REQUIRED_GITIGNORE_PATTERNS = [
   "output/",
   "workspace/",
   "docs/gemini-retriever-plan/loop-automation/runtime/",
-  "apps/.runtime/"
+  "apps/.runtime/",
+  "apps/omninode-middleware/gugudan.py"
 ];
 const ARTIFACT_PATHS = [
   "node_modules",
@@ -31,6 +32,9 @@ const ARTIFACT_PATHS = [
   "workspace/coding",
   "docs/gemini-retriever-plan/loop-automation/runtime",
   "apps/.runtime"
+];
+const DISALLOWED_TRACKED_FILES = [
+  "apps/omninode-middleware/gugudan.py"
 ];
 
 function toAbsolute(relativePath) {
@@ -53,6 +57,10 @@ function readTrackedFiles(relativePath) {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+function filterExistingTrackedFiles(trackedFiles) {
+  return trackedFiles.filter((relativePath) => !!lstatSync(toAbsolute(relativePath), { throwIfNoEntry: false }));
 }
 
 function ensureDirectory(relativePath) {
@@ -126,10 +134,17 @@ function ensureArtifactsAreUntracked() {
   const violations = [];
 
   for (const relativePath of ARTIFACT_PATHS) {
-    const trackedFiles = readTrackedFiles(relativePath);
+    const trackedFiles = filterExistingTrackedFiles(readTrackedFiles(relativePath));
     trackedArtifactCounts[relativePath] = trackedFiles.length;
     if (trackedFiles.length > 0) {
       violations.push(`${relativePath} (${trackedFiles.length})`);
+    }
+  }
+
+  for (const relativePath of DISALLOWED_TRACKED_FILES) {
+    const trackedFiles = filterExistingTrackedFiles(readTrackedFiles(relativePath));
+    if (trackedFiles.length > 0) {
+      violations.push(`${relativePath} (tracked sample artifact)`);
     }
   }
 

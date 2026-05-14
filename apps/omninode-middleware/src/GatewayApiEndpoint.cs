@@ -12,14 +12,21 @@ internal sealed class GatewayApiEndpoint
     private const string CodingPreviewApiPrefix = "/api/coding-preview/";
     private readonly GuardRetryTimelineStore _guardRetryTimelineStore;
     private readonly IConversationApplicationService _conversationService;
+    private readonly IReadOnlyList<string> _localImageRoots;
 
     public GatewayApiEndpoint(
         GuardRetryTimelineStore guardRetryTimelineStore,
-        IConversationApplicationService conversationService
+        IConversationApplicationService conversationService,
+        AppConfig config
     )
     {
         _guardRetryTimelineStore = guardRetryTimelineStore;
         _conversationService = conversationService;
+        var workspaceRoot = Path.GetFullPath(config.WorkspaceRootDir);
+        _localImageRoots = new[]
+        {
+            Path.GetFullPath(Path.Combine(workspaceRoot, "routines"))
+        };
     }
 
     public async Task<bool> TryHandleAsync(
@@ -137,6 +144,13 @@ internal sealed class GatewayApiEndpoint
         {
             context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
             await WriteResponseAsync(context.Response, "text/plain; charset=utf-8", "unsupported image type", cancellationToken);
+            return;
+        }
+
+        if (!IsLocalImagePathAllowed(fullPath))
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.Forbidden;
+            await WriteResponseAsync(context.Response, "text/plain; charset=utf-8", "image path is outside allowed routine asset roots", cancellationToken);
             return;
         }
 
@@ -450,5 +464,10 @@ internal sealed class GatewayApiEndpoint
         }
 
         return fullCandidate.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal);
+    }
+
+    private bool IsLocalImagePathAllowed(string fullPath)
+    {
+        return _localImageRoots.Any(root => IsPathUnderRoot(fullPath, root));
     }
 }

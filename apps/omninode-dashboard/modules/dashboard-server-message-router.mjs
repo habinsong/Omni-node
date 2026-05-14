@@ -303,7 +303,7 @@ export function handleDashboardServerMessage(msg, context) {
       remoteDashboardClient: !!msg.remoteDashboardClient
     })
     if (msg.remoteDashboardClient) {
-      setters.setStatus("외부 접속중")
+      setters.setStatus("외부 접속 / OTP 대기")
     }
     return true
   }
@@ -325,7 +325,7 @@ export function handleDashboardServerMessage(msg, context) {
       if (Number.isFinite(msg.ttlHours) && Number(msg.ttlHours) > 0) {
         setters.setAuthTtlHours(String(msg.ttlHours))
       }
-      setters.setStatus(msg.remoteDashboardClient ? "외부 접속중" : "세션 인증됨")
+      setters.setStatus(msg.remoteDashboardClient ? "외부 접속 인증됨" : "세션 인증됨")
       actions.send({ type: "get_routines" })
       actions.requestDoctorLast(actions.send, { silent: true, queueIfClosed: false })
       actions.requestRoutingPolicyGet(actions.send, { silent: true, queueIfClosed: false })
@@ -1030,7 +1030,7 @@ export function handleDashboardServerMessage(msg, context) {
       codexApiKeyMasked: msg.codexApiKeyMasked || ""
     })
     if (msg.remoteDashboardClient) {
-      setters.setStatus("외부 접속중")
+      setters.setStatus(state.authed ? "외부 접속 인증됨" : "외부 접속 / OTP 대기")
     }
     return true
   }

@@ -333,7 +333,7 @@ export function renderSettingsPanel(props) {
   const copilotReady = /완료|인증|ready/i.test(copilotStatus || "");
   const codexReady = /완료|인증|logged|ready/i.test(codexStatus || "");
   const cliReadyCount = [copilotReady, codexReady].filter(Boolean).length;
-  const requestedSettingsPane = currentSettingsPane || (remoteDashboardClient ? "basic-preferences" : "basic-auth");
+  const requestedSettingsPane = currentSettingsPane || (remoteDashboardClient && authed ? "basic-preferences" : "basic-auth");
 
   const statusTone = (ok) => ok ? "ok" : "idle";
   const renderStatusChip = (label, ok) => e(
@@ -364,8 +364,8 @@ export function renderSettingsPanel(props) {
       ),
       e("div", { className: "settings-visual-card auth" },
         e("span", null, "SESSION"),
-        e("strong", null, remoteDashboardClient && authed ? "외부 접속중" : authed ? "인증됨" : "OTP 대기"),
-        renderStatusChip(remoteDashboardClient && authed ? "외부 접속중" : authed ? "접근 가능" : "인증 필요", authed)
+        e("strong", null, remoteDashboardClient && authed ? "외부 접속 인증됨" : authed ? "인증됨" : "OTP 대기"),
+        renderStatusChip(remoteDashboardClient && authed ? "외부 접속 인증됨" : authed ? "접근 가능" : "인증 필요", authed)
       )
     ),
     e("div", { className: "settings-mini-stat-grid" },
@@ -1095,10 +1095,10 @@ export function renderSettingsPanel(props) {
     e("div", { className: "settings-summary-grid" },
       e("article", { className: "settings-summary-card" },
         e("div", { className: "settings-summary-label" }, "세션"),
-        e("strong", null, remoteDashboardClient && authed ? "외부 접속중" : authed ? "인증됨" : "OTP 대기"),
-        e("span", null, remoteDashboardClient && authed ? "외부 접속중" : authExpiry ? `만료 ${authExpiry}` : "OTP 인증 필요"),
+        e("strong", null, remoteDashboardClient && authed ? "외부 접속 인증됨" : authed ? "인증됨" : "OTP 대기"),
+        e("span", null, remoteDashboardClient && authed ? "외부 접속 인증됨" : authExpiry ? `만료 ${authExpiry}` : "OTP 인증 필요"),
         e("div", { className: "settings-chip-row" },
-          renderStatusChip(remoteDashboardClient && authed ? "외부 접속중" : authed ? "접근 가능" : "미인증", authed)
+          renderStatusChip(remoteDashboardClient && authed ? "외부 접속 인증됨" : authed ? "접근 가능" : "미인증", authed)
         )
       ),
       e("article", { className: "settings-summary-card" },
@@ -1143,7 +1143,7 @@ export function renderSettingsPanel(props) {
       label: "기본 설정",
       summary: "접근과 외부 연동",
       items: [
-        remoteDashboardClient ? null : { key: "basic-auth", label: "OTP 인증", summary: "대시보드 접근 세션", panel: otpPanel },
+        { key: "basic-auth", label: "OTP 인증", summary: "대시보드 접근 세션", panel: otpPanel },
         remoteDashboardClient ? null : { key: "basic-external", label: "외부접속", summary: "같은 LAN 접속 허용", panel: externalAccessPanel },
         remoteDashboardClient ? null : { key: "basic-telegram", label: "Telegram", summary: "알림 봇과 채팅 ID", panel: telegramPanel },
         remoteDashboardClient ? null : { key: "basic-keys", label: "LLM 키", summary: "Groq, Gemini, Cerebras, NVIDIA, Codex", panel: llmPanel },
