@@ -2,7 +2,7 @@
 
 [한국어](../디렉터리_가이드.md) · [English](./directory-guide.md)
 
-Updated: 2026-05-08
+Updated: 2026-05-15
 
 Canonical paths are `apps/`, `docs/`, and `workspace/`.
 

@@ -2,7 +2,7 @@
 
 [한국어](../DOCTOR.md) · [English](./doctor.md)
 
-Updated: 2026-05-08
+Updated: 2026-05-15
 
 Run:
 

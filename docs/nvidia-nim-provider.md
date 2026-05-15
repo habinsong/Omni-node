@@ -2,7 +2,7 @@
 
 [한국어](./nvidia-nim-provider.md) · [English](./en/nvidia-nim-provider.md)
 
-업데이트 기준: 2026-05-08
+업데이트 기준: 2026-05-15
 
 Omni-node의 NVIDIA NIM provider key는 `nvidia`다. UI 표시명은 `NVIDIA NIM`이고, `nvidia-nim`, `nvidia_nim`, `nim` alias도 `nvidia`로 정규화한다.
 

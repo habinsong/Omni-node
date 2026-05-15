@@ -2,7 +2,7 @@
 
 [한국어](../../gemini-retriever-plan/06_sprint_schedule.md) · [English](./06_sprint_schedule.md)
 
-Updated: 2026-05-08
+Updated: 2026-05-15
 
 This is an English companion note for the archived Gemini retriever migration record. The current operating documentation is in [Usage](../usage.md), [Architecture](../architecture.md), and [Tool Integration Panel](../tool-integration-panel.md).
 

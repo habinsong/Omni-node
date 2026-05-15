@@ -2,9 +2,9 @@
 
 [한국어](./README.md) · [English](./en/README.md)
 
-업데이트 기준: 2026-05-14
+업데이트 기준: 2026-05-15
 
-이 폴더는 Omni-node를 실제로 설치하고 운영할 때 필요한 문서만 앞에 둔다. 오래된 설계 기록은 `gemini-retriever-plan/` 아래에 따로 남겨 두었다.
+이 폴더는 Omni-node를 실제로 설치하고 운영할 때 필요한 문서만 앞에 둔다. v1.0.4 기준 외부접속 OTP 인증, WebSocket 보안 경계, 스킬 sticky 동작, 루틴/텔레그램 흐름을 현재 기준으로 맞췄다. 오래된 설계 기록은 `gemini-retriever-plan/` 아래에 따로 남겨 두었다.
 
 ## 빠르게 볼 문서
 

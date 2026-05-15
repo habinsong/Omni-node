@@ -2,7 +2,7 @@
 
 [한국어](../PLANNING_AND_TASKS.md) · [English](./planning-and-tasks.md)
 
-Updated: 2026-05-08
+Updated: 2026-05-15
 
 ![Plans tab](../assets/readme/dashboard-plans-tab.png)
 

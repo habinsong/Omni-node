@@ -14,7 +14,7 @@
 
 </div>
 
-업데이트 기준: 2026-05-14
+업데이트 기준: 2026-05-15
 
 Omni-node는 챗봇 하나 더 만들자는 프로젝트가 아니다. LLM에게 물어보고, 코드 만들고, 실행해 보고, 실패하면 고치고, 그 기록을 다시 꺼내보는 과정을 한 화면에 묶으려고 만든 도구다.
 
@@ -66,7 +66,7 @@ Omni-node는 이 문제를 기능 목록이 아니라 작업 흐름으로 풀려
 - **작업 계획**: 계획 생성, 리뷰, 승인, task graph 실행
 - **Safe Refactor**: 줄 범위 교체, LSP rename, ast-grep replace를 preview 중심으로 적용
 - **스킬**: `.omni/skills/**/SKILL.md`를 대화탭과 텔레그램에서 공통 사용, sticky 활성화/중지·재시작 후 자동 복원·다중 스킬 거부·단어 경계 매칭·Think+ 동시 사용 시 톤 양보·`/skill quick` 별명·`/skill status`
-- **외부접속**: 설정 탭에서 LAN 접속을 켜고, 외부 클라이언트의 민감 설정은 차단
+- **외부접속**: 설정 탭에서 LAN 접속을 켜고, 외부 클라이언트도 OTP 인증 후 사용. 민감 설정과 서버 액션은 차단
 - **제공자**: Gemini, Groq, Cerebras, NVIDIA NIM, Copilot CLI, Codex CLI/API
 - **텔레그램 봇**: 슬래시 명령(`/skill /think /web /history /coding download /off`), inline keyboard 빠른 작업, 음성 메시지 자동 STT + 들은 내용 echo, 다중 user allowlist (CSV), 본문 하단 footer (provider·model · 활성 스킬 · ⏱ 소요시간), 긴 응답 자동 .txt 첨부
 
@@ -78,7 +78,7 @@ Omni-node는 이 문제를 기능 목록이 아니라 작업 흐름으로 풀려
 - **컨텍스트 추적**: "그니까 잘 돌아가?" 같은 짧은 후속 질문에서 history가 누락되던 버그 해결. 의견·판단 요청에 모델이 "정확도/정밀도 같은 객관 지표 필요" 회피 답변 못 하도록 시스템 프롬프트 강화.
 - **NVIDIA quota 안내**: 429/quota/credits 본문을 식별해 "무료 할당량 도달, 다른 provider로 바꿔 보세요" 안내로 변환.
 - **Think+ 캐시**: 동일 입력 60초 TTL 캐시로 중복 Gemini 호출 절감.
-- **보안 경계 보강**: 외부접속 자동 인증을 제거하고 OTP 인증을 요구. WebSocket Origin 검사, 인증 전 메시지 allowlist, `/api/local-image` 루틴 자산 경로 제한, 첨부 파일 크기 reject 정책, Markdown raw HTML 차단 추가.
+- **보안 경계 보강**: 외부접속 자동 인증을 제거하고 OTP 인증을 요구. WebSocket Origin 검사, 인증 전 메시지 allowlist, `/api/local-image` 루틴 자산 경로 제한, 첨부 파일 개수/크기 reject 정책, Markdown raw HTML 차단 추가.
 
 ## 스크린샷
 

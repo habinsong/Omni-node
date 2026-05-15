@@ -2,7 +2,7 @@
 
 [한국어](../QUICKSTART.md) · [English](./quickstart.md)
 
-Updated: 2026-05-08
+Updated: 2026-05-15
 
 This is the shortest path from clone to dashboard.
 
@@ -42,3 +42,7 @@ dotnet run --project apps\omninode-middleware\OmniNode.Middleware.csproj
 ```
 
 Open `http://127.0.0.1:8080/`. Health endpoints are `/healthz` and `/readyz`.
+
+The first WebSocket session starts in an OTP-pending state. If Telegram is configured, the OTP is sent there; local development can use the console fallback OTP when enabled.
+
+Remote dashboard access is off by default. When enabled from Settings, LAN clients still need OTP authentication, and sensitive settings or server-side actions stay blocked for remote clients.

@@ -2,13 +2,13 @@
 
 [한국어](../사용법_빠른시작.md) · [English](./usage.md)
 
-Updated: 2026-05-08
+Updated: 2026-05-15
 
 ## Chat
 
 ![Chat tab](../assets/readme/dashboard-chat-tab.png)
 
-Chat supports single model, orchestration, multi-LLM comparison, Think+, URL/search/memory context, sticky skills, and TTS.
+Chat supports single model, orchestration, multi-LLM comparison, Think+, URL/search/memory context, sticky skills, and TTS. Active skills also apply to URL and web-search requests instead of being bypassed by fast paths.
 
 ## Coding
 
@@ -16,11 +16,15 @@ Chat supports single model, orchestration, multi-LLM comparison, Think+, URL/sea
 
 Coding runs create real folders, files, commands, stdout/stderr, validation status, and recoverable recent-result snapshots.
 
+Coding uses the same skill selection model as Chat. If the UI dropdown selects one skill but the prompt explicitly names another, the prompt wins.
+
 ## Routines and Logic
 
 ![Routines tab](../assets/readme/dashboard-routines-tab.png)
 
 Routines handle natural-language creation, immediate runs, scheduled runs, browser-agent runs, and Telegram delivery.
+
+The routine overview keeps refresh/sync actions aligned with the status summary on the same row when width allows.
 
 ![Logic tab](../assets/readme/dashboard-logic-tab.png)
 

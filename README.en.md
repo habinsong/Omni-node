@@ -14,7 +14,7 @@
 
 </div>
 
-Updated: 2026-05-14
+Updated: 2026-05-15
 
 Omni-node is not just another chat UI. It is a local-first AI workbench that keeps conversations, coding runs, generated files, validation logs, routines, logic graphs, notebooks, Safe Refactor previews, and Telegram control in the same operational flow.
 
@@ -83,8 +83,12 @@ Omni-node turns those loose pieces into a working loop.
 - **Logic Graph**: connect chat, coding, routines, and tools on a node canvas
 - **Notebooks**: learnings, decisions, verification notes, and handoff documents
 - **Safe Refactor**: anchor edits, LSP rename, ast-grep replacement with preview and guarded apply
-- **Skills**: project/global `SKILL.md` files, sticky activation, shared chat and Telegram behavior
-- **Remote dashboard**: LAN access toggle with sensitive settings blocked for remote clients
+- **Skills**: project/global `SKILL.md` files, sticky activation, shared chat and Telegram behavior, single-skill guard, and quick aliases
+- **Remote dashboard**: LAN access toggle with OTP authentication for remote clients; sensitive settings and server actions stay blocked
+
+## Recent updates
+
+- **Security boundaries**: remote dashboard auto-auth was removed. WebSocket Origin checks, pre-auth message allowlists, local image path limits, attachment count/size rejection, and Markdown raw HTML blocking are now documented and covered by the test contract.
 
 ## Quick start
 

@@ -2,9 +2,9 @@
 
 [한국어](../README.md) · [English](./README.md)
 
-Updated: 2026-05-08
+Updated: 2026-05-15
 
-This folder keeps the practical documentation for installing, using, operating, and validating Omni-node. Older Gemini search migration notes are kept as archival records under `gemini-retriever-plan/`.
+This folder keeps the practical documentation for installing, using, operating, and validating Omni-node. As of v1.0.4, the docs reflect remote-dashboard OTP authentication, WebSocket security boundaries, sticky skill behavior, routines, and Telegram flows. Older Gemini search migration notes are kept as archival records under `gemini-retriever-plan/`.
 
 | Topic | Korean | English |
 |---|---|---|
