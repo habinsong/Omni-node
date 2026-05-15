@@ -31,6 +31,31 @@ internal sealed class AuthSessionGateway
         var session = _sessionManager.CreatePending(TimeSpan.FromMinutes(3));
         var sessionId = session.SessionId;
 
+        if (remoteDashboardClient)
+        {
+            var ttl = TimeSpan.FromHours(12);
+            var expiresAtUtc = DateTimeOffset.UtcNow.Add(ttl);
+            var ok = _sessionManager.MarkAuthenticatedFromTrusted(sessionId, expiresAtUtc);
+            await WebSocketGateway.SendTextAsync(
+                socket,
+                sendLock,
+                "{"
+                + "\"type\":\"auth_result\","
+                + $"\"ok\":{(ok ? "true" : "false")},"
+                + "\"resumed\":false,"
+                + "\"authToken\":\"\","
+                + $"\"expiresAtUtc\":\"{WebSocketGateway.EscapeJson(ok ? expiresAtUtc.ToString("O") : string.Empty)}\","
+                + $"\"expiresAtLocal\":\"{WebSocketGateway.EscapeJson(ok ? WebSocketGateway.FormatLocalDateTime(expiresAtUtc) : string.Empty)}\","
+                + $"\"localUtcOffset\":\"{WebSocketGateway.EscapeJson(ok ? WebSocketGateway.FormatUtcOffset(expiresAtUtc.ToLocalTime().Offset) : string.Empty)}\","
+                + "\"ttlHours\":12,"
+                + "\"remoteDashboardClient\":true,"
+                + "\"remoteLimited\":true"
+                + "}",
+                cancellationToken
+            );
+            return sessionId;
+        }
+
         await WebSocketGateway.SendTextAsync(
             socket,
             sendLock,
@@ -59,6 +84,17 @@ internal sealed class AuthSessionGateway
     {
         if (string.Equals(messageType, "request_otp", StringComparison.Ordinal))
         {
+            if (remoteDashboardClient)
+            {
+                await WebSocketGateway.SendTextAsync(
+                    socket,
+                    sendLock,
+                    "{\"type\":\"error\",\"message\":\"forbidden_remote_auth\"}",
+                    cancellationToken
+                );
+                return new AuthSessionDispatchResult(true, false);
+            }
+
             await HandleRequestOtpAsync(sessionId, socket, sendLock, cancellationToken);
             return new AuthSessionDispatchResult(true, false);
         }

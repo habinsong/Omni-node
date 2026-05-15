@@ -4657,6 +4657,20 @@ body,
   padding: 16px;
 }
 
+.settings-note-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.settings-note-list li {
+  min-width: 0;
+}
+
 .settings-form-grid {
   display: grid;
   gap: 12px;

@@ -243,8 +243,12 @@ function handleUnauthorizedError(msg, context) {
   } = context
 
   actions.clearAuthToken()
+  const remoteDashboardClient = !!state.settingsState?.remoteDashboardClient || !!state.authMeta?.remoteDashboardClient
   setters.setAuthed(false)
-  setters.setStatus("인증 필요")
+  setters.setStatus(remoteDashboardClient ? "외부 접속 제한됨" : "인증 필요")
+  const expiredMessage = remoteDashboardClient
+    ? "외부 접속 제한 모드에서 허용되지 않은 요청입니다."
+    : "세션 인증이 만료되었습니다. 설정 탭에서 OTP 인증 후 다시 시도하세요."
   setters.setCodingRuntimeByConversation((prev) => {
     const entries = Object.entries(prev || {})
     const pendingIds = entries
@@ -257,7 +261,7 @@ function handleUnauthorizedError(msg, context) {
     const next = { ...prev }
     pendingIds.forEach((conversationId) => {
       next[conversationId] = actions.buildCodingRuntimeMessageState(
-        "세션 인증이 만료되었습니다. 설정 탭에서 OTP 인증 후 다시 시도하세요.",
+        expiredMessage,
         false,
         false
       )
@@ -265,7 +269,7 @@ function handleUnauthorizedError(msg, context) {
 
     if (state.currentConversationId && !next[state.currentConversationId]) {
       next[state.currentConversationId] = actions.buildCodingRuntimeMessageState(
-        "세션 인증이 만료되었습니다. 설정 탭에서 OTP 인증 후 다시 시도하세요.",
+        expiredMessage,
         false,
         false
       )
@@ -303,7 +307,7 @@ export function handleDashboardServerMessage(msg, context) {
       remoteDashboardClient: !!msg.remoteDashboardClient
     })
     if (msg.remoteDashboardClient) {
-      setters.setStatus("외부 접속 / OTP 대기")
+      setters.setStatus("외부 접속 제한 모드")
     }
     return true
   }
@@ -325,7 +329,7 @@ export function handleDashboardServerMessage(msg, context) {
       if (Number.isFinite(msg.ttlHours) && Number(msg.ttlHours) > 0) {
         setters.setAuthTtlHours(String(msg.ttlHours))
       }
-      setters.setStatus(msg.remoteDashboardClient ? "외부 접속 인증됨" : "세션 인증됨")
+      setters.setStatus(msg.remoteDashboardClient ? "외부 접속 제한 모드" : "세션 인증됨")
       actions.send({ type: "get_routines" })
       actions.requestDoctorLast(actions.send, { silent: true, queueIfClosed: false })
       actions.requestRoutingPolicyGet(actions.send, { silent: true, queueIfClosed: false })
@@ -344,7 +348,7 @@ export function handleDashboardServerMessage(msg, context) {
     // 재연결 시 stale token으로 자동 retry하면 토글 루프가 생기므로 항상 token 정리.
     actions.clearAuthToken()
     setters.setAuthLocalOffset(actions.localUtcOffsetLabel())
-    setters.setStatus(msg.resumed ? "세션 만료 / OTP 필요" : "OTP 인증 필요")
+    setters.setStatus(msg.remoteDashboardClient ? "외부 접속 제한 실패" : msg.resumed ? "세션 만료 / OTP 필요" : "OTP 인증 필요")
     return true
   }
 
@@ -1030,7 +1034,7 @@ export function handleDashboardServerMessage(msg, context) {
       codexApiKeyMasked: msg.codexApiKeyMasked || ""
     })
     if (msg.remoteDashboardClient) {
-      setters.setStatus(state.authed ? "외부 접속 인증됨" : "외부 접속 / OTP 대기")
+      setters.setStatus(state.authed ? "외부 접속 제한 모드" : "외부 접속 제한됨")
     }
     return true
   }
@@ -1267,7 +1271,7 @@ export function handleDashboardServerMessage(msg, context) {
 
   if (msg.type === "error") {
     const normalizedMessage = (msg.message || "").toLowerCase().replace(/[\s-]+/g, "_")
-    if (normalizedMessage.includes("forbidden_remote_dashboard")) {
+    if (normalizedMessage.includes("forbidden_remote_")) {
       return true
     }
 

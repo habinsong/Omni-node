@@ -66,7 +66,7 @@ Omni-node는 이 문제를 기능 목록이 아니라 작업 흐름으로 풀려
 - **작업 계획**: 계획 생성, 리뷰, 승인, task graph 실행
 - **Safe Refactor**: 줄 범위 교체, LSP rename, ast-grep replace를 preview 중심으로 적용
 - **스킬**: `.omni/skills/**/SKILL.md`를 대화탭과 텔레그램에서 공통 사용, sticky 활성화/중지·재시작 후 자동 복원·다중 스킬 거부·단어 경계 매칭·Think+ 동시 사용 시 톤 양보·`/skill quick` 별명·`/skill status`
-- **외부접속**: 설정 탭에서 LAN 접속을 켜고, 외부 클라이언트도 OTP 인증 후 사용. 민감 설정과 서버 액션은 차단
+- **외부접속**: 설정 탭에서 LAN 접속을 켜고, 외부 클라이언트는 OTP 없이 제한 모드로 사용. 대화/코딩/루틴/로직 그래프/모델 선택은 허용하고 인증/시크릿/외부접속 설정은 차단
 - **제공자**: Gemini, Groq, Cerebras, NVIDIA NIM, Copilot CLI, Codex CLI/API
 - **텔레그램 봇**: 슬래시 명령(`/skill /think /web /history /coding download /off`), inline keyboard 빠른 작업, 음성 메시지 자동 STT + 들은 내용 echo, 다중 user allowlist (CSV), 본문 하단 footer (provider·model · 활성 스킬 · ⏱ 소요시간), 긴 응답 자동 .txt 첨부
 
@@ -78,7 +78,7 @@ Omni-node는 이 문제를 기능 목록이 아니라 작업 흐름으로 풀려
 - **컨텍스트 추적**: "그니까 잘 돌아가?" 같은 짧은 후속 질문에서 history가 누락되던 버그 해결. 의견·판단 요청에 모델이 "정확도/정밀도 같은 객관 지표 필요" 회피 답변 못 하도록 시스템 프롬프트 강화.
 - **NVIDIA quota 안내**: 429/quota/credits 본문을 식별해 "무료 할당량 도달, 다른 provider로 바꿔 보세요" 안내로 변환.
 - **Think+ 캐시**: 동일 입력 60초 TTL 캐시로 중복 Gemini 호출 절감.
-- **보안 경계 보강**: 외부접속 자동 인증을 제거하고 OTP 인증을 요구. WebSocket Origin 검사, 인증 전 메시지 allowlist, `/api/local-image` 루틴 자산 경로 제한, 첨부 파일 개수/크기 reject 정책, Markdown raw HTML 차단 추가.
+- **보안 경계 보강**: 외부접속은 OTP 요청을 차단하고 제한 모드로 자동 승인. 제한 모드 권한표, 세분화된 차단 메시지, WebSocket Origin 검사, 인증 전 메시지 allowlist, `/api/local-image` 루틴 자산 경로 제한, 첨부 파일 개수/크기 reject 정책, Markdown raw HTML 차단 추가.
 
 ## 스크린샷
 
@@ -141,9 +141,12 @@ Omni-node는 이 문제를 기능 목록이 아니라 작업 흐름으로 풀려
 macOS/Linux에서 전역 실행기가 등록되어 있으면:
 
 ```bash
+Omni-node setup
 Omni-node
 Omni-node shutdown
 ```
+
+저장소에서 바로 준비하려면 `./scripts/Omni-node setup`을 먼저 실행한다. 이 명령은 의존성 확인/설치, 코어 빌드, 미들웨어 빌드, `npm test`, 실행기 등록을 한 번에 처리한다. 첫 `Omni-node` 실행 시 setup marker가 없으면 자동 setup도 시도한다.
 
 수동 실행:
 
@@ -155,6 +158,7 @@ dotnet run --project apps/omninode-middleware/OmniNode.Middleware.csproj
 Windows:
 
 ```powershell
+.\scripts\Omni-node.ps1 setup
 .\apps\omninode-core\build.ps1
 dotnet run --project apps\omninode-middleware\OmniNode.Middleware.csproj
 ```

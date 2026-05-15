@@ -25,9 +25,12 @@ LLM 키는 하나 이상만 있어도 시작할 수 있다. 키는 설정 탭에
 전역 실행기가 등록되어 있으면 macOS/Linux에서는 아래 두 개로 충분하다.
 
 ```bash
+Omni-node setup
 Omni-node
 Omni-node shutdown
 ```
+
+처음 클론한 저장소에서는 `./scripts/Omni-node setup`을 먼저 실행한다. setup은 필수 도구 확인/설치, `apps/omninode-core` 빌드, 미들웨어 빌드, `npm test`, 실행기 등록을 처리한다. setup marker가 없으면 `Omni-node` 첫 실행 때 자동 setup도 시도한다.
 
 수동 실행은 두 단계다.
 
@@ -39,6 +42,7 @@ dotnet run --project apps/omninode-middleware/OmniNode.Middleware.csproj
 Windows:
 
 ```powershell
+.\scripts\Omni-node.ps1 setup
 .\apps\omninode-core\build.ps1
 dotnet run --project apps\omninode-middleware\OmniNode.Middleware.csproj
 ```
@@ -61,4 +65,4 @@ dotnet run --project apps\omninode-middleware\OmniNode.Middleware.csproj
 
 ## 5. 외부접속
 
-외부접속은 기본 꺼짐이다. 로컬 대시보드의 설정 탭에서 토글을 켜면 같은 LAN의 다른 기기에서 접속할 수 있고, 설정 화면에 접속 주소가 표시된다. 외부 클라이언트도 OTP 인증을 거쳐야 하며, Telegram/LLM 키/CLI 인증 같은 민감 설정 화면과 서버 액션은 차단된다.
+외부접속은 기본 꺼짐이다. 로컬 대시보드의 설정 탭에서 토글을 켜면 같은 LAN의 다른 기기에서 접속할 수 있고, 설정 화면에 접속 주소가 표시된다. 외부 클라이언트는 OTP 인증을 요청하지 않고 제한 모드로 자동 진입한다. 대화, 코딩, 루틴, 로직 그래프, 노트북, 작업 계획, 라우팅 정책, 모델 선택은 허용하고, OTP/CLI 인증, Telegram/LLM 키, 외부접속 토글 변경은 차단한다.

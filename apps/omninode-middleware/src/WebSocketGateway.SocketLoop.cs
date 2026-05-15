@@ -36,6 +36,13 @@ public sealed partial class WebSocketGateway
                 cancellationToken
             );
             await SendSettingsStateAsync(socket, sendLock, cancellationToken, remoteDashboardClient);
+            if (_sessionManager.IsAuthenticated(sessionId))
+            {
+                await SendGroqModelsAsync(socket, sendLock, cancellationToken);
+                await SendCopilotModelsAsync(socket, sendLock, cancellationToken);
+                await SendUsageStatsAsync(socket, sendLock, cancellationToken);
+                streamTask = StreamMetricsAsync(socket, sendLock, streamCts.Token);
+            }
 
             while (socket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
             {

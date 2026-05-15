@@ -77,12 +77,15 @@ internal sealed class WsSetupCommandDispatcher
             return true;
         }
 
-        if (remoteDashboardClient && IsRemoteRestrictedMessage(messageType))
+        var remoteRestrictionMessage = remoteDashboardClient
+            ? GetRemoteRestrictionMessage(messageType)
+            : string.Empty;
+        if (!string.IsNullOrWhiteSpace(remoteRestrictionMessage))
         {
             await WebSocketGateway.SendTextAsync(
                 socket,
                 sendLock,
-                "{\"type\":\"error\",\"message\":\"forbidden_remote_dashboard\"}",
+                $"{{\"type\":\"error\",\"message\":\"{remoteRestrictionMessage}\"}}",
                 cancellationToken
             );
             return true;
@@ -407,20 +410,23 @@ internal sealed class WsSetupCommandDispatcher
             && !normalized.Contains("not set", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsRemoteRestrictedMessage(string? messageType)
+    private static string GetRemoteRestrictionMessage(string? messageType)
     {
-        return messageType is
-            "set_external_dashboard_access" or
+        return messageType switch
+        {
+            "set_external_dashboard_access" => "forbidden_remote_external_access",
             "set_telegram_credentials" or
             "delete_telegram_credentials" or
             "set_llm_credentials" or
             "delete_llm_credentials" or
-            "test_telegram" or
+            "test_telegram" => "forbidden_remote_secret_settings",
             "get_copilot_status" or
             "get_codex_status" or
             "start_copilot_login" or
             "start_codex_login" or
-            "logout_codex";
+            "logout_codex" => "forbidden_remote_auth",
+            _ => string.Empty
+        };
     }
 
     private static bool IsSetupMessage(string messageType)

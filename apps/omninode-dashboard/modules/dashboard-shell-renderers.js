@@ -100,7 +100,7 @@ export function renderGlobalNav(props) {
   } = props;
 
   const remoteDashboardClient = !!settingsState.remoteDashboardClient;
-  const navStatusText = authed ? (remoteDashboardClient ? "외부 접속 인증됨" : "세션 인증됨") : status;
+  const navStatusText = authed ? (remoteDashboardClient ? "외부 접속 제한 모드" : "세션 인증됨") : status;
   const geminiLabel = settingsState.geminiApiKeySet
     ? "gemini-3-flash-preview / gemini-3.1-flash-lite-preview"
     : "미설정";

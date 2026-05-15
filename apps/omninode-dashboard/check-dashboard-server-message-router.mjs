@@ -613,11 +613,19 @@ function run() {
   const remoteErrorCountBefore = calls.logs.length;
   handleDashboardServerMessage({
     type: "error",
-    message: "forbidden_remote_dashboard"
+    message: "forbidden_remote_auth"
   }, createContext(store, calls));
   handleDashboardServerMessage({
     type: "error",
-    message: "forbidden remote dashboard"
+    message: "forbidden_remote_secret_settings"
+  }, createContext(store, calls));
+  handleDashboardServerMessage({
+    type: "error",
+    message: "forbidden_remote_external_access"
+  }, createContext(store, calls));
+  handleDashboardServerMessage({
+    type: "error",
+    message: "forbidden remote secret settings"
   }, createContext(store, calls));
 
   assert.equal(calls.logs.length, remoteErrorCountBefore);

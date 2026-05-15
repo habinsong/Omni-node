@@ -21,6 +21,9 @@ const FRIENDLY_MAP = {
   nvidia_api_key_missing: "NVIDIA NIM API 키가 설정되어 있지 않습니다. 설정 탭에서 등록해주세요.",
   copilot_login_required: "Copilot 로그인이 필요합니다. 설정 탭에서 로그인해주세요.",
   codex_login_required: "Codex 로그인이 필요합니다. 설정 탭에서 로그인해주세요.",
+  forbidden_remote_auth: "외부 접속 제한 모드에서는 인증 관련 작업을 사용할 수 없습니다.",
+  forbidden_remote_secret_settings: "외부 접속 제한 모드에서는 API 키와 Telegram 같은 민감 설정을 바꿀 수 없습니다.",
+  forbidden_remote_external_access: "외부 접속 제한 모드에서는 외부접속 설정을 바꿀 수 없습니다.",
   ws_disconnected: "WebSocket 연결이 끊어졌습니다. 잠시 후 자동으로 재연결됩니다.",
 };
 

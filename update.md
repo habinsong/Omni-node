@@ -1,100 +1,76 @@
-# Omni-node v1.0.4 업데이트 내역
+# Omni-node v1.0.5 업데이트 내역
 
-작성일: 2026-05-14
+작성일: 2026-05-15
 문서 최신화: 2026-05-15
 
-이번 업데이트는 v1.0.3 안정화 범위에 외부접속 보안 경계와 릴리스 위생을 더한 패치다. 대화탭, 코딩탭, 텔레그램, 스킬탭에서 스킬이 서로 다른 경로로 적용되던 부분을 하나의 기준으로 맞추고, 활성 스킬이 URL/웹검색 빠른 응답 경로에서 우회되지 않도록 보강했다. 루틴탭은 개요 카드와 새로고침/동기화 버튼이 한 줄에 정렬되도록 UI를 정리했다.
+이번 업데이트는 v1.0.4 이후 확인한 외부접속 제한 모드와 문서/릴리스 위생을 정리한 패치다. 외부 접속에서 OTP 요청 자체를 제거하고 제한 모드로 자동 진입하게 했으며, 원격에서 허용할 작업과 차단할 인증/시크릿/외부접속 설정을 UI·서버·문서·계약 테스트에 같은 기준으로 맞췄다. `./scripts/Omni-node setup` 실행 흐름도 README와 docs에 명시했다.
 
 ## 핵심 요약
 
-- 대화/코딩 입력창에서 선택한 스킬이 서버의 sticky skill 상태에도 반영되도록 했다.
-- 프롬프트에 스킬이 명시된 경우 UI 선택보다 프롬프트 명시를 우선하도록 유지하면서, 단일 유효 스킬만 공통 입력 준비 단계에서 적용되도록 정리했다.
-- 활성 스킬이 있는 상태에서 URL이나 웹검색 질문을 보내도 빠른 응답 경로가 스킬 컨텍스트를 우회하지 않도록 막았다.
-- 텔레그램 일반 대화와 `/coding run` 모두 활성 스킬을 같은 방식으로 전달하도록 보강했다.
-- 스킬 배지의 끄기 버튼을 누르면 UI 선택뿐 아니라 서버에 저장된 해당 대화의 sticky skill도 함께 해제된다.
-- `/skill create`와 스킬탭의 새 스킬 저장이 기존 스킬을 조용히 덮어쓰지 않도록 안전장치를 추가했다.
-- 같은 이름의 project/global 스킬이 함께 있을 때 project 스킬을 우선한다.
-- 루틴탭의 개요 영역에서 새로고침/동기화 버튼이 두 번째 줄로 떨어지지 않고 오른쪽 끝에 한 줄로 보이도록 레이아웃을 조정했다.
-- 관련 문서와 계약 테스트를 갱신했다.
-- 외부접속 자동 인증 제거, 인증 전 WebSocket 메시지 차단, 루틴 이미지 프리뷰 경로 제한, 첨부 파일 reject 정책, Markdown raw HTML 차단을 추가했다.
+- 외부접속 클라이언트는 OTP 요청 없이 제한 모드로 자동 진입한다.
+- 외부 제한 모드에서 대화, 코딩, 루틴, 로직 그래프, 노트북, 작업 계획, 라우팅 정책, 모델 선택은 허용한다.
+- 외부 제한 모드에서 OTP/CLI 인증, Telegram/LLM 키, 외부접속 토글 변경은 차단한다.
+- 서버 차단 메시지를 `forbidden_remote_auth`, `forbidden_remote_secret_settings`, `forbidden_remote_external_access`로 세분화했다.
+- 설정 탭의 외부 제한 패널에 허용/차단 권한표를 표시한다.
+- 보안 경계 계약 테스트에 원격 제한 모드, 로직 그래프 허용, 모델/라우팅 허용, 세분화된 차단 메시지를 추가했다.
+- README와 docs에 `./scripts/Omni-node setup` 및 Windows `.\scripts\Omni-node.ps1 setup` 흐름을 명시했다.
+- `package.json`과 `package-lock.json` 버전을 1.0.5로 맞췄다.
 
-## 스킬 로직 개선
+## 외부접속 제한 모드
 
-### 공통 입력 준비 단계 정리
+### 자동 진입
 
-- UI에서 선택한 스킬 이름과 범위를 공통 입력 준비 단계로 전달하도록 했다.
-- 프롬프트 안에 스킬 이름이 직접 명시되어 있으면 그 스킬을 우선 적용한다.
-- 프롬프트에 명시된 스킬이 없을 때만 UI 선택 스킬을 활성 스킬로 반영한다.
-- 이미 다른 sticky skill이 있는 대화에서 UI 선택 스킬을 바꾸면 이전 활성 스킬 정보를 보존한 뒤 새 스킬로 갱신한다.
-- `PrepareSharedInputAsync`와 `PrepareInputWithAttachmentsAsync`가 `requestedSkillName`, `requestedSkillScope`를 받을 수 있도록 확장했다.
+- 원격 대시보드 클라이언트는 pending 세션 생성 직후 12시간 제한 세션으로 표시된다.
+- 원격 클라이언트에는 `authToken`을 발급하지 않고 `remoteLimited=true` 상태만 전달한다.
+- 대시보드는 외부 접속 상태를 `외부 접속 제한 모드`로 표시하고, 저장된 로컬 인증 토큰으로 `resume_auth`를 보내지 않는다.
 
-### 스킬 탐색과 우선순위
+### 허용되는 작업
 
-- 스킬 manifest 탐색을 공통 helper로 분리했다.
-- 같은 이름의 스킬이 project/global 범위에 동시에 있으면 project 범위를 먼저 선택한다.
-- 스킬 이름이나 범위가 비어 있으면 불필요한 탐색 없이 안전하게 넘어가도록 했다.
+- 대화, 코딩, 루틴 실행
+- 로직 그래프 목록, 열기, 경로 탐색, 저장, 삭제, 실행, 취소, 실행 결과 조회
+- 노트북, 작업 계획, 라우팅 정책, 모델 목록 조회, 모델 선택
 
-### 빠른 웹 응답 경로 보정
+### 차단되는 작업
 
-- 대화탭에서 활성 스킬이 있는 경우 URL fast path와 웹검색 fast path를 우회한다.
-- Think+가 켜진 경우와 마찬가지로, 스킬이 켜진 요청은 공통 입력 준비 단계에서 웹 문맥과 스킬 지침을 함께 붙인 뒤 모델이 답하도록 했다.
-- 이로 인해 웹 검색 결과는 사실 근거로 사용하되, 최종 응답 형식과 말투는 활성 스킬 지침을 따르게 된다.
+- OTP 요청과 인증 재개
+- Copilot/Codex CLI 인증 상태 조회, 로그인, 로그아웃
+- Telegram/LLM 키 저장, 삭제, 테스트
+- 외부접속 토글 변경
 
-## 텔레그램 개선
+## 문서 최신화
 
-- 텔레그램 일반 대화에서 inline 스킬 요청을 공통 입력 준비 단계로 전달한다.
-- 텔레그램에 sticky skill이 활성화되어 있으면 URL/웹검색 빠른 응답 경로가 스킬 지침을 우회하지 않는다.
-- `/coding run` 실행 시 텔레그램 대화의 활성 스킬을 코딩 요청의 `SkillName`으로 전달한다.
-- 단일, 오케스트레이션, 다중 LLM 코딩 모드 모두 텔레그램 활성 스킬을 반영한다.
-- `/skill create`는 기존 스킬을 자동으로 덮어쓰지 않고 실패 메시지를 반환한다.
-
-## 스킬탭과 대화/코딩 UI 개선
-
-- 대화/코딩 입력창의 스킬 배지를 해제하면 서버에 저장된 해당 대화의 active skill도 같이 지운다.
-- 이를 위해 WebSocket 메시지 `skill_active_clear`와 응답 `skill_active_clear_result`를 추가했다.
-- 새 스킬 생성 저장은 기본적으로 `allowOverwrite=false`로 보내 기존 스킬 덮어쓰기를 막는다.
-- 기존 스킬을 열어 수정하는 경우에만 `allowOverwrite=true`로 저장한다.
-
-## 루틴탭 UI 개선
-
-- 루틴탭 개요 그리드를 8개 항목 기준으로 조정했다.
-- `상세 패널`, `전체 루틴`, `활성 루틴`, `예약 대기`, `브라우저 에이전트`, `최근 오류`, `스케줄러`, `새로고침/동기화`가 한 줄에 정렬되도록 했다.
-- 화면 폭이 줄어드는 구간에서도 새로고침/동기화 카드가 두 번째 줄로 밀리지 않도록 column 최소 폭을 다시 잡았다.
-
-## 문서와 계약 테스트
-
-- `docs/AGENTS_AND_SKILLS.md`에 sticky skill 해제, 빠른 웹 응답 우회 방지, project 우선순위, 덮어쓰기 방지 규칙을 추가했다.
-- `docs/텔레그램_봇_가이드.md`에 텔레그램 스킬과 웹검색 경로의 동작 기준을 보강했다.
-- `scripts/check-chat-telegram-contract.mjs`에서 텔레그램 스킬/Think+와 웹검색 계약을 최신 동작에 맞게 갱신했다.
+- `README.md`, `README.en.md`, `docs/QUICKSTART.md`, `docs/en/quickstart.md`에 setup 명령을 추가했다.
+- `docs/아키텍처_흐름.md`, `docs/en/architecture.md`에 외부접속 제한 모드 권한표를 정리했다.
+- `docs/검증_가이드.md`, `docs/en/validation.md`, 수동 회귀 체크리스트에 원격 제한 모드 검증 항목을 추가했다.
+- `docs/README.md`, `docs/en/README.md`, 사용법/디렉터리 문서를 v1.0.5 기준으로 갱신했다.
 
 ## 변경된 주요 영역
 
-- 대시보드 UI: `apps/omninode-dashboard/app.js`, `apps/omninode-dashboard/styles.css`
-- 대시보드 WebSocket context: `apps/omninode-dashboard/modules/ws-context.js`
-- 미들웨어 입력 준비/대화 처리: `apps/omninode-middleware/src/CommandService.InputPreparation.cs`, `apps/omninode-middleware/src/CommandService.Chat.cs`
-- 텔레그램 처리: `apps/omninode-middleware/src/CommandService.Telegram.cs`, `apps/omninode-middleware/src/CommandService.Telegram.Coding.cs`, `apps/omninode-middleware/src/CommandService.Telegram.Skills.cs`
-- 스킬 저장/해제: `apps/omninode-middleware/src/SkillFileService.cs`, `apps/omninode-middleware/src/WsContextCommandDispatcher.cs`, `apps/omninode-middleware/src/WebSocketGateway*.cs`
-- 문서와 테스트: `docs/AGENTS_AND_SKILLS.md`, `docs/텔레그램_봇_가이드.md`, `scripts/check-chat-telegram-contract.mjs`
+- 대시보드 UI: `apps/omninode-dashboard/app.js`, `apps/omninode-dashboard/modules/dashboard-settings-renderers.js`, `apps/omninode-dashboard/modules/dashboard-server-message-router.mjs`, `apps/omninode-dashboard/modules/error-messages.js`, `apps/omninode-dashboard/styles.css`
+- 미들웨어 인증/설정/로직: `apps/omninode-middleware/src/AuthSessionGateway.cs`, `apps/omninode-middleware/src/WebSocketGateway.SocketLoop.cs`, `apps/omninode-middleware/src/WsSetupCommandDispatcher.cs`, `apps/omninode-middleware/src/WsLogicCommandDispatcher.cs`
+- 문서와 버전: `README.md`, `README.en.md`, `docs/**/*.md`, `update.md`, `package.json`, `package-lock.json`
+- 계약 테스트: `scripts/check-security-boundaries.mjs`, `scripts/check-logic-tab-contract.mjs`, `apps/omninode-dashboard/check-dashboard-server-message-router.mjs`
 
 ## 검증한 명령
 
 ```bash
+node scripts/check-security-boundaries.mjs
+node scripts/check-logic-tab-contract.mjs
+node apps/omninode-dashboard/check-dashboard-server-message-router.mjs
 dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj
 npm test
 ```
 
-두 검증 모두 통과했다.
+위 검증 명령은 모두 통과했다.
 
 ## 비전공자용 설명
 
-v1.0.4는 “스킬을 켰는데 어떤 화면에서는 먹고, 어떤 경로에서는 빠지는” 문제를 줄이고, 외부접속과 첨부·마크다운 처리의 안전 경계를 더 분명하게 만든 안정화 업데이트다.
+v1.0.5는 외부접속을 “OTP를 다시 요구하는 원격 화면”이 아니라 “작업 기능은 쓰되 민감 설정만 막는 제한 모드”로 정리한 업데이트다.
 
-예를 들어 대화창에서 특정 말투나 작업 규칙을 가진 스킬을 켜고 URL을 같이 보내면, 예전에는 빠른 웹 응답 경로가 먼저 동작하면서 스킬 지침을 건너뛸 수 있었다. 이제는 활성 스킬이 있으면 웹 자료를 참고하더라도 스킬의 말투와 출력 규칙을 유지한다.
+이제 같은 LAN에서 접속한 외부 클라이언트는 OTP 요청 화면으로 빠지지 않는다. 대신 제한 모드 패널에서 무엇이 허용되고 무엇이 차단되는지 바로 볼 수 있다.
 
-텔레그램도 같은 기준으로 맞췄다. 텔레그램에서 스킬을 켠 뒤 일반 질문을 하거나 `/coding run`으로 코딩 작업을 시켜도 활성 스킬이 전달된다.
+로직 그래프 작업은 외부에서도 계속 사용할 수 있다. 목록을 보고, 열고, 경로를 탐색하고, 저장/삭제/실행/취소/결과 조회까지 가능하다. 모델 선택과 라우팅 정책도 사용자가 바꿀 수 있도록 남겨 두었다.
 
-스킬 저장도 더 안전해졌다. 새 스킬을 만들 때 같은 이름이 이미 있으면 자동으로 덮어쓰지 않는다. 기존 스킬을 수정하려면 스킬탭에서 해당 스킬을 열어 저장해야 한다.
+반대로 OTP 요청, CLI 로그인/로그아웃, Telegram/LLM 키 변경, 외부접속 토글 변경은 막는다. 서버와 대시보드는 이 차단 이유를 인증, 시크릿, 외부접속 설정으로 나눠 보여준다.
 
-루틴탭은 화면 상단의 상태 카드들이 한 줄로 정리되었다. 새로고침/동기화 버튼이 따로 아래 줄로 내려가지 않고 오른쪽 끝에 붙어서 보인다.
-
-정리하면 v1.0.4는 큰 기능을 새로 늘리기보다, v1.0.3에서 정리한 스킬·텔레그램·루틴 흐름을 실제 사용 중 덜 흔들리게 만들고 외부접속 보안 경계를 보강한 업데이트다.
+또한 처음 설치하는 사람이 헷갈리지 않도록 `./scripts/Omni-node setup`과 `.\scripts\Omni-node.ps1 setup`을 README와 docs에 명확히 넣었다.

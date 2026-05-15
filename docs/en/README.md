@@ -4,7 +4,7 @@
 
 Updated: 2026-05-15
 
-This folder keeps the practical documentation for installing, using, operating, and validating Omni-node. As of v1.0.4, the docs reflect remote-dashboard OTP authentication, WebSocket security boundaries, sticky skill behavior, routines, and Telegram flows. Older Gemini search migration notes are kept as archival records under `gemini-retriever-plan/`.
+This folder keeps the practical documentation for installing, using, operating, and validating Omni-node. As of v1.0.5, the docs reflect `./scripts/Omni-node setup`, the remote-dashboard limited-mode permission table, WebSocket security boundaries, sticky skill behavior, routines, and Telegram flows. Older Gemini search migration notes are kept as archival records under `gemini-retriever-plan/`.
 
 | Topic | Korean | English |
 |---|---|---|

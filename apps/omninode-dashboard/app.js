@@ -3543,7 +3543,8 @@ import {
         }
 
         const token = getSavedAuthToken();
-        setStatus(token ? "연결됨 / 세션 인증 확인 중" : "연결됨 / OTP 대기");
+        const remoteDashboardClient = isRemoteDashboardHost();
+        setStatus(remoteDashboardClient ? "연결됨 / 외부 접속 제한 확인 중" : token ? "연결됨 / 세션 인증 확인 중" : "연결됨 / OTP 대기");
         setAuthed(false);
         hasOpenedSocketRef.current = true;
         flushQueuedPayloads(ws, outboundQueueRef.current);
@@ -3585,14 +3586,14 @@ import {
       send({ type: "ping" }, { silent: true, queueIfClosed: false });
 
       const token = getSavedAuthToken();
-      if (token) {
+      const remoteDashboardClient = isRemoteDashboardHost()
+        || !!authMetaRef.current?.remoteDashboardClient
+        || !!settingsStateRef.current?.remoteDashboardClient;
+      if (!remoteDashboardClient && token) {
         send({ type: "resume_auth", authToken: token });
       }
 
       send({ type: "get_settings" });
-      const remoteDashboardClient = isRemoteDashboardHost()
-        || !!authMetaRef.current?.remoteDashboardClient
-        || !!settingsStateRef.current?.remoteDashboardClient;
       if (!remoteDashboardClient) {
         send({ type: "get_copilot_status" });
         send({ type: "get_codex_status" });

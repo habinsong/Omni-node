@@ -18,7 +18,7 @@ const router = read("apps/omninode-dashboard/modules/dashboard-server-message-ro
 const wsLogicClient = read("apps/omninode-dashboard/modules/ws-logic.js");
 
 assert.match(wsLogic, /TryHandleAsync\(\s*WebSocketGateway\.ClientMessage message,\s*bool remoteDashboardClient,/s);
-assert.match(wsLogic, /IsRemoteRestrictedLogicMessage/);
+assert.doesNotMatch(wsLogic, /IsRemoteRestrictedLogicMessage/);
 assert.match(wsLogic, /"logic_graph_run"/);
 assert.match(wsLogic, /"logic_graph_save"/);
 assert.match(wsLogic, /SaveLogicGraphAsync\(\s*targetGraphId,\s*message\.LogicGraphJson,/s);

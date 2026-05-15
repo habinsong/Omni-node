@@ -9,6 +9,7 @@ make -C apps/omninode-core
 python3 apps/omninode-sandbox/executor.py --code "print('ok')"
 dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj
 npm test
+./scripts/Omni-node setup
 curl -s http://127.0.0.1:8080/readyz
 ```
 
@@ -16,4 +17,4 @@ curl -s http://127.0.0.1:8080/readyz
 
 For screenshots, check the PNG files under `docs/assets/readme/`, including `dashboard-mobile-composer-390x844.png.png`.
 
-Manual release checks should include remote-dashboard OTP authentication, remote sensitive-setting blocking, WebSocket unauthorized rejection, routine local-image path limits, attachment count/size rejection, and Markdown raw HTML blocking.
+Manual release checks should include remote-dashboard limited mode without an OTP prompt, blocked remote OTP requests, categorized remote auth/secret/external-access blocking, allowed remote logic graph actions, WebSocket unauthorized rejection, routine local-image path limits, attachment count/size rejection, and Markdown raw HTML blocking.

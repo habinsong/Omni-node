@@ -6,4 +6,4 @@ Updated: 2026-05-15
 
 Before release, manually check dashboard connection, chat, coding, mobile composer, routines, logic graphs, notebooks, plans, skills, Safe Refactor, settings, health endpoints, doctor, and Telegram.
 
-Security checks: remote clients should land in OTP-pending state, OTP authentication should succeed, sensitive settings should remain blocked remotely, and unauthorized WebSocket requests should be rejected.
+Security checks: remote clients should enter limited mode without an OTP prompt, remote OTP requests should stay blocked, sensitive settings should remain blocked remotely, logic graph actions plus model/routing changes should stay available remotely, and unauthorized WebSocket requests should be rejected.

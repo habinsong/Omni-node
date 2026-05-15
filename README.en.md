@@ -84,20 +84,23 @@ Omni-node turns those loose pieces into a working loop.
 - **Notebooks**: learnings, decisions, verification notes, and handoff documents
 - **Safe Refactor**: anchor edits, LSP rename, ast-grep replacement with preview and guarded apply
 - **Skills**: project/global `SKILL.md` files, sticky activation, shared chat and Telegram behavior, single-skill guard, and quick aliases
-- **Remote dashboard**: LAN access toggle with OTP authentication for remote clients; sensitive settings and server actions stay blocked
+- **Remote dashboard**: LAN access toggle with no OTP prompt for remote clients; chat, coding, routines, logic graphs, routing policy, and model selection remain available while auth, secrets, and external-access settings stay blocked
 
 ## Recent updates
 
-- **Security boundaries**: remote dashboard auto-auth was removed. WebSocket Origin checks, pre-auth message allowlists, local image path limits, attachment count/size rejection, and Markdown raw HTML blocking are now documented and covered by the test contract.
+- **Security boundaries**: remote dashboard OTP requests stay blocked, while remote sessions enter limited mode automatically. The permission table, categorized remote-block messages, WebSocket Origin checks, pre-auth message allowlists, local image path limits, attachment count/size rejection, and Markdown raw HTML blocking are documented and covered by the test contract.
 
 ## Quick start
 
 macOS/Linux global launcher:
 
 ```bash
+Omni-node setup
 Omni-node
 Omni-node shutdown
 ```
+
+From a fresh checkout, run `./scripts/Omni-node setup` first. It checks or installs dependencies, builds the core and middleware, runs `npm test`, and registers the launcher. A first `Omni-node` start also attempts automatic setup if the setup marker is missing.
 
 Manual run:
 
@@ -109,6 +112,7 @@ dotnet run --project apps/omninode-middleware/OmniNode.Middleware.csproj
 Windows:
 
 ```powershell
+.\scripts\Omni-node.ps1 setup
 .\apps\omninode-core\build.ps1
 dotnet run --project apps\omninode-middleware\OmniNode.Middleware.csproj
 ```

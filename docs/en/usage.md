@@ -4,6 +4,8 @@
 
 Updated: 2026-05-15
 
+For a fresh checkout, run `./scripts/Omni-node setup` before starting the dashboard. It checks or installs dependencies, builds the core and middleware, runs `npm test`, and registers the launcher.
+
 ## Chat
 
 ![Chat tab](../assets/readme/dashboard-chat-tab.png)
@@ -29,6 +31,12 @@ The routine overview keeps refresh/sync actions aligned with the status summary 
 ![Logic tab](../assets/readme/dashboard-logic-tab.png)
 
 Logic graphs connect chat, coding, routines, and tools on a node canvas.
+
+Remote limited mode keeps logic graph list, open, path browse, save, delete, run, cancel, and run-result lookup available.
+
+## Settings and Remote Access
+
+Remote clients enter limited mode without an OTP prompt. Chat, coding, routines, logic graphs, notebooks, plans, routing policy, and model selection remain available. OTP/CLI auth, Telegram/LLM keys, and external-access toggle changes are blocked.
 
 ## Notebooks and Plans
 

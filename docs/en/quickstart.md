@@ -23,9 +23,12 @@ This is the shortest path from clone to dashboard.
 macOS/Linux launcher:
 
 ```bash
+Omni-node setup
 Omni-node
 Omni-node shutdown
 ```
+
+From a fresh checkout, run `./scripts/Omni-node setup` first. Setup checks or installs required tools, builds `apps/omninode-core`, builds the middleware, runs `npm test`, and registers the launcher. If the setup marker is missing, the first `Omni-node` start also attempts automatic setup.
 
 Manual run:
 
@@ -37,6 +40,7 @@ dotnet run --project apps/omninode-middleware/OmniNode.Middleware.csproj
 Windows:
 
 ```powershell
+.\scripts\Omni-node.ps1 setup
 .\apps\omninode-core\build.ps1
 dotnet run --project apps\omninode-middleware\OmniNode.Middleware.csproj
 ```
@@ -45,4 +49,4 @@ Open `http://127.0.0.1:8080/`. Health endpoints are `/healthz` and `/readyz`.
 
 The first WebSocket session starts in an OTP-pending state. If Telegram is configured, the OTP is sent there; local development can use the console fallback OTP when enabled.
 
-Remote dashboard access is off by default. When enabled from Settings, LAN clients still need OTP authentication, and sensitive settings or server-side actions stay blocked for remote clients.
+Remote dashboard access is off by default. When enabled from Settings, LAN clients enter limited mode without an OTP prompt. Chat, coding, routines, logic graphs, notebooks, plans, routing policy, and model selection remain available; OTP/CLI auth, Telegram/LLM keys, and external-access toggle changes are blocked.
