@@ -338,7 +338,7 @@ public sealed class LlmRouter : IDisposable
             var plan = ExtractGeminiText(responseBody);
             if (string.IsNullOrWhiteSpace(plan))
             {
-                var blockReason = ExtractGeminiBlockReason(responseBody);
+                var blockReason = ProviderResponseParser.ExtractGeminiBlockReason(responseBody);
                 if (!string.IsNullOrWhiteSpace(blockReason))
                 {
                     Console.Error.WriteLine($"[gemini] blocked: {blockReason}");
@@ -609,7 +609,7 @@ public sealed class LlmRouter : IDisposable
                     mergedBuilder.Append(chunkText);
                 }
 
-                if (!IsOpenAiCompatibleTruncated(chunk.FinishReason) || string.IsNullOrWhiteSpace(chunkText))
+                if (!ProviderResponseParser.IsOpenAiCompatibleTruncated(chunk.FinishReason) || string.IsNullOrWhiteSpace(chunkText))
                 {
                     break;
                 }
@@ -843,7 +843,7 @@ public sealed class LlmRouter : IDisposable
                     mergedBuilder.Append(chunkText);
                 }
 
-                if (!IsGeminiTruncated(chunk.FinishReason) || string.IsNullOrWhiteSpace(chunkText))
+                if (!ProviderResponseParser.IsGeminiTruncated(chunk.FinishReason) || string.IsNullOrWhiteSpace(chunkText))
                 {
                     break;
                 }
@@ -1310,7 +1310,7 @@ public sealed class LlmRouter : IDisposable
                     mergedBuilder.Append(chunkText);
                 }
 
-                if (!IsGeminiTruncated(chunk.FinishReason) || string.IsNullOrWhiteSpace(chunkText))
+                if (!ProviderResponseParser.IsGeminiTruncated(chunk.FinishReason) || string.IsNullOrWhiteSpace(chunkText))
                 {
                     break;
                 }
@@ -1739,7 +1739,7 @@ public sealed class LlmRouter : IDisposable
                     mergedBuilder.Append(chunkText);
                 }
 
-                if (!IsOpenAiCompatibleTruncated(chunk.FinishReason) || string.IsNullOrWhiteSpace(chunkText))
+                if (!ProviderResponseParser.IsOpenAiCompatibleTruncated(chunk.FinishReason) || string.IsNullOrWhiteSpace(chunkText))
                 {
                     break;
                 }
@@ -1896,7 +1896,7 @@ public sealed class LlmRouter : IDisposable
                     mergedBuilder.Append(chunkText);
                 }
 
-                if (!IsOpenAiCompatibleTruncated(chunk.FinishReason) || string.IsNullOrWhiteSpace(chunkText))
+                if (!ProviderResponseParser.IsOpenAiCompatibleTruncated(chunk.FinishReason) || string.IsNullOrWhiteSpace(chunkText))
                 {
                     break;
                 }
@@ -2070,44 +2070,29 @@ public sealed class LlmRouter : IDisposable
 
     private void CaptureGroqUsage(string model, string responseBody)
     {
-        var changed = false;
-        try
+        if (!ProviderResponseParser.TryParseOpenAiCompatibleUsage(responseBody, out var parsed))
         {
-            using var doc = JsonDocument.Parse(responseBody);
-            if (!doc.RootElement.TryGetProperty("usage", out var usageElement) || usageElement.ValueKind != JsonValueKind.Object)
+            return;
+        }
+
+        CaptureResponseTokenUsage(new TokenUsage(parsed.PromptTokens, parsed.CompletionTokens, parsed.TotalTokens, TokenUsageEstimator.SourceExact));
+
+        lock (_groqLock)
+        {
+            if (!_groqUsageByModel.TryGetValue(model, out var usage))
             {
-                return;
+                usage = new GroqUsage();
+                _groqUsageByModel[model] = usage;
             }
 
-            var promptTokens = GetInt(usageElement, "prompt_tokens");
-            var completionTokens = GetInt(usageElement, "completion_tokens");
-            var totalTokens = GetInt(usageElement, "total_tokens");
-            CaptureResponseTokenUsage(new TokenUsage(promptTokens, completionTokens, totalTokens, TokenUsageEstimator.SourceExact));
-
-            lock (_groqLock)
-            {
-                if (!_groqUsageByModel.TryGetValue(model, out var usage))
-                {
-                    usage = new GroqUsage();
-                    _groqUsageByModel[model] = usage;
-                }
-
-                usage.Requests += 1;
-                usage.PromptTokens += promptTokens;
-                usage.CompletionTokens += completionTokens;
-                usage.TotalTokens += totalTokens;
-                usage.LastUpdatedUtc = DateTimeOffset.UtcNow;
-                changed = true;
-            }
-        }
-        catch
-        {
+            usage.Requests += 1;
+            usage.PromptTokens += parsed.PromptTokens;
+            usage.CompletionTokens += parsed.CompletionTokens;
+            usage.TotalTokens += parsed.TotalTokens;
+            usage.LastUpdatedUtc = DateTimeOffset.UtcNow;
         }
 
-        if (changed)
-        {
-            SaveUsageState();
-        }
+        SaveUsageState();
     }
 
     private void CaptureGroqRateLimitHeaders(string model, HttpResponseHeaders headers)
@@ -2138,35 +2123,21 @@ public sealed class LlmRouter : IDisposable
 
     private void CaptureGeminiUsage(string responseBody)
     {
-        var promptTokens = 0;
-        var completionTokens = 0;
-        var totalTokens = 0;
-        try
-        {
-            using var doc = JsonDocument.Parse(responseBody);
-            if (!doc.RootElement.TryGetProperty("usageMetadata", out var usageElement) || usageElement.ValueKind != JsonValueKind.Object)
-            {
-                return;
-            }
-
-            promptTokens = GetInt(usageElement, "promptTokenCount");
-            completionTokens = GetInt(usageElement, "candidatesTokenCount");
-            totalTokens = GetInt(usageElement, "totalTokenCount");
-            CaptureResponseTokenUsage(new TokenUsage(promptTokens, completionTokens, totalTokens, TokenUsageEstimator.SourceExact));
-        }
-        catch
+        if (!ProviderResponseParser.TryParseGeminiUsage(responseBody, out var parsed))
         {
             return;
         }
 
-        var addedCost = ((decimal)promptTokens * _providers.GeminiInputPricePerMillionUsd / 1_000_000m)
-                        + ((decimal)completionTokens * _providers.GeminiOutputPricePerMillionUsd / 1_000_000m);
+        CaptureResponseTokenUsage(new TokenUsage(parsed.PromptTokens, parsed.CompletionTokens, parsed.TotalTokens, TokenUsageEstimator.SourceExact));
+
+        var addedCost = ((decimal)parsed.PromptTokens * _providers.GeminiInputPricePerMillionUsd / 1_000_000m)
+                        + ((decimal)parsed.CompletionTokens * _providers.GeminiOutputPricePerMillionUsd / 1_000_000m);
         lock (_geminiLock)
         {
             _geminiUsage.Requests += 1;
-            _geminiUsage.PromptTokens += promptTokens;
-            _geminiUsage.CompletionTokens += completionTokens;
-            _geminiUsage.TotalTokens += totalTokens;
+            _geminiUsage.PromptTokens += parsed.PromptTokens;
+            _geminiUsage.CompletionTokens += parsed.CompletionTokens;
+            _geminiUsage.TotalTokens += parsed.TotalTokens;
             _geminiUsage.EstimatedCostUsd += addedCost;
             _geminiUsage.LastUpdatedUtc = DateTimeOffset.UtcNow;
         }
@@ -2176,22 +2147,12 @@ public sealed class LlmRouter : IDisposable
 
     private void CaptureOpenAiCompatibleTokenUsage(string responseBody)
     {
-        try
+        if (!ProviderResponseParser.TryParseOpenAiCompatibleUsage(responseBody, out var parsed))
         {
-            using var doc = JsonDocument.Parse(responseBody);
-            if (!doc.RootElement.TryGetProperty("usage", out var usageElement) || usageElement.ValueKind != JsonValueKind.Object)
-            {
-                return;
-            }
+            return;
+        }
 
-            var promptTokens = GetInt(usageElement, "prompt_tokens");
-            var completionTokens = GetInt(usageElement, "completion_tokens");
-            var totalTokens = GetInt(usageElement, "total_tokens");
-            CaptureResponseTokenUsage(new TokenUsage(promptTokens, completionTokens, totalTokens, TokenUsageEstimator.SourceExact));
-        }
-        catch
-        {
-        }
+        CaptureResponseTokenUsage(new TokenUsage(parsed.PromptTokens, parsed.CompletionTokens, parsed.TotalTokens, TokenUsageEstimator.SourceExact));
     }
 
     private void CaptureResponseTokenUsage(TokenUsage usage)
@@ -2543,7 +2504,7 @@ public sealed class LlmRouter : IDisposable
                         SafeEmitDelta(deltaCallback, finalContent);
                     }
 
-                    if (!IsOpenAiCompatibleTruncated(polledChunk.FinishReason)
+                    if (!ProviderResponseParser.IsOpenAiCompatibleTruncated(polledChunk.FinishReason)
                         || string.IsNullOrWhiteSpace(finalContent))
                     {
                         break;
@@ -2602,7 +2563,7 @@ public sealed class LlmRouter : IDisposable
                     ConsumeOpenAiStreamEvent(eventBuilder.ToString());
                 }
 
-                if (!IsOpenAiCompatibleTruncated(turnFinishReason) || turnBuilder.Length == 0)
+                if (!ProviderResponseParser.IsOpenAiCompatibleTruncated(turnFinishReason) || turnBuilder.Length == 0)
                 {
                     break;
                 }
@@ -2942,66 +2903,11 @@ public sealed class LlmRouter : IDisposable
         return json;
     }
 
-    private static GroqChatChunk ExtractGroqChatChunk(string json)
-    {
-        using var doc = JsonDocument.Parse(json);
-        if (!doc.RootElement.TryGetProperty("choices", out var choices) || choices.ValueKind != JsonValueKind.Array || choices.GetArrayLength() == 0)
-        {
-            return new GroqChatChunk(string.Empty, string.Empty);
-        }
+    private static ProviderChatChunk ExtractGroqChatChunk(string json)
+        => ProviderResponseParser.ExtractOpenAiCompatibleChunk(json);
 
-        var first = choices[0];
-        var finishReason = first.TryGetProperty("finish_reason", out var finishReasonElement)
-            ? finishReasonElement.GetString() ?? string.Empty
-            : string.Empty;
-
-        if (!first.TryGetProperty("message", out var message) || message.ValueKind != JsonValueKind.Object)
-        {
-            return new GroqChatChunk(string.Empty, finishReason);
-        }
-
-        if (!message.TryGetProperty("content", out var content))
-        {
-            return new GroqChatChunk(string.Empty, finishReason);
-        }
-
-        return new GroqChatChunk(content.GetString() ?? string.Empty, finishReason);
-    }
-
-    private static GeminiChatChunk ExtractGeminiChatChunk(string json)
-    {
-        using var doc = JsonDocument.Parse(json);
-        if (!doc.RootElement.TryGetProperty("candidates", out var candidates) || candidates.ValueKind != JsonValueKind.Array || candidates.GetArrayLength() == 0)
-        {
-            return new GeminiChatChunk(string.Empty, string.Empty);
-        }
-
-        var first = candidates[0];
-        var finishReason = first.TryGetProperty("finishReason", out var finishElement)
-            ? finishElement.GetString() ?? string.Empty
-            : string.Empty;
-
-        if (!first.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Object)
-        {
-            return new GeminiChatChunk(string.Empty, finishReason);
-        }
-
-        if (!content.TryGetProperty("parts", out var parts) || parts.ValueKind != JsonValueKind.Array || parts.GetArrayLength() == 0)
-        {
-            return new GeminiChatChunk(string.Empty, finishReason);
-        }
-
-        var builder = new StringBuilder();
-        foreach (var part in parts.EnumerateArray())
-        {
-            if (part.TryGetProperty("text", out var textElement))
-            {
-                builder.AppendLine(textElement.GetString());
-            }
-        }
-
-        return new GeminiChatChunk(builder.ToString().Trim(), finishReason);
-    }
+    private static ProviderChatChunk ExtractGeminiChatChunk(string json)
+        => ProviderResponseParser.ExtractGeminiChunk(json);
 
     private static SearchCitationReference[] ExtractGeminiUrlContextCitations(string json)
     {
@@ -3196,18 +3102,6 @@ public sealed class LlmRouter : IDisposable
         return false;
     }
 
-    private static bool IsGroqTruncated(string? finishReason)
-    {
-        return string.Equals(finishReason, "length", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsOpenAiCompatibleTruncated(string? finishReason)
-    {
-        return IsGroqTruncated(finishReason)
-               || string.Equals(finishReason, "max_tokens", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(finishReason, "token_limit", StringComparison.OrdinalIgnoreCase);
-    }
-
     private static void AppendGeneratedChunk(StringBuilder builder, string chunk)
     {
         var normalized = (chunk ?? string.Empty).Trim();
@@ -3222,17 +3116,6 @@ public sealed class LlmRouter : IDisposable
         }
 
         builder.Append(normalized);
-    }
-
-    private static bool IsGeminiTruncated(string? finishReason)
-    {
-        if (string.IsNullOrWhiteSpace(finishReason))
-        {
-            return false;
-        }
-
-        return finishReason.Contains("MAX_TOKENS", StringComparison.OrdinalIgnoreCase)
-               || finishReason.Contains("LENGTH", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildContinuationPrompt(string originalInput, string writtenText)
@@ -3251,22 +3134,6 @@ public sealed class LlmRouter : IDisposable
                [이미 작성된 답변 끝부분]
                """
                + tail;
-    }
-
-    private static string ExtractGeminiBlockReason(string json)
-    {
-        using var doc = JsonDocument.Parse(json);
-        if (!doc.RootElement.TryGetProperty("promptFeedback", out var promptFeedback) || promptFeedback.ValueKind != JsonValueKind.Object)
-        {
-            return string.Empty;
-        }
-
-        if (!promptFeedback.TryGetProperty("blockReason", out var blockReasonElement))
-        {
-            return string.Empty;
-        }
-
-        return blockReasonElement.GetString() ?? string.Empty;
     }
 
     private static RouterIntent MapIntent(string content)
@@ -3303,8 +3170,6 @@ public sealed class LlmRouter : IDisposable
             .Replace("\n", "\\n", StringComparison.Ordinal);
     }
 
-    private sealed record GroqChatChunk(string Content, string FinishReason);
-    private sealed record GeminiChatChunk(string Content, string FinishReason);
 }
 
 public sealed class GroqUsage

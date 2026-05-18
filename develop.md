@@ -60,8 +60,8 @@ git diff --check
 최근 확인 결과:
 
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 77 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 150
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 97 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 166
 - `npm test`: 통과
 - `make -C apps/omninode-core -B`: 통과
 - `git diff --check`: 통과
@@ -450,13 +450,19 @@ git diff --check
   - Cerebras `model_not_found` 식별과 429/503 메시지 분기(zai-glm-4.7, qwen-3-preview 분기 포함)를 분리했다.
 - `apps/omninode-middleware-tests/CerebrasErrorPolicyTests.cs`
   - 명시적 code 필드, substring 폴백, preview 모델 429/503 안내, 기본 statusCode 메시지 동작을 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/ProviderResponseParser.cs`
+  - OpenAI-compatible(Groq/NVIDIA/Cerebras) `choices` chunk 추출, Gemini `candidates` chunk 추출, truncation 판정(`length`/`max_tokens`/`token_limit`/Gemini `MAX_TOKENS`), Gemini block reason 추출, OpenAI-compatible/Gemini token usage 파싱을 단일 static parser로 묶었다.
+  - `ProviderChatChunk`(Content, FinishReason)와 `ProviderTokenUsage`(prompt/completion/total) 두 record를 공용 타입으로 노출하고, `LlmRouter`의 사설 `GroqChatChunk`/`GeminiChatChunk` record는 제거했다.
+  - `LlmRouter`의 `CaptureGroqUsage`, `CaptureGeminiUsage`, `CaptureOpenAiCompatibleTokenUsage`는 parser가 돌려준 typed 결과만 받아 state 갱신과 SaveUsageState 호출에 집중하도록 단순화했다.
+- `apps/omninode-middleware-tests/ProviderResponseParserTests.cs`
+  - OpenAI-compatible/Gemini chunk 추출 분기, truncation 인식, block reason 추출, OpenAI/Gemini usage 파싱(부재/손상 폴백 포함)을 단위 테스트로 고정했다.
 - `scripts/check-security-boundaries.mjs`
-  - 네 policy 클래스가 책임을 들고 있고, `LlmRouter`가 정책 객체만 호출하도록 정리되었는지 계약 검사를 추가했다 (assertions 117 → 150).
+  - 다섯 정책/파서 클래스가 책임을 들고 있고, `LlmRouter`가 정책/파서만 호출하도록 정리되었는지 계약 검사를 추가했다 (assertions 117 → 166).
 
 남은 범위:
 
 - Groq/Gemini/Cerebras/NVIDIA/STT 별 HTTP 호출 어댑터를 인터페이스화한다.
-- usage tracking과 응답 normalization(Groq/Gemini/OpenAI-compat token usage 캡처 메서드)을 별도 정책 객체로 분리한다.
+- Groq rate-limit 헤더 캡처(`x-ratelimit-*`)는 아직 `LlmRouter` 내부에 있다. 다음 단계로 `GroqRateLimitHeaderParser` 분리를 검토한다.
 - Cerebras 모델 resolver(`ResolveAvailableCerebrasModelAsync`)의 cache 동작은 LlmRouter 인스턴스 상태에 묶여 있어 어댑터화 시 별도 설계가 필요하다.
 
 ### P5. 상태 저장소 복구 정책 확대
