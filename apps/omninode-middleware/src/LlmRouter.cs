@@ -36,10 +36,6 @@ public sealed class LlmRouter : IDisposable
     private const string CerebrasFallbackModel = "gpt-oss-120b";
     private string? _cerebrasResolvedModelCache = null;
     private DateTime _cerebrasResolvedModelCachedAt = DateTime.MinValue;
-    private static readonly Regex GroqMaxTokensLimitRegex = new(
-        @"max_tokens`?\s*must be less than or equal to `?(?<limit>\d+)`?|maximum value for `max_tokens` is(?: less than the `context_window` for this model)?\s*`?(?<limit2>\d+)`?",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase
-    );
     private readonly ProviderOptions _providers;
     private readonly PathOptions _paths;
     private readonly ContextOptions _context;
@@ -64,7 +60,7 @@ public sealed class LlmRouter : IDisposable
         _usageStatePath = _paths.LlmUsageStatePath;
         _httpClient = new HttpClient
         {
-            Timeout = ResolveSharedHttpTimeout(_providers, _context)
+            Timeout = ProviderTimeoutPolicy.ResolveSharedHttpTimeout(_providers, _context)
         };
 
         LoadUsageState();
@@ -514,9 +510,9 @@ public sealed class LlmRouter : IDisposable
             + "When the user asks for your judgment or opinion (어때, 어떻게 생각해, 잘 돌아갈까, 검토해봐, 추천해, 너 생각, 네 의견 등), give a concrete, decisive answer based on the conversation history and your knowledge. Do not deflect with generic disclaimers like '정확도/정밀도/재현율/F1-score 같은 객관적 지표가 필요하다' or '구체적인 평가 지표와 데이터셋이 필요하다'. State your best assessment with a 1-2 sentence rationale, then optionally note any uncertainty. "
             + "Do not repeat the same paragraphs across multiple turns. If the user asks the same thing again, dig deeper or take a clearer stance instead of repeating prior wording.";
         var requestedMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _context.ChatMaxOutputTokens);
-        var effectiveMaxOutputTokens = ClampGroqMaxOutputTokensForModel(model, requestedMaxOutputTokens);
-        var promptBudgetChars = ResolveGroqPromptBudgetChars(model);
-        var promptForTurn = TruncatePromptForGroq(userInput, promptBudgetChars);
+        var effectiveMaxOutputTokens = GroqPromptPolicy.ClampGroqMaxOutputTokensForModel(model, requestedMaxOutputTokens);
+        var promptBudgetChars = GroqPromptPolicy.ResolveGroqPromptBudgetChars(model);
+        var promptForTurn = GroqPromptPolicy.TruncatePromptForGroq(userInput, promptBudgetChars);
         var mergedBuilder = new StringBuilder();
         var rateLimitRetries = 0;
         var requestTooLargeRetries = 0;
@@ -526,8 +522,8 @@ public sealed class LlmRouter : IDisposable
         {
             for (var turn = 0; turn < ChatContinuationRounds; turn++)
             {
-                var promptForRequest = TruncatePromptForGroq(promptForTurn, promptBudgetChars);
-                var multiTurn = SplitPromptToMultiTurn(promptForRequest);
+                var promptForRequest = GroqPromptPolicy.TruncatePromptForGroq(promptForTurn, promptBudgetChars);
+                var multiTurn = GroqPromptPolicy.SplitPromptToMultiTurn(promptForRequest);
                 string messagesJson;
                 if (multiTurn.Count > 1 && multiTurn[0].Role != "user")
                 {
@@ -569,27 +565,27 @@ public sealed class LlmRouter : IDisposable
                     if ((int)response.StatusCode == 429 && rateLimitRetries < 2)
                     {
                         rateLimitRetries += 1;
-                        await Task.Delay(GetGroqRetryDelayMs(response.Headers, rateLimitRetries == 1 ? 900 : 1800), cancellationToken);
+                        await Task.Delay(GroqPromptPolicy.GetGroqRetryDelayMs(response.Headers, rateLimitRetries == 1 ? 900 : 1800), cancellationToken);
                         turn -= 1;
                         continue;
                     }
 
-                    if (TryExtractGroqMaxTokensLimit(responseBody, out var limit)
+                    if (GroqPromptPolicy.TryExtractGroqMaxTokensLimit(responseBody, out var limit)
                         && limit >= 128
                         && effectiveMaxOutputTokens > limit
                         && tokenLimitRetries < 2)
                     {
                         tokenLimitRetries += 1;
-                        effectiveMaxOutputTokens = ClampGroqMaxOutputTokensForModel(model, limit);
+                        effectiveMaxOutputTokens = GroqPromptPolicy.ClampGroqMaxOutputTokensForModel(model, limit);
                         turn -= 1;
                         continue;
                     }
 
-                    if (IsGroqRequestTooLarge(response.StatusCode, responseBody) && requestTooLargeRetries < 3)
+                    if (GroqPromptPolicy.IsGroqRequestTooLarge(response.StatusCode, responseBody) && requestTooLargeRetries < 3)
                     {
                         requestTooLargeRetries += 1;
                         promptBudgetChars = Math.Max(1200, promptBudgetChars / 2);
-                        promptForTurn = TruncatePromptForGroq(promptForTurn, promptBudgetChars);
+                        promptForTurn = GroqPromptPolicy.TruncatePromptForGroq(promptForTurn, promptBudgetChars);
                         effectiveMaxOutputTokens = Math.Max(256, effectiveMaxOutputTokens / 2);
                         turn -= 1;
                         continue;
@@ -618,7 +614,7 @@ public sealed class LlmRouter : IDisposable
                     break;
                 }
 
-                promptForTurn = TruncatePromptForGroq(BuildContinuationPrompt(userInput, mergedBuilder.ToString()), promptBudgetChars);
+                promptForTurn = GroqPromptPolicy.TruncatePromptForGroq(BuildContinuationPrompt(userInput, mergedBuilder.ToString()), promptBudgetChars);
             }
 
             var content = mergedBuilder.ToString().Trim();
@@ -653,9 +649,9 @@ public sealed class LlmRouter : IDisposable
             + "When the user asks for your judgment or opinion (어때, 어떻게 생각해, 잘 돌아갈까, 검토해봐, 추천해, 너 생각, 네 의견 등), give a concrete, decisive answer based on the conversation history and your knowledge. Do not deflect with generic disclaimers like '정확도/정밀도/재현율/F1-score 같은 객관적 지표가 필요하다' or '구체적인 평가 지표와 데이터셋이 필요하다'. State your best assessment with a 1-2 sentence rationale, then optionally note any uncertainty. "
             + "Do not repeat the same paragraphs across multiple turns. If the user asks the same thing again, dig deeper or take a clearer stance instead of repeating prior wording.";
         var requestedMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _context.ChatMaxOutputTokens);
-        var effectiveMaxOutputTokens = ClampGroqMaxOutputTokensForModel(model, requestedMaxOutputTokens);
-        var promptForRequest = TruncatePromptForGroq(userInput, ResolveGroqPromptBudgetChars(model));
-        var multiTurn = SplitPromptToMultiTurn(promptForRequest);
+        var effectiveMaxOutputTokens = GroqPromptPolicy.ClampGroqMaxOutputTokensForModel(model, requestedMaxOutputTokens);
+        var promptForRequest = GroqPromptPolicy.TruncatePromptForGroq(userInput, GroqPromptPolicy.ResolveGroqPromptBudgetChars(model));
+        var multiTurn = GroqPromptPolicy.SplitPromptToMultiTurn(promptForRequest);
 
         return await GenerateOpenAiCompatibleChatStreamingAsync(
             "groq",
@@ -698,7 +694,7 @@ public sealed class LlmRouter : IDisposable
 
         var endpoint = $"{_providers.GroqBaseUrl.TrimEnd('/')}/chat/completions";
         var systemPrompt = "You are Omni-node assistant. Analyze attached images and answer in Korean concisely.";
-        var effectiveMaxOutputTokens = ClampGroqMaxOutputTokensForModel(model, NormalizeMaxOutputTokens(maxOutputTokens, _context.ChatMaxOutputTokens));
+        var effectiveMaxOutputTokens = GroqPromptPolicy.ClampGroqMaxOutputTokensForModel(model, NormalizeMaxOutputTokens(maxOutputTokens, _context.ChatMaxOutputTokens));
 
         try
         {
@@ -736,7 +732,7 @@ public sealed class LlmRouter : IDisposable
             {
                 if ((int)response.StatusCode == 429)
                 {
-                    await Task.Delay(GetGroqRetryDelayMs(response.Headers, 1200), cancellationToken);
+                    await Task.Delay(GroqPromptPolicy.GetGroqRetryDelayMs(response.Headers, 1200), cancellationToken);
                     using var retryRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
                     retryRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", groqApiKey);
                     retryRequest.Content = new StringContent(body, Encoding.UTF8, "application/json");
@@ -754,7 +750,7 @@ public sealed class LlmRouter : IDisposable
                 }
                 else
                 {
-                    if (IsGroqRequestTooLarge(response.StatusCode, responseBody))
+                    if (GroqPromptPolicy.IsGroqRequestTooLarge(response.StatusCode, responseBody))
                     {
                         var fallbackPrompt = "[이미지 첨부는 크기 제한으로 제외됨]\n" + userInput;
                         return await GenerateGroqChatAsync(fallbackPrompt, model, Math.Min(effectiveMaxOutputTokens, 1024), cancellationToken);
@@ -1019,7 +1015,7 @@ public sealed class LlmRouter : IDisposable
         var selectedModel = string.IsNullOrWhiteSpace(model) ? "gemini-3.1-flash-lite-preview" : model.Trim();
         var endpoint = $"{_providers.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:generateContent";
         var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, Math.Min(_context.ChatMaxOutputTokens, 4096));
-        var effectiveTimeoutMs = NormalizeGeminiGroundedTimeoutMs(timeoutMs);
+        var effectiveTimeoutMs = ProviderTimeoutPolicy.NormalizeGeminiGroundedTimeoutMs(timeoutMs);
         var body = BuildGeminiGroundedBody(prompt, effectiveMaxOutputTokens);
 
         try
@@ -1074,8 +1070,8 @@ public sealed class LlmRouter : IDisposable
         var selectedModel = string.IsNullOrWhiteSpace(model) ? "gemini-3.1-flash-lite-preview" : model.Trim();
         var endpoint = $"{_providers.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:streamGenerateContent?alt=sse";
         var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, Math.Min(_context.ChatMaxOutputTokens, 4096));
-        var effectiveTimeoutMs = NormalizeGeminiGroundedTimeoutMs(timeoutMs);
-        var effectiveFirstChunkTimeoutMs = NormalizeGeminiGroundedFirstChunkTimeoutMs(effectiveTimeoutMs);
+        var effectiveTimeoutMs = ProviderTimeoutPolicy.NormalizeGeminiGroundedTimeoutMs(timeoutMs);
+        var effectiveFirstChunkTimeoutMs = ProviderTimeoutPolicy.NormalizeGeminiGroundedFirstChunkTimeoutMs(effectiveTimeoutMs);
         var body = BuildGeminiGroundedBody(prompt, effectiveMaxOutputTokens);
         var stopwatch = Stopwatch.StartNew();
         var firstChunkMs = 0L;
@@ -1269,7 +1265,7 @@ public sealed class LlmRouter : IDisposable
         var selectedModel = string.IsNullOrWhiteSpace(model) ? _providers.GeminiModel : model.Trim();
         var endpoint = $"{_providers.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:generateContent";
         var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, Math.Min(_context.ChatMaxOutputTokens, 2048));
-        var effectiveTimeoutMs = NormalizeGeminiGroundedTimeoutMs(timeoutMs);
+        var effectiveTimeoutMs = ProviderTimeoutPolicy.NormalizeGeminiGroundedTimeoutMs(timeoutMs);
         var stopwatch = Stopwatch.StartNew();
         var promptForTurn = prompt;
         var mergedBuilder = new StringBuilder();
@@ -1392,8 +1388,8 @@ public sealed class LlmRouter : IDisposable
         var selectedModel = string.IsNullOrWhiteSpace(model) ? _providers.GeminiModel : model.Trim();
         var endpoint = $"{_providers.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:streamGenerateContent?alt=sse";
         var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, Math.Min(_context.ChatMaxOutputTokens, 2048));
-        var effectiveTimeoutMs = NormalizeGeminiGroundedTimeoutMs(timeoutMs);
-        var effectiveFirstChunkTimeoutMs = NormalizeGeminiUrlContextFirstChunkTimeoutMs(effectiveTimeoutMs);
+        var effectiveTimeoutMs = ProviderTimeoutPolicy.NormalizeGeminiGroundedTimeoutMs(timeoutMs);
+        var effectiveFirstChunkTimeoutMs = ProviderTimeoutPolicy.NormalizeGeminiUrlContextFirstChunkTimeoutMs(effectiveTimeoutMs);
         var body = BuildGeminiUrlContextBody(prompt, effectiveMaxOutputTokens, includeGoogleSearch);
         var stopwatch = Stopwatch.StartNew();
         var firstChunkMs = 0L;
@@ -1654,41 +1650,6 @@ public sealed class LlmRouter : IDisposable
             Console.Error.WriteLine($"[gemini] multimodal chat error: {ex.Message}");
             return $"Gemini 호출 오류: {ex.Message}";
         }
-    }
-
-    private static TimeSpan ResolveSharedHttpTimeout(ProviderOptions providers, ContextOptions context)
-    {
-        var llmTimeoutMs = Math.Max(5000, context.LlmTimeoutSec * 1000);
-        var providerTimeoutMs = Math.Max(
-            Math.Max(providers.NvidiaTimeoutSec, providers.CerebrasTimeoutSec),
-            45
-        ) * 1000;
-        var geminiWebTimeoutMs = NormalizeGeminiGroundedTimeoutMs(context.GeminiWebTimeoutMs);
-        return TimeSpan.FromMilliseconds(Math.Max(Math.Max(llmTimeoutMs, providerTimeoutMs + 5000), geminiWebTimeoutMs + 5000));
-    }
-
-    private static int NormalizeGeminiGroundedTimeoutMs(int timeoutMs)
-    {
-        if (timeoutMs <= 0)
-        {
-            return 30000;
-        }
-
-        return Math.Clamp(timeoutMs, 5000, 60000);
-    }
-
-    private static int NormalizeGeminiGroundedFirstChunkTimeoutMs(int totalTimeoutMs)
-    {
-        var normalizedTotal = NormalizeGeminiGroundedTimeoutMs(totalTimeoutMs);
-        var derived = Math.Min(7000, Math.Max(3000, normalizedTotal / 4));
-        return Math.Clamp(derived, 3000, normalizedTotal);
-    }
-
-    private static int NormalizeGeminiUrlContextFirstChunkTimeoutMs(int totalTimeoutMs)
-    {
-        var normalizedTotal = NormalizeGeminiGroundedTimeoutMs(totalTimeoutMs);
-        var derived = Math.Min(30000, Math.Max(8000, normalizedTotal));
-        return Math.Clamp(derived, 8000, normalizedTotal);
     }
 
     private static string BuildGeminiGroundedBody(string prompt, int maxOutputTokens)
@@ -2182,259 +2143,9 @@ public sealed class LlmRouter : IDisposable
         return false;
     }
 
-    private static int ClampGroqMaxOutputTokens(int value)
-    {
-        return Math.Clamp(value, 256, 8192);
-    }
-
-    private static int ClampGroqMaxOutputTokensForModel(string model, int value)
-    {
-        var clamped = ClampGroqMaxOutputTokens(value);
-        if (IsGroqCompoundModel(model))
-        {
-            return Math.Min(clamped, 1024);
-        }
-
-        return clamped;
-    }
-
     private int NormalizeNvidiaMaxOutputTokens(int requested)
     {
         return Math.Clamp(NormalizeMaxOutputTokens(requested, Math.Min(_context.ChatMaxOutputTokens, 4096)), 256, 4096);
-    }
-
-    private static bool IsGroqCompoundModel(string model)
-    {
-        var normalized = (model ?? string.Empty).Trim();
-        return normalized.StartsWith("groq/compound", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static int ResolveGroqPromptBudgetChars(string model)
-    {
-        return IsGroqCompoundModel(model) ? 12000 : 22000;
-    }
-
-    /// <summary>
-    /// 단일 user 프롬프트에서 [최근 대화] 섹션을 파싱해 multi-turn messages로 분리.
-    /// [최근 대화] 안의 [user]/[assistant] 블록을 개별 메시지로, [새 요청]은 마지막 user로.
-    /// 파싱 실패 시 원본 그대로 단일 user 메시지로 폴백.
-    /// </summary>
-    private static List<(string Role, string Content)> SplitPromptToMultiTurn(string prompt)
-    {
-        var fallback = new List<(string, string)> { ("user", prompt) };
-        if (string.IsNullOrWhiteSpace(prompt))
-        {
-            return fallback;
-        }
-
-        // [새 요청] 마커 위치 찾기
-        var requestIdx = prompt.IndexOf("\n[새 요청]", StringComparison.Ordinal);
-        if (requestIdx < 0)
-        {
-            return fallback;
-        }
-
-        // [최근 대화] 섹션 찾기
-        var historyMarker = "\n[최근 대화]";
-        var historyIdx = prompt.IndexOf(historyMarker, StringComparison.Ordinal);
-        if (historyIdx < 0 || historyIdx > requestIdx)
-        {
-            return fallback;
-        }
-
-        // history 섹션 텍스트 추출 ([최근 대화] 이후 ~ [새 요청] 이전)
-        var historyStart = historyIdx + historyMarker.Length;
-        var historyText = prompt[historyStart..requestIdx].Trim();
-
-        // [새 요청] 이후 텍스트
-        var requestText = prompt[(requestIdx + "\n[새 요청]".Length)..].Trim();
-
-        // [컨텍스트 사용 규칙] 등 헤더 부분 (있으면 system 메시지로)
-        var headerText = prompt[..historyIdx].Trim();
-        var headerClean = headerText
-            .Replace("[컨텍스트 사용 규칙]", "", StringComparison.Ordinal)
-            .Trim();
-
-        var messages = new List<(string, string)>();
-
-        // 규칙/메모리 노트는 system 메시지에 포함 (있으면)
-        var systemContent = headerClean.Length > 0 ? headerClean : "";
-
-        // history 내의 [user]/[assistant] 블록 파싱
-        var historyMessages = ParseHistoryBlocks(historyText);
-
-        if (historyMessages.Count == 0)
-        {
-            return fallback;
-        }
-
-        // system + 규칙
-        if (systemContent.Length > 0)
-        {
-            messages.Add(("system_context", systemContent));
-        }
-
-        // history 메시지들
-        foreach (var (role, content) in historyMessages)
-        {
-            messages.Add((role, content));
-        }
-
-        // 새 요청
-        messages.Add(("user", requestText));
-
-        return messages;
-    }
-
-    /// <summary>
-    /// "[최근 대화]" 안의 [user]/[assistant] 블록을 파싱.
-    /// [이전 대화 압축]은 assistant 메시지로 처리.
-    /// </summary>
-    private static List<(string Role, string Content)> ParseHistoryBlocks(string historyText)
-    {
-        var result = new List<(string, string)>();
-        if (string.IsNullOrWhiteSpace(historyText))
-        {
-            return result;
-        }
-
-        // [이전 대화 압축] 블록 처리
-        var compressionIdx = historyText.IndexOf("[이전 대화 압축]", StringComparison.Ordinal);
-        var recentTurnIdx = historyText.IndexOf("[최근 턴]", StringComparison.Ordinal);
-
-        if (compressionIdx >= 0)
-        {
-            var compressionEnd = recentTurnIdx >= 0 ? recentTurnIdx : historyText.Length;
-            var compressionText = historyText[compressionIdx..compressionEnd]
-                .Replace("[이전 대화 압축]", "", StringComparison.Ordinal).Trim();
-            if (compressionText.Length > 0)
-            {
-                result.Add(("assistant", $"[이전 대화 요약] {compressionText}"));
-            }
-        }
-
-        // [최근 턴] 이후 또는 전체에서 [user]/[assistant] 블록 파싱
-        var parseTarget = recentTurnIdx >= 0
-            ? historyText[recentTurnIdx..]
-            : (compressionIdx >= 0 ? historyText[..compressionIdx] : historyText);
-
-        var lines = parseTarget.Split('\n');
-        string? currentRole = null;
-        var currentContent = new List<string>();
-
-        foreach (var line in lines)
-        {
-            var trimmed = line.Trim();
-            if (trimmed.StartsWith("[user]", StringComparison.OrdinalIgnoreCase))
-            {
-                if (currentRole != null && currentContent.Count > 0)
-                {
-                    result.Add((currentRole, string.Join('\n', currentContent).Trim()));
-                }
-                currentRole = "user";
-                currentContent = new List<string>();
-                var rest = trimmed["[user]".Length..].Trim();
-                if (rest.Length > 0) currentContent.Add(rest);
-            }
-            else if (trimmed.StartsWith("[assistant]", StringComparison.OrdinalIgnoreCase))
-            {
-                if (currentRole != null && currentContent.Count > 0)
-                {
-                    result.Add((currentRole, string.Join('\n', currentContent).Trim()));
-                }
-                currentRole = "assistant";
-                currentContent = new List<string>();
-                var rest = trimmed["[assistant]".Length..].Trim();
-                if (rest.Length > 0) currentContent.Add(rest);
-            }
-            else if (trimmed.StartsWith("[최근 턴]", StringComparison.OrdinalIgnoreCase))
-            {
-                // 마커 무시
-                continue;
-            }
-            else if (currentRole != null)
-            {
-                currentContent.Add(line);
-            }
-        }
-
-        if (currentRole != null && currentContent.Count > 0)
-        {
-            result.Add((currentRole, string.Join('\n', currentContent).Trim()));
-        }
-
-        return result;
-    }
-
-    private static string TruncatePromptForGroq(string prompt, int maxChars)
-    {
-        var normalized = (prompt ?? string.Empty)
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace("\r", "\n", StringComparison.Ordinal)
-            .Trim();
-        var safeMax = Math.Max(1200, maxChars);
-        if (normalized.Length <= safeMax)
-        {
-            return normalized;
-        }
-
-        var headLen = (int)Math.Round(safeMax * 0.62);
-        var tailLen = Math.Max(200, safeMax - headLen - 80);
-        if (headLen + tailLen >= normalized.Length)
-        {
-            return normalized[..safeMax];
-        }
-
-        var head = normalized[..headLen].TrimEnd();
-        var tail = normalized[^tailLen..].TrimStart();
-        return head
-               + "\n\n[중간 내용 생략됨: 요청 크기 제한으로 축약]\n\n"
-               + tail;
-    }
-
-    private static bool TryExtractGroqMaxTokensLimit(string responseBody, out int limit)
-    {
-        limit = 0;
-        if (string.IsNullOrWhiteSpace(responseBody))
-        {
-            return false;
-        }
-
-        var match = GroqMaxTokensLimitRegex.Match(responseBody);
-        if (!match.Success)
-        {
-            return false;
-        }
-
-        var raw = match.Groups["limit"].Success ? match.Groups["limit"].Value : match.Groups["limit2"].Value;
-        return int.TryParse(raw, out limit) && limit > 0;
-    }
-
-    private static bool IsGroqRequestTooLarge(System.Net.HttpStatusCode statusCode, string responseBody)
-    {
-        if (statusCode == System.Net.HttpStatusCode.RequestEntityTooLarge)
-        {
-            return true;
-        }
-
-        if (string.IsNullOrWhiteSpace(responseBody))
-        {
-            return false;
-        }
-
-        return responseBody.IndexOf("request_too_large", StringComparison.OrdinalIgnoreCase) >= 0
-               || responseBody.IndexOf("entity too large", StringComparison.OrdinalIgnoreCase) >= 0;
-    }
-
-    private static int GetGroqRetryDelayMs(HttpResponseHeaders headers, int fallbackMs)
-    {
-        var retryAfter = ReadHeaderString(headers, "retry-after");
-        if (int.TryParse(retryAfter, out var seconds) && seconds > 0)
-        {
-            return Math.Clamp(seconds * 1000, 400, 5000);
-        }
-
-        return Math.Clamp(fallbackMs, 400, 5000);
     }
 
     private static int NormalizeMaxOutputTokens(int requested, int fallback)

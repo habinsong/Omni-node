@@ -20,7 +20,17 @@ public sealed class FileRoutingPolicyStore
 
         try
         {
-            var json = File.ReadAllText(path, Encoding.UTF8);
+            var json = AtomicFileStore.ReadAllTextWithBackup(
+                path,
+                RoutingPolicyJson.IsValidPolicyJson,
+                Encoding.UTF8,
+                "routing-policy-store"
+            );
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return new RoutingPolicy();
+            }
+
             return RoutingPolicyJson.DeserializePolicy(json);
         }
         catch

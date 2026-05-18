@@ -123,6 +123,24 @@ public sealed class RoutingPolicy
 
 internal static class RoutingPolicyJson
 {
+    public static bool IsValidPolicyJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public static RoutingPolicy DeserializePolicy(string json)
     {
         if (string.IsNullOrWhiteSpace(json))

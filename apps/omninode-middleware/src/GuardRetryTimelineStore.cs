@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 
 namespace OmniNode.Middleware;
@@ -250,7 +251,12 @@ public sealed class GuardRetryTimelineStore
 
         try
         {
-            var raw = File.ReadAllText(_statePath);
+            var raw = AtomicFileStore.ReadAllTextWithBackup(
+                _statePath,
+                IsValidPersistedStateJson,
+                Encoding.UTF8,
+                "guard-retry-timeline"
+            );
             if (string.IsNullOrWhiteSpace(raw))
             {
                 return;
@@ -296,6 +302,26 @@ public sealed class GuardRetryTimelineStore
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[guard-retry-timeline] state load failed: {ex.Message}");
+        }
+    }
+
+    private static bool IsValidPersistedStateJson(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return false;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize(
+                raw,
+                GuardRetryTimelineJsonContext.Default.GuardRetryTimelinePersistedState
+            ) != null;
+        }
+        catch
+        {
+            return false;
         }
     }
 

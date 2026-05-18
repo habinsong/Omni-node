@@ -39,7 +39,7 @@
 - 첨부 개수와 크기 제한.
 - dynamic code 기본 비활성.
 - 자동 의존성 설치 기본 비활성.
-- 상태 JSON `.lock`, `.bak`, 대표 저장소 복구 경로.
+- 상태 JSON `.lock`, `.bak`, 대표 저장소 복구 경로와 상태 저장소 inventory.
 - memory index sync 관측성.
 - 대시보드 정적 파일 byte 응답, `ETag`, `Last-Modified`, 조건부 `304 Not Modified`.
 - C core auth token과 고정 command protocol.
@@ -60,8 +60,8 @@ git diff --check
 최근 확인 결과:
 
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 35 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 111
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 63 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 135
 - `npm test`: 통과
 - `make -C apps/omninode-core -B`: 통과
 - `git diff --check`: 통과
@@ -179,7 +179,7 @@ git diff --check
 
 - 대표 JSON 저장소에는 `.lock`, `.bak`, 복구 경로가 들어갔다.
 - 모든 JSON 읽기 경로가 같은 복구 정책을 쓰는 것은 아니다.
-- `llm_usage.json`, `copilot_usage.json` 계열은 `.bak` 복구 로더를 통과한다.
+- `llm_usage.json`, `copilot_usage.json`, `routing-policy.json`, `guard_retry_timeline.json` 계열은 `.bak` 복구 로더를 통과한다.
 - 일부 읽기 전용 tool 상태는 후속 정리 대상이다.
 
 영향:
@@ -322,7 +322,7 @@ git diff --check
 
 검증 결과:
 
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 111
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 117
 - `git diff --check`: 통과
 
 검증:
@@ -370,8 +370,8 @@ git diff --check
 
 - `node scripts/check-gateway-runtime-contract.mjs`: 통과
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 35 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 111
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 63 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 135
 - `npm test`: 통과
 - `make -C apps/omninode-core -B`: 통과
 - `git diff --check`: 통과
@@ -410,6 +410,8 @@ git diff --check
 
 ### P4. Provider adapter 구조 정리
 
+상태: 진행 중
+
 목표:
 
 - `LlmRouter`를 provider 호출 구현체와 routing/fallback 조정자로 분리한다.
@@ -427,9 +429,29 @@ git diff --check
 - provider별 timeout, error normalization, usage 추적 책임이 명확해진다.
 - 신규 provider 추가 시 `LlmRouter` 본문 변경량이 줄어든다.
 
+진행 내용:
+
+- `apps/omninode-middleware/src/ProviderTimeoutPolicy.cs`
+  - `LlmRouter` 내부에 묶여 있던 shared HTTP timeout, single-chat timeout floor, Gemini grounded/url-context first-chunk timeout 계산을 단일 static policy로 분리했다.
+  - `LlmRouter`와 `CommandService.ProviderRouting`이 같은 정책 객체를 호출하도록 정리했다.
+- `apps/omninode-middleware-tests/ProviderTimeoutPolicyTests.cs`
+  - provider별 timeout floor, override 우선순위, Gemini grounded timeout clamp, shared HTTP timeout 합계를 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/GroqPromptPolicy.cs`
+  - Groq compound 모델 max_output_tokens cap, prompt budget, multi-turn split, `[최근 대화]/[새 요청]` 파싱, prompt truncation, request-too-large 판단, retry-after 헤더 기반 retry delay를 묶었다.
+  - `LlmRouter`는 더 이상 이 helper의 원본을 들고 있지 않으며, Groq 호출 경로 전체가 `GroqPromptPolicy.*` 단일 진입점을 통과한다.
+- `apps/omninode-middleware-tests/GroqPromptPolicyTests.cs`
+  - compound 모델 cap, prompt 축약 마커, multi-turn split 동작, max_tokens 에러 추출, request_too_large 식별, retry-after 헤더 처리를 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - 두 policy 클래스가 실제로 책임을 들고 있는지, `LlmRouter`가 정책 객체만 호출하도록 정리되었는지 계약 검사를 추가했다.
+
+남은 범위:
+
+- Groq/Gemini/Cerebras/NVIDIA/STT 별 HTTP 호출 어댑터를 인터페이스화한다.
+- usage tracking과 응답 normalization을 별도 정책 객체로 분리한다.
+
 ### P5. 상태 저장소 복구 정책 확대
 
-상태: 진행 중
+상태: 완료
 
 목표:
 
@@ -451,6 +473,19 @@ git diff --check
   - `WorkspaceDoctorCheck`가 손상 JSON 상세를 `corruptJsonFiles=상대경로:backup=yes|no` 형태로 노출한다.
   - `.bak`가 없는 손상 JSON이 있으면 별도 suggested action을 추가한다.
   - `WorkspaceDoctorCheckTests`가 backup 유무가 섞인 손상 JSON을 경고와 detail로 고정했다.
+- 상태 파일 inventory 작성. 완료:
+  - `docs/환경변수_및_상태파일.md`
+    - JSON 상태 저장소별 기본 위치, override 환경변수, 원자 쓰기/백업 복구 여부를 표로 정리했다.
+    - 실행 산출물과 Markdown 문서는 JSON 상태 저장소와 분리해 기록했다.
+  - `scripts/check-security-boundaries.mjs`
+    - 상태 저장소 inventory 문서가 핵심 상태 파일과 백업 복구 기준을 포함하는지 계약 검사에 추가했다.
+- 추가 백업 복구 확대. 완료:
+  - `FileRoutingPolicyStore`
+    - `routing-policy.json` 로드 시 `AtomicFileStore.ReadAllTextWithBackup`을 사용한다.
+  - `GuardRetryTimelineStore`
+    - `guard_retry_timeline.json` 로드 시 `AtomicFileStore.ReadAllTextWithBackup`을 사용한다.
+  - `RoutingPolicyTests`, `GuardRetryTimelineStoreTests`
+    - 손상 primary → 유효 `.bak` 복구를 단위 테스트로 고정했다.
 
 ## 운영 판단
 

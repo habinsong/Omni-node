@@ -183,16 +183,12 @@ public sealed partial class CommandService
         var effectiveModel = normalized == "groq"
             ? ResolveGroqModelForInput(input, model)
             : ResolveProviderModel(normalized, model);
-        var timeoutSeconds = timeoutOverrideSeconds ?? (normalized switch
-        {
-            "groq" => Math.Max(90, _context.LlmTimeoutSec * 3),
-            "gemini" => Math.Max(90, _context.LlmTimeoutSec * 3),
-            "copilot" => Math.Max(120, _context.LlmTimeoutSec * 3),
-            "codex" => Math.Max(120, _context.LlmTimeoutSec * 3),
-            "cerebras" => Math.Max(120, _providers.CerebrasTimeoutSec * 3),
-            "nvidia" => Math.Max(360, _providers.NvidiaTimeoutSec * 2),
-            _ => Math.Max(8, _context.LlmTimeoutSec)
-        });
+        var timeoutSeconds = ProviderTimeoutPolicy.ResolveSingleChatTimeoutSeconds(
+            normalized,
+            _providers,
+            _context,
+            timeoutOverrideSeconds
+        );
         var maxAttempts = normalized == "gemini" ? 2 : 1;
         LlmSingleChatResult? lastResult = null;
         Exception? lastException = null;
