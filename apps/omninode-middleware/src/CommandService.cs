@@ -144,7 +144,6 @@ public sealed partial class CommandService :
     private readonly object _telegramRefactorLock = new();
     private readonly object _telegramUpgradeQuotaLock = new();
     private readonly object _routineLock = new();
-    private readonly object _planLock = new();
     private readonly IDoctorApplicationService _doctorAppService;
     private readonly INotebookApplicationService _notebookAppService;
     private readonly ISettingsApplicationService _settingsAppService;
@@ -153,6 +152,7 @@ public sealed partial class CommandService :
     private readonly CleanupService _cleanupService;
     private readonly ITaskGraphApplicationService _taskGraphAppService;
     private readonly IMemoryApplicationService _memoryAppService;
+    private readonly IPlanningApplicationService _planAppService;
     private readonly AsyncLocal<TelegramExecutionMetadata?> _telegramExecutionMetadata = new();
     private readonly AsyncLocal<TelegramTurnContext?> _telegramTurnContext = new();
     private readonly string _telegramUpgradeQuotaStatePath;
@@ -222,7 +222,8 @@ public sealed partial class CommandService :
         IContextApplicationService contextAppService,
         CleanupService cleanupService,
         ITaskGraphApplicationService taskGraphAppService,
-        IMemoryApplicationService memoryAppService
+        IMemoryApplicationService memoryAppService,
+        IPlanningApplicationService planAppService
     )
     {
         _config = config;
@@ -276,6 +277,7 @@ public sealed partial class CommandService :
         _cleanupService = cleanupService;
         _taskGraphAppService = taskGraphAppService;
         _memoryAppService = memoryAppService;
+        _planAppService = planAppService;
         _killAllowlist = (_config.KillAllowlistCsv ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(x => !string.IsNullOrWhiteSpace(x))
