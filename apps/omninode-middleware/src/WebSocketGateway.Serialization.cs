@@ -81,6 +81,7 @@ public sealed partial class WebSocketGateway
 
         builder.Append("],");
         builder.Append($"\"latestCodingResult\":{BuildConversationCodingResultJson(conversation.LatestCodingResult)},");
+        builder.Append($"\"tokenUsageTotal\":{BuildTokenUsageJson(conversation.TokenUsageTotal)},");
         builder.Append("\"messages\":[");
         for (var i = 0; i < conversation.Messages.Count; i++)
         {
@@ -94,12 +95,29 @@ public sealed partial class WebSocketGateway
             builder.Append($"\"role\":\"{EscapeJson(message.Role)}\",");
             builder.Append($"\"text\":\"{EscapeJson(message.Text)}\",");
             builder.Append($"\"meta\":\"{EscapeJson(message.Meta)}\",");
-            builder.Append($"\"createdUtc\":\"{EscapeJson(message.CreatedUtc.ToString("O"))}\"");
+            builder.Append($"\"createdUtc\":\"{EscapeJson(message.CreatedUtc.ToString("O"))}\",");
+            builder.Append($"\"tokenUsage\":{BuildTokenUsageJson(message.TokenUsage)}");
             builder.Append("}");
         }
 
         builder.Append("]}");
         return builder.ToString();
+    }
+
+    private static string BuildTokenUsageJson(TokenUsage? usage)
+    {
+        if (usage == null)
+        {
+            return "null";
+        }
+
+        var normalized = TokenUsageEstimator.Normalize(usage);
+        return "{"
+            + $"\"promptTokens\":{Math.Max(0L, normalized.PromptTokens).ToString(CultureInfo.InvariantCulture)},"
+            + $"\"completionTokens\":{Math.Max(0L, normalized.CompletionTokens).ToString(CultureInfo.InvariantCulture)},"
+            + $"\"totalTokens\":{Math.Max(0L, normalized.TotalTokens).ToString(CultureInfo.InvariantCulture)},"
+            + $"\"source\":\"{EscapeJson(normalized.Source)}\""
+            + "}";
     }
 
     private static string BuildChatLatencyJson(ChatLatencyMetrics? latency)
@@ -315,7 +333,8 @@ public sealed partial class WebSocketGateway
                + $"\"recommendation\":\"{EscapeJson(result.Recommendation)}\","
                + $"\"execution\":{BuildExecutionJson(result.Execution)},"
                + $"\"workers\":{BuildCodingWorkerSnapshotsJson(result.Workers)},"
-               + $"\"changedFiles\":{BuildStringArrayJson(result.ChangedFiles)}"
+               + $"\"changedFiles\":{BuildStringArrayJson(result.ChangedFiles)},"
+               + $"\"evidence\":{BuildCodingEvidenceJson(result.Evidence)}"
                + "}";
     }
 
@@ -332,7 +351,30 @@ public sealed partial class WebSocketGateway
                + $"\"targetModel\":\"{EscapeJson(result.TargetModel)}\","
                + $"\"previewUrl\":\"{EscapeJson(result.PreviewUrl)}\","
                + $"\"previewEntry\":\"{EscapeJson(result.PreviewEntry)}\","
-               + $"\"execution\":{(result.Execution == null ? "null" : BuildExecutionJson(result.Execution))}"
+               + $"\"execution\":{(result.Execution == null ? "null" : BuildExecutionJson(result.Execution))},"
+               + $"\"evidence\":{BuildCodingEvidenceJson(result.Evidence)}"
+               + "}";
+    }
+
+    private static string BuildCodingEvidenceJson(CodingEvidencePack? evidence)
+    {
+        if (evidence == null)
+        {
+            return "null";
+        }
+
+        return "{"
+               + $"\"runMode\":\"{EscapeJson(evidence.RunMode)}\","
+               + $"\"command\":\"{EscapeJson(evidence.Command)}\","
+               + $"\"exitCode\":{(evidence.ExitCode.HasValue ? evidence.ExitCode.Value.ToString(CultureInfo.InvariantCulture) : "null")},"
+               + $"\"status\":\"{EscapeJson(evidence.Status)}\","
+               + $"\"stdoutSummary\":\"{EscapeJson(evidence.StdoutSummary)}\","
+               + $"\"stderrSummary\":\"{EscapeJson(evidence.StderrSummary)}\","
+               + $"\"changedFiles\":{BuildStringArrayJson(evidence.ChangedFiles)},"
+               + $"\"previewUrl\":\"{EscapeJson(evidence.PreviewUrl)}\","
+               + $"\"previewEntry\":\"{EscapeJson(evidence.PreviewEntry)}\","
+               + $"\"screenshotPath\":\"{EscapeJson(evidence.ScreenshotPath)}\","
+               + $"\"consoleSummary\":\"{EscapeJson(evidence.ConsoleSummary)}\""
                + "}";
     }
 

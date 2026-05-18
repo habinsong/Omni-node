@@ -17,4 +17,5 @@ public sealed class MemoryApplicationService : IMemoryApplicationService
     public Task<MemoryNoteCreateResult> CreateMemoryNoteAsync(string conversationId, string source, bool compactConversation, CancellationToken cancellationToken) => _inner.CreateMemoryNoteAsync(conversationId, source, compactConversation, cancellationToken);
     public MemorySearchToolResult SearchMemory(string query, int? maxResults = null, double? minScore = null) => _inner.SearchMemory(query, maxResults, minScore);
     public MemoryGetToolResult GetMemory(string path, int? from = null, int? lines = null) => _inner.GetMemory(path, from, lines);
+    public MemoryIndexRebuildResult RebuildMemoryIndex() => _inner.RebuildMemoryIndex();
 }

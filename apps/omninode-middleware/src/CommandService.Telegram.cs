@@ -2065,7 +2065,12 @@ public sealed partial class CommandService
 
         var thinkingLevel = ResolveTelegramThinkingLevel(snapshot, requestText);
         var profiledInput = BuildTelegramProfilePrompt(preparedInput, snapshot.Profile, thinkingLevel);
-        var contextualProfiledInput = BuildContextualInput(session.SessionId, profiledInput, session.LinkedMemoryNotes);
+        var contextualProfiledInput = BuildContextualInput(
+            session.SessionId,
+            profiledInput,
+            session.LinkedMemoryNotes,
+            contextDecisionInput: effectiveTopicInput
+        );
         var shouldSkipDriftRecovery = ShouldSkipTelegramDriftRecovery(contextualProfiledInput, effectiveTopicInput, preparedInput);
 
         string responseText;

@@ -76,6 +76,11 @@ export function renderToolControlPanel(props) {
     toolMemoryGetPath,
     setToolMemoryGetPath,
     submitMemoryGetProbe,
+    submitMemoryIndexRebuild,
+    submitDoctorFixPreview,
+    submitDoctorFixApply,
+    submitCleanupPreview,
+    submitCleanupApply,
     clearToolControlResults,
     toolResultPreview,
     filteredToolResultItems,
@@ -556,6 +561,13 @@ export function renderToolControlPanel(props) {
               e("button", { className: "btn", disabled: !authed, onClick: submitMemorySearchProbe }, "memory_search"),
               renderTextInput(toolMemoryGetPath, setToolMemoryGetPath, "memory_get path"),
               e("button", { className: "btn", disabled: !authed, onClick: submitMemoryGetProbe }, "memory_get")
+            ),
+            e("div", { className: "tool-control-grid five" },
+              e("button", { className: "btn", disabled: !authed, onClick: submitMemoryIndexRebuild }, "memory.rebuild"),
+              e("button", { className: "btn", disabled: !authed, onClick: submitDoctorFixPreview }, "doctor.fix.preview"),
+              e("button", { className: "btn", disabled: !authed, onClick: submitDoctorFixApply }, "doctor.fix.apply"),
+              e("button", { className: "btn", disabled: !authed, onClick: submitCleanupPreview }, "cleanup.preview"),
+              e("button", { className: "btn", disabled: !authed, onClick: submitCleanupApply }, "cleanup.apply")
             )
           )
         )

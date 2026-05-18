@@ -29,7 +29,12 @@ public sealed partial class CommandService
         );
         if (!string.IsNullOrWhiteSpace(prepared.UnsupportedMessage))
         {
-            return new LlmSingleChatResult(resolvedProvider, resolvedModel, prepared.UnsupportedMessage);
+            return new LlmSingleChatResult(
+                resolvedProvider,
+                resolvedModel,
+                prepared.UnsupportedMessage,
+                TokenUsageEstimator.Estimate(input, prepared.UnsupportedMessage)
+            );
         }
 
         return await GenerateByProviderSafeAsync(

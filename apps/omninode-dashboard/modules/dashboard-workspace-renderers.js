@@ -576,6 +576,69 @@ function renderExecutionDetails(props) {
   );
 }
 
+function renderCodingEvidencePack(props) {
+  const {
+    e,
+    evidence,
+    humanPath,
+    runDir,
+    title = "검증 근거"
+  } = props;
+  if (!evidence || typeof evidence !== "object") {
+    return null;
+  }
+
+  const changedFiles = Array.isArray(evidence.changedFiles) ? evidence.changedFiles.filter(Boolean) : [];
+  const stdout = normalizeExecutionText(evidence.stdoutSummary);
+  const stderr = normalizeExecutionText(evidence.stderrSummary);
+  const detailItems = [
+    { key: "run-mode", label: "모드", value: evidence.runMode || "-" },
+    { key: "status", label: "상태", value: `${evidence.status || "-"} · exit=${evidence.exitCode ?? "-"}` },
+    evidence.command ? { key: "command", label: "명령", value: evidence.command } : null,
+    evidence.previewUrl ? { key: "preview", label: "프리뷰", value: evidence.previewUrl } : null,
+    evidence.previewEntry ? { key: "preview-entry", label: "엔트리", value: evidence.previewEntry } : null,
+    evidence.consoleSummary ? { key: "console", label: "콘솔", value: evidence.consoleSummary } : null
+  ].filter(Boolean);
+
+  return e("div", { className: "coding-evidence-panel" },
+    e("div", { className: "coding-preview-head" }, title),
+    detailItems.length > 0
+      ? e("div", { className: "coding-execution-meta-grid" },
+        detailItems.map((item) => e("div", {
+          key: `evidence-${item.key}`,
+          className: `coding-execution-meta-card${item.key === "command" || item.key === "preview" ? " is-wide" : ""}`
+        },
+        e("div", { className: "coding-execution-meta-label" }, item.label),
+        e("div", { className: "coding-execution-meta-value" }, item.value)
+        ))
+      )
+      : null,
+    changedFiles.length > 0
+      ? e("div", { className: "coding-files evidence-files" },
+        e("div", { className: "coding-files-head" }, `근거 파일 (${changedFiles.length})`),
+        e("div", { className: "coding-files-list" },
+          changedFiles.slice(0, 24).map((pathValue) => e("span", {
+            key: `evidence-file-${pathValue}`,
+            className: "file-chip readonly"
+          }, humanPath(pathValue, runDir || "")))
+        )
+      )
+      : null,
+    stdout
+      ? e("div", { className: "coding-execution-output-block" },
+        e("div", { className: "coding-execution-output-head" }, "stdout summary"),
+        e("pre", { className: "coding-execution-output-content" }, stdout)
+      )
+      : null,
+    stderr
+      ? e("div", { className: "coding-execution-output-block is-error" },
+        e("div", { className: "coding-execution-output-head" }, "stderr summary"),
+        e("pre", { className: "coding-execution-output-content" }, stderr)
+      )
+      : null
+  );
+}
+
 function ResultMessageCarousel(props) {
   const { useEffect, useState } = React;
   const {
@@ -829,6 +892,13 @@ function renderCodingResultCard(props) {
     runtime.message
       ? e("div", { className: "coding-runtime-message" }, runtime.message)
       : null,
+    renderCodingEvidencePack({
+      e,
+      evidence: runtime.evidence,
+      humanPath,
+      runDir,
+      title: "재실행 검증 근거"
+    }),
     runtime.runMode === "browser" && runtime.previewUrl
       ? e("div", { className: "coding-runtime-scroll" },
           e("div", { className: "coding-runtime-browser-bar" },
@@ -938,6 +1008,13 @@ function renderCodingResultCard(props) {
         })
       : e("div", { className: "coding-output empty-line" }, "생성 단계 실행 로그는 숨김 상태입니다.")
   );
+  const evidencePanel = renderCodingEvidencePack({
+    e,
+    evidence: result.evidence,
+    humanPath,
+    runDir,
+    title: "생성 검증 근거"
+  });
   const contentGrid = e("div", { className: "coding-result-body-grid" },
     e("div", { className: "coding-result-primary-column" },
       filesPanel,
@@ -945,6 +1022,7 @@ function renderCodingResultCard(props) {
     ),
     e("div", { className: "coding-result-secondary-column" },
       runtimePanel,
+      evidencePanel,
       executionLogsPanel
     )
   );

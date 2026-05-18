@@ -20,6 +20,7 @@ const execution = read("apps/omninode-middleware/src/CommandService.Execution.cs
 const contracts = read("apps/omninode-middleware/src/Application/ApplicationServiceContracts.cs");
 const inputPrep = read("apps/omninode-middleware/src/CommandService.InputPreparation.cs");
 const utils = read("apps/omninode-middleware/src/CommandService.Utils.cs");
+const searchPipeline = read("apps/omninode-middleware/src/CommandService.SearchPipeline.cs");
 
 assert(
   contracts.includes("TelegramTurnContext? telegramContext = null"),
@@ -84,8 +85,16 @@ assert(
 assert(
   utils.includes("LooksLikeStrongFollowupQuestion") &&
     utils.includes("LooksLikeExplicitStandaloneQuestion") &&
+    utils.includes("LooksLikeStandaloneFreshGreeting(input)") &&
+    utils.includes("contextDecisionInput") &&
     utils.includes("새 요청에 자체 주제와 대상이 분명하면 [최근 대화]는 배경으로만 참고"),
-  "대화탭은 후속 질문과 독립 질문을 구분하는 공통 맥락 판단 규칙을 가져야 합니다."
+  "대화탭은 후속 질문, 독립 질문, 독립 인사를 구분하는 공통 맥락 판단 규칙을 가져야 합니다."
+);
+assert(
+  searchPipeline.includes("LooksLikeStandaloneFreshGreeting") &&
+    searchPipeline.includes("\"ㅎㅇ\"") &&
+    searchPipeline.includes("\"hello\""),
+  "대화탭은 'ㅎㅇ' 같은 독립 인사를 최근 대화 맥락 주입에서 제외해야 합니다."
 );
 assert(
   telegram.includes("FindTelegramAnchorTurn") &&

@@ -198,7 +198,7 @@ public sealed class ToolRegistry
         ));
         _ = TryRegister(new ToolDefinition(
             "browser",
-            "Runs browser actions via stub adapter (status/start/stop/tabs/navigate/open/focus/close)",
+            "Runs browser actions with auto Playwright adapter fallback to stub (status/start/stop/tabs/navigate/open/focus/close)",
             "browser",
             EnabledByDefault: true,
             Implemented: true,

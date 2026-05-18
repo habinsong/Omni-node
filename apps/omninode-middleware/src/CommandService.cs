@@ -145,6 +145,8 @@ public sealed partial class CommandService :
     private readonly object _telegramUpgradeQuotaLock = new();
     private readonly object _routineLock = new();
     private readonly object _planLock = new();
+    private readonly ConcurrentDictionary<string, DoctorFixPlanResult> _doctorFixPreviews = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, CleanupPreviewResult> _cleanupPreviews = new(StringComparer.Ordinal);
     private readonly AsyncLocal<TelegramExecutionMetadata?> _telegramExecutionMetadata = new();
     private readonly AsyncLocal<TelegramTurnContext?> _telegramTurnContext = new();
     private readonly string _telegramUpgradeQuotaStatePath;

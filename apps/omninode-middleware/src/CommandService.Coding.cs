@@ -101,6 +101,11 @@ public sealed partial class CommandService
         var thread = session.Thread;
         var rawInput = (request.Input ?? string.Empty).Trim();
         var codingRunRoot = CreateCodingRunWorkspaceRoot("single");
+        if (TryHandleBrowserCodingIntent(session, rawInput, "single", codingRunRoot, request.Language) is { } browserIntentResult)
+        {
+            return browserIntentResult;
+        }
+
         var routingCategory = ResolveCodingTaskCategory(request.Category, rawInput);
 
         var multiSkillRejectionSingle = TryBuildCodingMultiSkillRejectionResult(
@@ -230,7 +235,12 @@ public sealed partial class CommandService
                 thinkPlusPreText = thinkPlusContext + thinkPlusPreText;
             }
         }
-        var contextualInput = BuildContextualInput(session.SessionId, thinkPlusPreText, session.LinkedMemoryNotes);
+        var contextualInput = BuildContextualInput(
+            session.SessionId,
+            thinkPlusPreText,
+            session.LinkedMemoryNotes,
+            contextDecisionInput: rawInput
+        );
         var rawRequestedPaths = ExtractRequestedCodingPaths(rawInput, request.Language);
         var rawExpectedOutput = ExtractExpectedConsoleOutput(rawInput);
         AutonomousCodingOutcome outcome;
@@ -371,7 +381,13 @@ public sealed partial class CommandService
         }
 
         _conversationStore.AppendMessage(thread.Id, "user", rawInput, $"coding:{provider}:{model}");
-        _conversationStore.AppendMessage(thread.Id, "assistant", assistantText, $"coding:{provider}:{model}");
+        _conversationStore.AppendMessage(
+            thread.Id,
+            "assistant",
+            assistantText,
+            $"coding:{provider}:{model}",
+            outcome.TokenUsage ?? TokenUsageEstimator.Estimate(contextualInput, assistantText)
+        );
         await EnsureConversationTitleFromFirstTurnAsync(thread.Id, provider, model, cancellationToken);
 
         var note = await MaybeCompressConversationAsync(thread.Id, $"{session.Scope}-{session.Mode}", provider, model, cancellationToken);
@@ -419,6 +435,10 @@ public sealed partial class CommandService
         var thread = session.Thread;
         var rawInput = (request.Input ?? string.Empty).Trim();
         var codingRunRoot = CreateCodingRunWorkspaceRoot("orchestration");
+        if (TryHandleBrowserCodingIntent(session, rawInput, "orchestration", codingRunRoot, request.Language) is { } browserIntentResult)
+        {
+            return browserIntentResult;
+        }
 
         var multiSkillRejectionOrch = TryBuildCodingMultiSkillRejectionResult(
             "orchestration",
@@ -517,7 +537,12 @@ public sealed partial class CommandService
                 thinkPlusPreText = thinkPlusContext + thinkPlusPreText;
             }
         }
-        var contextualInput = BuildContextualInput(session.SessionId, thinkPlusPreText, session.LinkedMemoryNotes);
+        var contextualInput = BuildContextualInput(
+            session.SessionId,
+            thinkPlusPreText,
+            session.LinkedMemoryNotes,
+            contextDecisionInput: rawInput
+        );
 
         var availableProviders = await GetAvailableProvidersAsync(cancellationToken);
         if (availableProviders.Count == 0)
@@ -668,7 +693,7 @@ public sealed partial class CommandService
             request.Language,
             Array.Empty<string>()
         );
-        var planningText = SanitizeChatOutput((await GenerateByProviderSafeAsync(
+        var planningGenerated = await GenerateByProviderSafeAsync(
             planningStage.Provider,
             planningStage.Model,
             BuildOrchestrationPlannerPrompt(contextualInput, request.Language, planningStage.RolePrompt),
@@ -677,7 +702,8 @@ public sealed partial class CommandService
             useRawCodexPrompt: true,
             optimizeCodexForCoding: planningProfile.OptimizeCodexCli,
             timeoutOverrideSeconds: planningProfile.RequestTimeoutSeconds
-        )).Text);
+        );
+        var planningText = SanitizeChatOutput(planningGenerated.Text);
         var planningResult = new CodingWorkerResult(
             planningStage.Provider,
             planningStage.Model,
@@ -696,7 +722,8 @@ public sealed partial class CommandService
             ),
             Array.Empty<string>(),
             planningStage.Title,
-            string.IsNullOrWhiteSpace(planningText) ? "기획 단계 응답이 비어 있습니다." : planningText
+            string.IsNullOrWhiteSpace(planningText) ? "기획 단계 응답이 비어 있습니다." : planningText,
+            planningGenerated.TokenUsage
         );
 
         var implementationStage = stageAssignments[1];
@@ -820,7 +847,14 @@ public sealed partial class CommandService
             ? "[AUTO] 입력 없이 실행: 워커 자동 역할 협의 모드"
             : rawInput;
         _conversationStore.AppendMessage(thread.Id, "user", conversationUserText, "coding-orchestration");
-        _conversationStore.AppendMessage(thread.Id, "assistant", assistantText, $"coding-orchestration:{finalWorker.Provider}:{finalWorker.Model}");
+        _conversationStore.AppendMessage(
+            thread.Id,
+            "assistant",
+            assistantText,
+            $"coding-orchestration:{finalWorker.Provider}:{finalWorker.Model}",
+            TokenUsageEstimator.Combine(workerResults.Select(worker => worker.TokenUsage))
+                ?? TokenUsageEstimator.Estimate(contextualInput, assistantText)
+        );
         await EnsureConversationTitleFromFirstTurnAsync(thread.Id, finalWorker.Provider, finalWorker.Model, cancellationToken);
 
         var note = await MaybeCompressConversationAsync(thread.Id, $"{session.Scope}-{session.Mode}", finalWorker.Provider, finalWorker.Model, cancellationToken);
@@ -868,6 +902,10 @@ public sealed partial class CommandService
         var thread = session.Thread;
         var rawInput = (request.Input ?? string.Empty).Trim();
         var codingRunRoot = CreateCodingRunWorkspaceRoot("multi");
+        if (TryHandleBrowserCodingIntent(session, rawInput, "multi", codingRunRoot, request.Language) is { } browserIntentResult)
+        {
+            return browserIntentResult;
+        }
 
         var multiSkillRejectionMulti = TryBuildCodingMultiSkillRejectionResult(
             "multi",
@@ -959,7 +997,12 @@ public sealed partial class CommandService
                 thinkPlusPreText = thinkPlusContext + thinkPlusPreText;
             }
         }
-        var contextualInput = BuildContextualInput(session.SessionId, thinkPlusPreText, session.LinkedMemoryNotes);
+        var contextualInput = BuildContextualInput(
+            session.SessionId,
+            thinkPlusPreText,
+            session.LinkedMemoryNotes,
+            contextDecisionInput: rawInput
+        );
         var workers = await GetAvailableProvidersAsync(cancellationToken);
         workers = workers
             .Where(provider =>
@@ -1171,6 +1214,7 @@ public sealed partial class CommandService
 
         var aggregateModel = ResolveModelForCategory(routingCategory, aggregateProvider, aggregateModelOverride);
         string summary;
+        TokenUsage? summaryTokenUsage = null;
         if (aggregateProvider == "none")
         {
             summary = """
@@ -1211,6 +1255,7 @@ public sealed partial class CommandService
                 optimizeCodexForCoding: string.Equals(aggregateProvider, "codex", StringComparison.OrdinalIgnoreCase)
             );
             summary = SanitizeChatOutput(summaryResult.Text);
+            summaryTokenUsage = summaryResult.TokenUsage;
         }
 
         var summarySections = ParseCodingMultiSummarySections(summary);
@@ -1253,9 +1298,21 @@ public sealed partial class CommandService
         _conversationStore.AppendMessage(thread.Id, "user", rawInput, "coding-multi");
         if (citationValidationGuardFailure is null)
         {
-            _conversationStore.AppendMessage(thread.Id, "assistant", comparisonAssistantText, "coding-multi:comparison");
+            _conversationStore.AppendMessage(
+                thread.Id,
+                "assistant",
+                comparisonAssistantText,
+                "coding-multi:comparison",
+                TokenUsageEstimator.Combine(workerResults.Select(worker => worker.TokenUsage))
+            );
         }
-        _conversationStore.AppendMessage(thread.Id, "assistant", assistantText, $"coding-multi:summary={aggregateProvider}:{aggregateModel}");
+        _conversationStore.AppendMessage(
+            thread.Id,
+            "assistant",
+            assistantText,
+            $"coding-multi:summary={aggregateProvider}:{aggregateModel}",
+            summaryTokenUsage ?? TokenUsageEstimator.Estimate(contextualInput, assistantText)
+        );
         await EnsureConversationTitleFromFirstTurnAsync(thread.Id, aggregateProvider, aggregateModel, cancellationToken);
 
         var note = await MaybeCompressConversationAsync(
@@ -1295,11 +1352,14 @@ public sealed partial class CommandService
 
     private CodingRunResult PersistLatestCodingResult(CodingRunResult result)
     {
+        var resultWithEvidence = result.Evidence == null
+            ? result with { Evidence = BuildCodingEvidencePack("generation", result.Execution, result.ChangedFiles) }
+            : result;
         var updatedConversation = _conversationStore.SetLatestCodingResult(
-            result.ConversationId,
-            BuildConversationCodingResultSnapshot(result)
+            resultWithEvidence.ConversationId,
+            BuildConversationCodingResultSnapshot(resultWithEvidence)
         );
-        return result with
+        return resultWithEvidence with
         {
             Conversation = updatedConversation,
             ConversationId = updatedConversation.Id
@@ -1329,7 +1389,38 @@ public sealed partial class CommandService
             result.CommonSummary,
             result.CommonPoints,
             result.Differences,
-            result.Recommendation
+            result.Recommendation,
+            result.Evidence
+        );
+    }
+
+    private static CodingEvidencePack BuildCodingEvidencePack(
+        string runMode,
+        CodeExecutionResult? execution,
+        IReadOnlyList<string>? changedFiles,
+        string previewUrl = "",
+        string previewEntry = "",
+        string screenshotPath = "",
+        string consoleSummary = ""
+    )
+    {
+        var files = (changedFiles ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.Ordinal)
+            .Take(80)
+            .ToArray();
+        return new CodingEvidencePack(
+            runMode,
+            execution?.Command ?? string.Empty,
+            execution?.ExitCode,
+            execution?.Status ?? (string.IsNullOrWhiteSpace(previewUrl) ? "unknown" : "preview_ready"),
+            TrimForOutput(execution?.StdOut ?? string.Empty, 2400),
+            TrimForOutput(execution?.StdErr ?? string.Empty, 2400),
+            files,
+            previewUrl,
+            previewEntry,
+            screenshotPath,
+            consoleSummary
         );
     }
 

@@ -354,7 +354,8 @@ public sealed partial class CommandService
                         message.Role,
                         message.Text,
                         message.Meta,
-                        message.CreatedUtc
+                        message.CreatedUtc,
+                        message.TokenUsage
                     ))
                     .ToArray(),
                 item.LinkedMemoryNotes.ToArray(),

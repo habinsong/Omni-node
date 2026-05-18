@@ -283,6 +283,24 @@ public sealed partial class CommandService
         return _memoryGetTool.Get(path, from, lines);
     }
 
+    public MemoryIndexRebuildResult RebuildMemoryIndex()
+    {
+        try
+        {
+            var schema = new MemoryIndexSchemaBootstrap(_config).EnsureInitialized();
+            var snapshot = new MemoryIndexDocumentSync(_config, schema).SyncOnce();
+            var message = $"메모리 인덱스 재빌드 완료: scanned={snapshot.ScannedDocuments}, indexed={snapshot.IndexedDocuments}, skipped={snapshot.SkippedDocuments}, removed={snapshot.RemovedDocuments}";
+            _auditLogger.Log("web", "memory_index_rebuild", "ok", message);
+            return new MemoryIndexRebuildResult(true, message, snapshot);
+        }
+        catch (Exception ex)
+        {
+            var message = $"메모리 인덱스 재빌드 실패: {ex.Message}";
+            _auditLogger.Log("web", "memory_index_rebuild", "error", TrimPlanText(message, 300));
+            return new MemoryIndexRebuildResult(false, message, null, ex.Message);
+        }
+    }
+
     private static string NormalizeMemoryClearScope(string? scope)
     {
         var normalized = (scope ?? string.Empty).Trim().ToLowerInvariant();

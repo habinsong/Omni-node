@@ -9,6 +9,11 @@ public sealed partial class CommandService
         return _taskGraphService.CreateGraphFromPlan(planId);
     }
 
+    public TaskGraphActionResult UpdateTaskGraph(string graphId, string? rawJson)
+    {
+        return _taskGraphService.UpdateGraphFromJson(graphId, rawJson);
+    }
+
     public TaskGraphListResult ListTaskGraphs()
     {
         return _taskGraphService.ListGraphs();
@@ -56,6 +61,49 @@ public sealed partial class CommandService
     public TaskGraphActionResult CancelTask(string graphId, string taskId)
     {
         return _taskGraphCoordinator.CancelTask(graphId, taskId);
+    }
+
+    public async Task<TaskGraphActionResult> RetryTaskAsync(
+        string graphId,
+        string taskId,
+        string source,
+        TaskGraphEventSink? eventSink,
+        CancellationToken cancellationToken
+    )
+    {
+        var retry = _taskGraphService.RetryTask(graphId, taskId);
+        if (!retry.Ok)
+        {
+            return retry;
+        }
+
+        return await _taskGraphCoordinator.ResumeGraphAsync(
+            retry.Snapshot?.Graph.GraphId ?? graphId,
+            source,
+            eventSink,
+            cancellationToken
+        );
+    }
+
+    public async Task<TaskGraphActionResult> ResumeTaskGraphAsync(
+        string graphId,
+        string source,
+        TaskGraphEventSink? eventSink,
+        CancellationToken cancellationToken
+    )
+    {
+        var snapshot = _taskGraphService.GetGraph(graphId);
+        if (snapshot == null)
+        {
+            return new TaskGraphActionResult(false, "Task graph를 찾을 수 없습니다.", null);
+        }
+
+        return await _taskGraphCoordinator.ResumeGraphAsync(
+            snapshot.Graph.GraphId,
+            source,
+            eventSink,
+            cancellationToken
+        );
     }
 
     public TaskOutputResult? GetTaskOutput(string graphId, string taskId)

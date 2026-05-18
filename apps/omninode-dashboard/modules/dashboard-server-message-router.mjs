@@ -38,7 +38,7 @@ export function summarizeToolResult(msg) {
   }
 
   if (msg.type === "browser_result") {
-    return `browser.${msg.action || "-"} ok=${msg.ok ? "true" : "false"} running=${msg.running ? "true" : "false"} tabs=${Array.isArray(msg.tabs) ? msg.tabs.length : 0}`
+    return `browser.${msg.action || "-"} adapter=${msg.adapter || "-"} ok=${msg.ok ? "true" : "false"} running=${msg.running ? "true" : "false"} tabs=${Array.isArray(msg.tabs) ? msg.tabs.length : 0}`
   }
 
   if (msg.type === "canvas_result") {
@@ -75,6 +75,23 @@ export function summarizeToolResult(msg) {
   if (msg.type === "memory_get_result") {
     const text = typeof msg.text === "string" ? msg.text : ""
     return `memory.get disabled=${msg.disabled ? "true" : "false"} path=${msg.path || msg.requestedPath || "-"} chars=${text.length}`
+  }
+
+  if (msg.type === "memory_index_rebuild_result") {
+    const snapshot = msg.snapshot || {}
+    return `memory.rebuild ok=${msg.ok ? "true" : "false"} scanned=${snapshot.scannedDocuments ?? 0} indexed=${snapshot.indexedDocuments ?? 0} removed=${snapshot.removedDocuments ?? 0}`
+  }
+
+  if (msg.type === "doctor_fix_result") {
+    return `doctor.fix.${msg.action || "-"} ok=${msg.ok ? "true" : "false"} actions=${Array.isArray(msg.actions) ? msg.actions.length : 0}`
+  }
+
+  if (msg.type === "cleanup_preview_result") {
+    return `cleanup.preview ok=${msg.ok ? "true" : "false"} candidates=${Array.isArray(msg.candidates) ? msg.candidates.length : 0} bytes=${msg.totalSizeBytes ?? 0}`
+  }
+
+  if (msg.type === "cleanup_apply_result") {
+    return `cleanup.apply ok=${msg.ok ? "true" : "false"} removed=${msg.removedCount ?? 0} bytes=${msg.removedSizeBytes ?? 0}`
   }
 
   return msg.type || "도구 응답"
@@ -330,6 +347,19 @@ export function handleDashboardServerMessage(msg, context) {
         setters.setAuthTtlHours(String(msg.ttlHours))
       }
       setters.setStatus(msg.remoteDashboardClient ? "외부 접속 제한 모드" : "세션 인증됨")
+      if (!msg.remoteDashboardClient) {
+        actions.send({ type: "get_copilot_status" })
+        actions.send({ type: "get_codex_status" })
+      }
+      actions.send({ type: "get_groq_models" })
+      actions.send({ type: "get_copilot_models" })
+      actions.send({ type: "get_usage_stats" })
+      actions.send({ type: "list_memory_notes" })
+      ;["chat", "coding"].forEach((scope) => {
+        ;["single", "orchestration", "multi"].forEach((mode) => {
+          actions.send({ type: "list_conversations", scope, mode })
+        })
+      })
       actions.send({ type: "get_routines" })
       actions.requestDoctorLast(actions.send, { silent: true, queueIfClosed: false })
       actions.requestRoutingPolicyGet(actions.send, { silent: true, queueIfClosed: false })

@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace OmniNode.Middleware;
 
@@ -49,6 +50,7 @@ public sealed class LlmRouter : IDisposable
     private GeminiUsage _geminiUsage = new();
     private readonly string _usageStatePath;
     private string _selectedGroqModel;
+    private readonly AsyncLocal<TokenUsage?> _responseTokenUsage = new();
 
     public LlmRouter(AppConfig config, RuntimeSettings runtimeSettings)
     {
@@ -70,6 +72,18 @@ public sealed class LlmRouter : IDisposable
         {
             return _selectedGroqModel;
         }
+    }
+
+    public void ClearLastResponseTokenUsage()
+    {
+        _responseTokenUsage.Value = null;
+    }
+
+    public TokenUsage? ConsumeLastResponseTokenUsage()
+    {
+        var usage = _responseTokenUsage.Value;
+        _responseTokenUsage.Value = null;
+        return usage;
     }
 
     public bool TrySetSelectedGroqModel(string modelId)
@@ -1811,6 +1825,7 @@ public sealed class LlmRouter : IDisposable
                     return BuildCerebrasHttpFailureText(response.StatusCode, effectiveModel);
                 }
 
+                CaptureOpenAiCompatibleTokenUsage(responseBody);
                 var chunk = ExtractGroqChatChunk(responseBody);
                 var chunkText = chunk.Content.Trim();
                 if (!string.IsNullOrWhiteSpace(chunkText))
@@ -1967,6 +1982,7 @@ public sealed class LlmRouter : IDisposable
                     return $"NVIDIA NIM 요청 실패: {(int)response.StatusCode}";
                 }
 
+                CaptureOpenAiCompatibleTokenUsage(responseBody);
                 var chunk = ExtractGroqChatChunk(responseBody);
                 var chunkText = chunk.Content.Trim();
                 if (!string.IsNullOrWhiteSpace(chunkText))
@@ -2468,6 +2484,7 @@ public sealed class LlmRouter : IDisposable
             var promptTokens = GetInt(usageElement, "prompt_tokens");
             var completionTokens = GetInt(usageElement, "completion_tokens");
             var totalTokens = GetInt(usageElement, "total_tokens");
+            CaptureResponseTokenUsage(new TokenUsage(promptTokens, completionTokens, totalTokens, TokenUsageEstimator.SourceExact));
 
             lock (_groqLock)
             {
@@ -2537,6 +2554,7 @@ public sealed class LlmRouter : IDisposable
             promptTokens = GetInt(usageElement, "promptTokenCount");
             completionTokens = GetInt(usageElement, "candidatesTokenCount");
             totalTokens = GetInt(usageElement, "totalTokenCount");
+            CaptureResponseTokenUsage(new TokenUsage(promptTokens, completionTokens, totalTokens, TokenUsageEstimator.SourceExact));
         }
         catch
         {
@@ -2556,6 +2574,32 @@ public sealed class LlmRouter : IDisposable
         }
 
         SaveUsageState();
+    }
+
+    private void CaptureOpenAiCompatibleTokenUsage(string responseBody)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseBody);
+            if (!doc.RootElement.TryGetProperty("usage", out var usageElement) || usageElement.ValueKind != JsonValueKind.Object)
+            {
+                return;
+            }
+
+            var promptTokens = GetInt(usageElement, "prompt_tokens");
+            var completionTokens = GetInt(usageElement, "completion_tokens");
+            var totalTokens = GetInt(usageElement, "total_tokens");
+            CaptureResponseTokenUsage(new TokenUsage(promptTokens, completionTokens, totalTokens, TokenUsageEstimator.SourceExact));
+        }
+        catch
+        {
+        }
+    }
+
+    private void CaptureResponseTokenUsage(TokenUsage usage)
+    {
+        var normalized = TokenUsageEstimator.Normalize(usage, TokenUsageEstimator.SourceExact);
+        _responseTokenUsage.Value = TokenUsageEstimator.Combine(_responseTokenUsage.Value, normalized);
     }
 
     private void LoadUsageState()
@@ -2904,6 +2948,7 @@ public sealed class LlmRouter : IDisposable
                 {
                     var acceptedBody = await response.Content.ReadAsStringAsync(cancellationToken);
                     var polled = await PollNvidiaStatusAsync(apiKey, acceptedBody, cancellationToken);
+                    CaptureOpenAiCompatibleTokenUsage(polled);
                     var polledChunk = ExtractGroqChatChunk(polled);
                     var finalContent = polledChunk.Content.Trim();
                     if (!string.IsNullOrWhiteSpace(finalContent))
@@ -2986,6 +3031,7 @@ public sealed class LlmRouter : IDisposable
                         return;
                     }
 
+                    CaptureOpenAiCompatibleTokenUsage(payload);
                     var chunk = ExtractOpenAiStreamChunk(payload);
                     if (!string.IsNullOrWhiteSpace(chunk.FinishReason))
                     {

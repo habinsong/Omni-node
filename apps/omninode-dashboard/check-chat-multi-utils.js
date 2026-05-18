@@ -11,6 +11,9 @@ const {
 } = require("./chat-multi-utils.js");
 
 const gatewaySourcePath = path.resolve(__dirname, "../omninode-middleware/src/WebSocketGateway.Serialization.cs");
+const composerRendererPath = path.resolve(__dirname, "modules/dashboard-composer-renderers.js");
+const threadRendererPath = path.resolve(__dirname, "modules/dashboard-thread-renderers.js");
+const stylesPath = path.resolve(__dirname, "styles.css");
 const expectedGatewayKeys = [
   "type",
   "conversationId",
@@ -61,6 +64,8 @@ function assertGatewayContract() {
   const keys = extractGatewayMultiResultKeys(sourceText);
   const missingKeys = expectedGatewayKeys.filter((key) => !keys.includes(key));
   assert.equal(missingKeys.length, 0, `llm_chat_multi_result 계약 누락 필드: ${missingKeys.join(", ")}`);
+  assert.ok(sourceText.includes('\\"tokenUsageTotal\\":{BuildTokenUsageJson(conversation.TokenUsageTotal)}'), "conversation JSON tokenUsageTotal 직렬화 누락");
+  assert.ok(sourceText.includes('\\"tokenUsage\\":{BuildTokenUsageJson(message.TokenUsage)}'), "message tokenUsage 직렬화 누락");
   return {
     keys,
     missingKeys,
@@ -68,8 +73,25 @@ function assertGatewayContract() {
   };
 }
 
+function assertTokenUsageRendererContract() {
+  const composerSource = fs.readFileSync(composerRendererPath, "utf8");
+  const threadSource = fs.readFileSync(threadRendererPath, "utf8");
+  const stylesSource = fs.readFileSync(stylesPath, "utf8");
+
+  assert.match(composerSource, /renderComposerTokenPill\(e, tokenUsageTotal\)/, "composer 왼쪽 토큰 pill 렌더링 누락");
+  assert.match(composerSource, /className: "toolbar token-toolbar"/, "composer token-toolbar 클래스 누락");
+  assert.match(threadSource, /\[saveNotebookButton, createPlanButton, ttsButton\]/, "assistant 액션 순서가 노트북 → 작업계획 → 음성이 아닙니다");
+  assert.match(threadSource, /className: "assistant-action-column"/, "assistant 액션 세로 열 렌더링 누락");
+  assert.match(threadSource, /className: "message-token-usage"/, "assistant 메시지 토큰 label 렌더링 누락");
+  assert.match(threadSource, /toLocaleString\("en-US"\).*tokens/s, "토큰 tooltip 전체 숫자 포맷 누락");
+  assert.match(stylesSource, /\.composer-token-pill/, "composer token pill 스타일 누락");
+  assert.match(stylesSource, /\.assistant-action-column\s*\{[^}]*flex-direction:\s*column/s, "assistant 액션 세로 스타일 누락");
+  assert.match(stylesSource, /\.message-token-usage/, "메시지 토큰 label 스타일 누락");
+}
+
 function run() {
   const gatewayContract = assertGatewayContract();
+  assertTokenUsageRendererContract();
 
   const payload = {
     type: "llm_chat_multi_result",

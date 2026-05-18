@@ -20,11 +20,22 @@ public sealed class MemoryIndexDocumentSync
     private const string DefaultModelId = "fts-baseline";
     private const int DefaultChunkTokens = 400;
     private const int DefaultChunkOverlap = 80;
+    private const long MaxProjectFileBytes = 768 * 1024;
     private const int SqliteCommandTimeoutMs = 20000;
+    private static readonly string[] ProjectIndexRoots = { "docs", "apps", "scripts", "workspace" };
+    private static readonly HashSet<string> ProjectTextExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".md", ".txt", ".cs", ".js", ".mjs", ".json", ".html", ".css", ".py", ".c", ".h", ".sh", ".ps1", ".cmd", ".yml", ".yaml", ".toml"
+    };
+    private static readonly HashSet<string> ProjectExcludedDirectoryNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".git", ".runtime", ".cache", "node_modules", "bin", "obj", "dist", "build", "target", "__pycache__"
+    };
     private readonly string _dbPath;
     private readonly bool _ftsAvailable;
     private readonly string _memoryNotesRootDir;
     private readonly string _conversationStatePath;
+    private readonly string _projectRootDir;
 
     public MemoryIndexDocumentSync(
         AppConfig config,
@@ -35,6 +46,7 @@ public sealed class MemoryIndexDocumentSync
         _ftsAvailable = schemaSnapshot.FtsAvailable;
         _memoryNotesRootDir = Path.GetFullPath(config.MemoryNotesRootDir);
         _conversationStatePath = Path.GetFullPath(config.ConversationStatePath);
+        _projectRootDir = ResolveProjectRoot(config);
     }
 
     public MemoryIndexSyncSnapshot SyncOnce()
@@ -48,7 +60,8 @@ public sealed class MemoryIndexDocumentSync
         var activeBySource = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase)
         {
             ["memory"] = new HashSet<string>(StringComparer.Ordinal),
-            ["sessions"] = new HashSet<string>(StringComparer.Ordinal)
+            ["sessions"] = new HashSet<string>(StringComparer.Ordinal),
+            ["project"] = new HashSet<string>(StringComparer.Ordinal)
         };
 
         foreach (var document in documents)
@@ -112,6 +125,7 @@ public sealed class MemoryIndexDocumentSync
         var items = new List<MemorySourceDocument>();
         items.AddRange(LoadMemoryNotes());
         items.AddRange(LoadConversationThreads());
+        items.AddRange(LoadProjectDocuments());
 
         return items
             .OrderBy(x => x.Source, StringComparer.Ordinal)
@@ -212,6 +226,130 @@ public sealed class MemoryIndexDocumentSync
         }
 
         return result;
+    }
+
+    private IReadOnlyList<MemorySourceDocument> LoadProjectDocuments()
+    {
+        if (string.IsNullOrWhiteSpace(_projectRootDir) || !Directory.Exists(_projectRootDir))
+        {
+            return Array.Empty<MemorySourceDocument>();
+        }
+
+        var result = new List<MemorySourceDocument>();
+        foreach (var rootName in ProjectIndexRoots)
+        {
+            var rootPath = Path.Combine(_projectRootDir, rootName);
+            if (!Directory.Exists(rootPath))
+            {
+                continue;
+            }
+
+            foreach (var filePath in EnumerateProjectFiles(rootPath))
+            {
+                string content;
+                FileInfo info;
+                try
+                {
+                    info = new FileInfo(filePath);
+                    if (info.Length <= 0 || info.Length > MaxProjectFileBytes)
+                    {
+                        continue;
+                    }
+
+                    content = File.ReadAllText(filePath, Encoding.UTF8);
+                    if (LooksBinary(content))
+                    {
+                        continue;
+                    }
+                }
+                catch
+                {
+                    continue;
+                }
+
+                var relativePath = Path.GetRelativePath(_projectRootDir, filePath).Replace('\\', '/');
+                result.Add(new MemorySourceDocument(
+                    Source: "project",
+                    Path: relativePath,
+                    Content: content,
+                    Hash: Sha256Hex(content),
+                    MtimeUnixMs: new DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeMilliseconds(),
+                    SizeBytes: info.Length
+                ));
+            }
+        }
+
+        return result;
+    }
+
+    private static IEnumerable<string> EnumerateProjectFiles(string rootPath)
+    {
+        var pending = new Stack<string>();
+        pending.Push(rootPath);
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            IEnumerable<string> childDirectories;
+            try
+            {
+                childDirectories = Directory.EnumerateDirectories(directory);
+            }
+            catch
+            {
+                childDirectories = Array.Empty<string>();
+            }
+
+            foreach (var child in childDirectories)
+            {
+                var name = Path.GetFileName(child);
+                if (ProjectExcludedDirectoryNames.Contains(name))
+                {
+                    continue;
+                }
+
+                pending.Push(child);
+            }
+
+            IEnumerable<string> files;
+            try
+            {
+                files = Directory.EnumerateFiles(directory);
+            }
+            catch
+            {
+                files = Array.Empty<string>();
+            }
+
+            foreach (var file in files)
+            {
+                var extension = Path.GetExtension(file);
+                if (!ProjectTextExtensions.Contains(extension))
+                {
+                    continue;
+                }
+
+                yield return Path.GetFullPath(file);
+            }
+        }
+    }
+
+    private static bool LooksBinary(string content)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return false;
+        }
+
+        var probeLength = Math.Min(content.Length, 4096);
+        for (var i = 0; i < probeLength; i += 1)
+        {
+            if (content[i] == '\0')
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string BuildConversationPath(string rawId, HashSet<string> seenPaths)
@@ -594,6 +732,48 @@ public sealed class MemoryIndexDocumentSync
 
         var safe = builder.ToString().Trim('_');
         return string.IsNullOrWhiteSpace(safe) ? fallback : safe;
+    }
+
+    private static string ResolveProjectRoot(AppConfig config)
+    {
+        var candidates = new List<string>();
+        if (!string.IsNullOrWhiteSpace(config.DashboardIndexPath))
+        {
+            var current = new FileInfo(Path.GetFullPath(config.DashboardIndexPath)).Directory;
+            while (current != null)
+            {
+                candidates.Add(current.FullName);
+                current = current.Parent;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(config.WorkspaceRootDir))
+        {
+            var current = new DirectoryInfo(Path.GetFullPath(config.WorkspaceRootDir));
+            while (current != null)
+            {
+                candidates.Add(current.FullName);
+                current = current.Parent;
+            }
+        }
+
+        candidates.Add(Environment.CurrentDirectory);
+        foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                if (Directory.Exists(Path.Combine(candidate, "apps"))
+                    && Directory.Exists(Path.Combine(candidate, "docs")))
+                {
+                    return Path.GetFullPath(candidate);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        return Path.GetFullPath(Environment.CurrentDirectory);
     }
 
     private static string EscapeSql(string value)

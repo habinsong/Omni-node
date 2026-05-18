@@ -30,6 +30,11 @@ public sealed class PlanApplicationService : IPlanningApplicationService
         return _inner.ApprovePlan(planId);
     }
 
+    public PlanActionResult UpdatePlan(string planId, string? rawJson)
+    {
+        return _inner.UpdatePlan(planId, rawJson);
+    }
+
     public PlanListResult ListPlans()
     {
         return _inner.ListPlans();

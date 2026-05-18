@@ -57,6 +57,8 @@ public interface IDoctorApplicationService
 {
     Task<DoctorReport> RunDoctorAsync(CancellationToken cancellationToken);
     Task<DoctorReport?> GetLastDoctorReportAsync(CancellationToken cancellationToken);
+    Task<DoctorFixPlanResult> PreviewDoctorFixAsync(CancellationToken cancellationToken);
+    DoctorFixPlanResult ApplyDoctorFix(string previewId);
 }
 
 public interface IPlanningApplicationService
@@ -70,6 +72,7 @@ public interface IPlanningApplicationService
     );
     Task<PlanActionResult> ReviewPlanAsync(string planId, CancellationToken cancellationToken);
     PlanActionResult ApprovePlan(string planId);
+    PlanActionResult UpdatePlan(string planId, string? rawJson);
     PlanListResult ListPlans();
     PlanSnapshot? GetPlan(string planId);
     Task<PlanActionResult> RunPlanAsync(string planId, string source, CancellationToken cancellationToken);
@@ -78,6 +81,7 @@ public interface IPlanningApplicationService
 public interface ITaskGraphApplicationService
 {
     TaskGraphActionResult CreateTaskGraph(string planId);
+    TaskGraphActionResult UpdateTaskGraph(string graphId, string? rawJson);
     TaskGraphListResult ListTaskGraphs();
     TaskGraphSnapshot? GetTaskGraph(string graphId);
     Task<TaskGraphActionResult> RunTaskGraphAsync(
@@ -87,6 +91,19 @@ public interface ITaskGraphApplicationService
         CancellationToken cancellationToken
     );
     TaskGraphActionResult CancelTask(string graphId, string taskId);
+    Task<TaskGraphActionResult> RetryTaskAsync(
+        string graphId,
+        string taskId,
+        string source,
+        TaskGraphEventSink? eventSink,
+        CancellationToken cancellationToken
+    );
+    Task<TaskGraphActionResult> ResumeTaskGraphAsync(
+        string graphId,
+        string source,
+        TaskGraphEventSink? eventSink,
+        CancellationToken cancellationToken
+    );
     TaskOutputResult? GetTaskOutput(string graphId, string taskId);
 }
 
@@ -197,6 +214,7 @@ public interface IMemoryApplicationService
     );
     MemorySearchToolResult SearchMemory(string query, int? maxResults = null, double? minScore = null);
     MemoryGetToolResult GetMemory(string path, int? from = null, int? lines = null);
+    MemoryIndexRebuildResult RebuildMemoryIndex();
 }
 
 public interface IToolApplicationService
@@ -296,6 +314,8 @@ public interface IToolApplicationService
         string? invokeCommand = null,
         string? invokeParamsJson = null
     );
+    CleanupPreviewResult PreviewCleanup();
+    CleanupApplyResult ApplyCleanup(string? previewId);
 }
 
 public interface IRoutineApplicationService

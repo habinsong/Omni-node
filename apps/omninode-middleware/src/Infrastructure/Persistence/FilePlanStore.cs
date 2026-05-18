@@ -105,6 +105,16 @@ public sealed class FilePlanStore
         );
     }
 
+    public void DeleteReview(string planId)
+    {
+        DeleteIfExists(Path.Combine(GetPlanDirectory(planId), ReviewFileName));
+    }
+
+    public void DeleteExecution(string planId)
+    {
+        DeleteIfExists(Path.Combine(GetPlanDirectory(planId), ExecutionFileName));
+    }
+
     private void SaveIndexEntry(PlanIndexEntry nextEntry)
     {
         var current = LoadIndex()
@@ -143,6 +153,20 @@ public sealed class FilePlanStore
         catch
         {
             return null;
+        }
+    }
+
+    private static void DeleteIfExists(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
         }
     }
 }

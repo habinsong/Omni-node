@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace OmniNode.Middleware;
@@ -115,6 +116,37 @@ public sealed class TaskGraphService
         }
     }
 
+    public TaskGraphSnapshot PrepareForResume(string graphId)
+    {
+        var normalizedGraphId = NormalizeRequiredId(graphId);
+        lock (_gate)
+        {
+            var snapshot = RequireSnapshot(normalizedGraphId);
+            var nodes = snapshot.Graph.Nodes
+                .Select(node => node.Status == TaskNodeStatus.Running
+                    ? node with
+                    {
+                        Status = TaskNodeStatus.Pending,
+                        Error = null,
+                        StartedAtUtc = null,
+                        CompletedAtUtc = null
+                    }
+                    : node)
+                .ToArray();
+            var prepared = NormalizeSnapshot(new TaskGraphSnapshot(
+                snapshot.Graph with
+                {
+                    UpdatedAtUtc = DateTimeOffset.UtcNow,
+                    Status = TaskGraphStatus.Running,
+                    Nodes = nodes
+                },
+                snapshot.Executions
+            ));
+            _store.SaveSnapshot(prepared);
+            return prepared;
+        }
+    }
+
     public TaskGraphSnapshot UpdateReadiness(string graphId)
     {
         var normalizedGraphId = NormalizeRequiredId(graphId);
@@ -191,6 +223,150 @@ public sealed class TaskGraphService
             ));
             _store.SaveSnapshot(updated);
             return updated;
+        }
+    }
+
+    public TaskGraphActionResult UpdateGraphFromJson(string graphId, string? rawJson)
+    {
+        var normalizedGraphId = NormalizeId(graphId);
+        if (normalizedGraphId == null)
+        {
+            return new TaskGraphActionResult(false, "Task graph ID를 입력하세요.", null);
+        }
+
+        lock (_gate)
+        {
+            var snapshot = _store.TryLoadSnapshot(normalizedGraphId);
+            if (snapshot == null)
+            {
+                return new TaskGraphActionResult(false, "Task graph를 찾을 수 없습니다.", null);
+            }
+
+            if (snapshot.Graph.Status == TaskGraphStatus.Running)
+            {
+                return new TaskGraphActionResult(false, "실행 중인 Task graph는 수정할 수 없습니다.", snapshot);
+            }
+
+            var payload = ExtractPayloadObject(rawJson, "graph");
+            if (payload.ValueKind != JsonValueKind.Object || !payload.TryGetProperty("nodes", out var nodesElement))
+            {
+                return new TaskGraphActionResult(false, "수정할 nodes payload가 필요합니다.", snapshot);
+            }
+
+            var nodes = BuildUpdatedNodes(nodesElement, snapshot.Graph.Nodes);
+            if (nodes.Count == 0)
+            {
+                return new TaskGraphActionResult(false, "Task graph에는 최소 1개 이상의 node가 필요합니다.", snapshot);
+            }
+
+            var updated = NormalizeSnapshot(new TaskGraphSnapshot(
+                snapshot.Graph with
+                {
+                    Nodes = nodes,
+                    Status = TaskGraphStatus.Draft,
+                    UpdatedAtUtc = DateTimeOffset.UtcNow
+                },
+                snapshot.Executions
+            ));
+            _store.SaveSnapshot(updated);
+            return new TaskGraphActionResult(true, "Task graph를 수정했습니다.", updated);
+        }
+    }
+
+    public TaskGraphActionResult RetryTask(string graphId, string taskId)
+    {
+        var normalizedGraphId = NormalizeId(graphId);
+        var normalizedTaskId = NormalizeId(taskId);
+        if (normalizedGraphId == null || normalizedTaskId == null)
+        {
+            return new TaskGraphActionResult(false, "graphId와 taskId가 필요합니다.", null);
+        }
+
+        lock (_gate)
+        {
+            var snapshot = _store.TryLoadSnapshot(normalizedGraphId);
+            if (snapshot == null)
+            {
+                return new TaskGraphActionResult(false, "Task graph를 찾을 수 없습니다.", null);
+            }
+
+            var nodes = snapshot.Graph.Nodes.ToArray();
+            var targetIndex = Array.FindIndex(nodes, node => node.TaskId.Equals(normalizedTaskId, StringComparison.Ordinal));
+            if (targetIndex < 0)
+            {
+                return new TaskGraphActionResult(false, "작업 노드를 찾을 수 없습니다.", snapshot);
+            }
+
+            var target = nodes[targetIndex];
+            if (target.Status == TaskNodeStatus.Running)
+            {
+                return new TaskGraphActionResult(false, "실행 중인 작업은 재시도할 수 없습니다.", snapshot);
+            }
+
+            nodes[targetIndex] = target with
+            {
+                Status = target.DependsOn.Count == 0 ? TaskNodeStatus.Pending : TaskNodeStatus.Blocked,
+                OutputSummary = null,
+                ArtifactPath = null,
+                Error = null,
+                StartedAtUtc = null,
+                CompletedAtUtc = null
+            };
+
+            var affected = new HashSet<string>(StringComparer.Ordinal) { target.TaskId };
+            var changed = true;
+            while (changed)
+            {
+                changed = false;
+                foreach (var node in nodes)
+                {
+                    if (affected.Contains(node.TaskId))
+                    {
+                        continue;
+                    }
+
+                    if (node.DependsOn.Any(affected.Contains))
+                    {
+                        affected.Add(node.TaskId);
+                        changed = true;
+                    }
+                }
+            }
+
+            for (var i = 0; i < nodes.Length; i += 1)
+            {
+                if (!affected.Contains(nodes[i].TaskId) || nodes[i].TaskId.Equals(target.TaskId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (nodes[i].Status == TaskNodeStatus.Completed || nodes[i].Status == TaskNodeStatus.Running)
+                {
+                    continue;
+                }
+
+                nodes[i] = nodes[i] with
+                {
+                    Status = TaskNodeStatus.Blocked,
+                    OutputSummary = null,
+                    ArtifactPath = null,
+                    Error = null,
+                    StartedAtUtc = null,
+                    CompletedAtUtc = null
+                };
+            }
+
+            var updated = NormalizeSnapshot(new TaskGraphSnapshot(
+                snapshot.Graph with
+                {
+                    Status = TaskGraphStatus.Running,
+                    UpdatedAtUtc = DateTimeOffset.UtcNow,
+                    Nodes = nodes
+                },
+                snapshot.Executions.Where(item => !affected.Contains(item.TaskId)).ToArray()
+            ));
+            _store.SaveSnapshot(updated);
+            return new TaskGraphActionResult(true, "실패한 작업을 재시도 대기 상태로 전환했습니다.", updated);
         }
     }
 
@@ -336,6 +512,135 @@ public sealed class TaskGraphService
         return node.Status == TaskNodeStatus.Completed
             || node.Status == TaskNodeStatus.Failed
             || node.Status == TaskNodeStatus.Canceled;
+    }
+
+    private static IReadOnlyList<TaskNode> BuildUpdatedNodes(JsonElement nodesElement, IReadOnlyList<TaskNode> currentNodes)
+    {
+        if (nodesElement.ValueKind != JsonValueKind.Array)
+        {
+            return currentNodes;
+        }
+
+        var currentById = currentNodes.ToDictionary(node => node.TaskId, StringComparer.OrdinalIgnoreCase);
+        var result = new List<TaskNode>();
+        var index = 0;
+        foreach (var item in nodesElement.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var taskId = ReadOptionalString(item, "taskId") ?? $"task-{index + 1:00}";
+            currentById.TryGetValue(taskId, out var existing);
+            var title = ReadOptionalString(item, "title") ?? existing?.Title ?? $"작업 {index + 1}";
+            var category = ReadOptionalString(item, "category") ?? existing?.Category ?? "coding";
+            var prompt = ReadOptionalString(item, "prompt")
+                ?? ReadOptionalString(item, "description")
+                ?? existing?.Prompt
+                ?? title;
+            var dependsOn = item.TryGetProperty("dependsOn", out var dependsOnElement)
+                ? ReadStringArray(dependsOnElement).Where(value => !string.Equals(value, taskId, StringComparison.Ordinal)).Distinct(StringComparer.Ordinal).Take(12).ToArray()
+                : existing?.DependsOn ?? Array.Empty<string>();
+            var requiredSkills = item.TryGetProperty("requiredSkills", out var requiredSkillsElement)
+                ? ReadStringArray(requiredSkillsElement).Distinct(StringComparer.Ordinal).Take(12).ToArray()
+                : existing?.RequiredSkills ?? ResolveRequiredSkills(category);
+            var requiredTools = item.TryGetProperty("requiredTools", out var requiredToolsElement)
+                ? ReadStringArray(requiredToolsElement).Distinct(StringComparer.Ordinal).Take(12).ToArray()
+                : existing?.RequiredTools ?? ResolveRequiredTools(category);
+
+            result.Add(new TaskNode(
+                NormalizeId(taskId) ?? $"task-{index + 1:00}",
+                TrimText(title, 80),
+                NormalizeCategory(category),
+                dependsOn.Count == 0 ? TaskNodeStatus.Pending : TaskNodeStatus.Blocked,
+                dependsOn,
+                prompt.Trim(),
+                requiredSkills,
+                requiredTools,
+                null,
+                null,
+                null
+            ));
+            index += 1;
+            if (result.Count >= 32)
+            {
+                break;
+            }
+        }
+
+        return result;
+    }
+
+    private static JsonElement ExtractPayloadObject(string? rawJson, string propertyName)
+    {
+        var normalized = (rawJson ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return default;
+        }
+
+        using var doc = JsonDocument.Parse(normalized);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return default;
+        }
+
+        if (root.TryGetProperty(propertyName, out var nested) && nested.ValueKind == JsonValueKind.Object)
+        {
+            return nested.Clone();
+        }
+
+        return root.Clone();
+    }
+
+    private static string? ReadOptionalString(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        var normalized = Regex.Replace((value.GetString() ?? string.Empty).Trim(), @"\s+", " ");
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
+    private static IReadOnlyList<string> ReadStringArray(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.String)
+        {
+            var single = element.GetString();
+            return string.IsNullOrWhiteSpace(single) ? Array.Empty<string>() : new[] { single };
+        }
+
+        if (element.ValueKind != JsonValueKind.Array)
+        {
+            return Array.Empty<string>();
+        }
+
+        return element.EnumerateArray()
+            .Where(item => item.ValueKind == JsonValueKind.String)
+            .Select(item => item.GetString() ?? string.Empty)
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .ToArray();
+    }
+
+    private static string NormalizeCategory(string category)
+    {
+        var normalized = Regex.Replace((category ?? string.Empty).Trim().ToLowerInvariant(), @"[^a-z0-9_-]+", "-", RegexOptions.CultureInvariant);
+        return string.IsNullOrWhiteSpace(normalized) ? "coding" : normalized;
+    }
+
+    private static string TrimText(string value, int maxChars)
+    {
+        var normalized = Regex.Replace((value ?? string.Empty).Trim(), @"\s+", " ");
+        if (normalized.Length <= maxChars)
+        {
+            return normalized;
+        }
+
+        return normalized[..maxChars].TrimEnd();
     }
 
     private TaskGraphSnapshot RequireSnapshot(string graphId)

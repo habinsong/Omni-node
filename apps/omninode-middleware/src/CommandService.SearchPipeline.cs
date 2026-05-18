@@ -3862,6 +3862,11 @@ public sealed partial class CommandService
     {
         var normalized = (input ?? string.Empty).Trim().ToLowerInvariant();
 
+        if (LooksLikeStandaloneFreshGreeting(normalized))
+        {
+            return true;
+        }
+
         if (normalized.Length <= 8)
         {
             if (ContainsAny(normalized, "응", "어", "아니", "네", "예", "맞아", "그래", "음", "헐", "대박", "진짜", "뭐해", "ok", "ㅇㅇ", "ㅋㅋ", "ㅎㅎ", "ㅠㅠ", "ㅜㅜ", "너는?", "나도"))
@@ -3904,6 +3909,31 @@ public sealed partial class CommandService
             "잘자",
             "잘가"
         );
+    }
+
+    private static bool LooksLikeStandaloneFreshGreeting(string input)
+    {
+        var normalized = Regex.Replace((input ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
+        if (normalized.Length == 0 || normalized.Length > 16)
+        {
+            return false;
+        }
+
+        var compact = Regex.Replace(normalized, @"[\s\p{P}\p{S}]+", "");
+        return compact is
+            "ㅎㅇ" or
+            "ㅎㅇㅎㅇ" or
+            "하이" or
+            "안녕" or
+            "안녕하세요" or
+            "안녕하십니까" or
+            "안뇽" or
+            "안뇽하세요" or
+            "헬로" or
+            "hi" or
+            "hello" or
+            "hey" or
+            "yo";
     }
 
     private static bool LooksLikeLocalDateTimeQuestion(string input)

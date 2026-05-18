@@ -32,6 +32,7 @@ function createCodingRuntimeState(msg) {
     previewUrl: msg.previewUrl || "",
     previewEntry: msg.previewEntry || "",
     execution,
+    evidence: msg && msg.evidence && typeof msg.evidence === "object" ? msg.evidence : null,
     updatedAt: Date.now()
   }
 }

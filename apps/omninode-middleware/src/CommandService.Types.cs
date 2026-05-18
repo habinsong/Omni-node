@@ -7,8 +7,109 @@ using System.Text.RegularExpressions;
 
 namespace OmniNode.Middleware;
 
-public sealed record LlmSingleChatResult(string Provider, string Model, string Text);
-public sealed record LlmOrchestrationResult(string Route, string Text);
+public sealed record TokenUsage(long PromptTokens, long CompletionTokens, long TotalTokens, string Source);
+
+internal static class TokenUsageEstimator
+{
+    public const string SourceExact = "exact";
+    public const string SourceEstimated = "estimated";
+    public const string SourceLegacyEstimated = "legacy_estimated";
+    public const string SourceUnavailable = "unavailable";
+
+    public static TokenUsage Estimate(string? prompt, string? completion, string source = SourceEstimated)
+    {
+        var promptTokens = EstimateTextTokens(prompt);
+        var completionTokens = EstimateTextTokens(completion);
+        return new TokenUsage(
+            promptTokens,
+            completionTokens,
+            Math.Max(0L, promptTokens + completionTokens),
+            NormalizeSource(source)
+        );
+    }
+
+    public static TokenUsage? Combine(params TokenUsage?[] usages)
+    {
+        return Combine((IEnumerable<TokenUsage?>)usages);
+    }
+
+    public static TokenUsage? Combine(IEnumerable<TokenUsage?> usages)
+    {
+        if (usages == null)
+        {
+            return null;
+        }
+
+        var items = usages
+            .Where(item => item != null)
+            .Select(item => item!)
+            .ToArray();
+        if (items.Length == 0)
+        {
+            return null;
+        }
+
+        var promptTokens = items.Sum(item => Math.Max(0L, item.PromptTokens));
+        var completionTokens = items.Sum(item => Math.Max(0L, item.CompletionTokens));
+        var totalTokens = items.Sum(item => Math.Max(0L, item.TotalTokens));
+        if (totalTokens <= 0)
+        {
+            totalTokens = promptTokens + completionTokens;
+        }
+
+        var source = items.All(item => string.Equals(item.Source, SourceExact, StringComparison.OrdinalIgnoreCase))
+            ? SourceExact
+            : items.All(item => string.Equals(item.Source, SourceLegacyEstimated, StringComparison.OrdinalIgnoreCase))
+                ? SourceLegacyEstimated
+                : SourceEstimated;
+
+        return new TokenUsage(promptTokens, completionTokens, totalTokens, source);
+    }
+
+    public static TokenUsage Normalize(TokenUsage usage, string fallbackSource = SourceEstimated)
+    {
+        var promptTokens = Math.Max(0L, usage.PromptTokens);
+        var completionTokens = Math.Max(0L, usage.CompletionTokens);
+        var totalTokens = Math.Max(0L, usage.TotalTokens);
+        if (totalTokens == 0 && (promptTokens > 0 || completionTokens > 0))
+        {
+            totalTokens = promptTokens + completionTokens;
+        }
+
+        return new TokenUsage(promptTokens, completionTokens, totalTokens, NormalizeSource(usage.Source, fallbackSource));
+    }
+
+    private static long EstimateTextTokens(string? text)
+    {
+        var value = (text ?? string.Empty).Trim();
+        if (value.Length == 0)
+        {
+            return 0L;
+        }
+
+        var utf8Bytes = Encoding.UTF8.GetByteCount(value);
+        var whitespaceSeparated = Regex.Matches(value, @"[A-Za-z0-9_]+|[^\sA-Za-z0-9_]", RegexOptions.CultureInvariant).Count;
+        var byBytes = (long)Math.Ceiling(utf8Bytes / 4.0d);
+        var bySegments = (long)Math.Ceiling(whitespaceSeparated * 0.85d);
+        return Math.Max(1L, Math.Max(byBytes, bySegments));
+    }
+
+    private static string NormalizeSource(string? source, string fallback = SourceEstimated)
+    {
+        var normalized = (source ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            SourceExact => SourceExact,
+            SourceEstimated => SourceEstimated,
+            SourceLegacyEstimated => SourceLegacyEstimated,
+            SourceUnavailable => SourceUnavailable,
+            _ => fallback
+        };
+    }
+}
+
+public sealed record LlmSingleChatResult(string Provider, string Model, string Text, TokenUsage? TokenUsage = null);
+public sealed record LlmOrchestrationResult(string Route, string Text, TokenUsage? TokenUsage = null);
 public sealed record LlmMultiChatResult(
     string GroqText,
     string GeminiText,
@@ -26,7 +127,9 @@ public sealed record LlmMultiChatResult(
     string CommonCore = "",
     string Differences = "",
     string NvidiaText = "",
-    string NvidiaModel = ""
+    string NvidiaModel = "",
+    TokenUsage? WorkerTokenUsage = null,
+    TokenUsage? SummaryTokenUsage = null
 );
 public sealed record InputAttachment(
     string Name,
@@ -260,7 +363,8 @@ public sealed record CodingWorkerResult(
     CodeExecutionResult Execution,
     IReadOnlyList<string> ChangedFiles,
     string Role = "",
-    string Summary = ""
+    string Summary = "",
+    TokenUsage? TokenUsage = null
 );
 public sealed record CodingWorkerResultSnapshot(
     string Provider,
@@ -284,7 +388,21 @@ public sealed record ConversationCodingResultSnapshot(
     string CommonSummary = "",
     string CommonPoints = "",
     string Differences = "",
-    string Recommendation = ""
+    string Recommendation = "",
+    CodingEvidencePack? Evidence = null
+);
+public sealed record CodingEvidencePack(
+    string RunMode,
+    string Command,
+    int? ExitCode,
+    string Status,
+    string StdoutSummary,
+    string StderrSummary,
+    IReadOnlyList<string> ChangedFiles,
+    string PreviewUrl = "",
+    string PreviewEntry = "",
+    string ScreenshotPath = "",
+    string ConsoleSummary = ""
 );
 public sealed record CodingResultExecutionResult(
     string ConversationId,
@@ -296,7 +414,8 @@ public sealed record CodingResultExecutionResult(
     string TargetModel,
     CodeExecutionResult? Execution = null,
     string PreviewUrl = "",
-    string PreviewEntry = ""
+    string PreviewEntry = "",
+    CodingEvidencePack? Evidence = null
 );
 public sealed record CodingRunResult(
     string Mode,
@@ -321,9 +440,57 @@ public sealed record CodingRunResult(
     string CommonSummary = "",
     string CommonPoints = "",
     string Differences = "",
-    string Recommendation = ""
+    string Recommendation = "",
+    CodingEvidencePack? Evidence = null
 );
 public sealed record WorkspaceFilePreview(string FullPath, string Content);
+public sealed record MemoryIndexRebuildResult(
+    bool Ok,
+    string Message,
+    MemoryIndexSyncSnapshot? Snapshot,
+    string? Error = null
+);
+public sealed record DoctorFixAction(
+    string ActionId,
+    string Kind,
+    string Target,
+    string Description,
+    bool AutoApply,
+    string Status = "pending",
+    string? Error = null
+);
+public sealed record DoctorFixPlanResult(
+    bool Ok,
+    string Message,
+    string PreviewId,
+    IReadOnlyList<DoctorFixAction> Actions,
+    string? Error = null
+);
+public sealed record CleanupCandidate(
+    string Path,
+    string Kind,
+    long SizeBytes,
+    DateTimeOffset LastModifiedUtc,
+    string Reason
+);
+public sealed record CleanupPreviewResult(
+    bool Ok,
+    string Message,
+    string PreviewId,
+    IReadOnlyList<CleanupCandidate> Candidates,
+    long TotalSizeBytes,
+    string? Error = null
+);
+public sealed record CleanupApplyResult(
+    bool Ok,
+    string Message,
+    string PreviewId,
+    int RemovedCount,
+    long RemovedSizeBytes,
+    IReadOnlyList<string> RemovedPaths,
+    IReadOnlyList<string> FailedPaths,
+    string? Error = null
+);
 public sealed record CodingProgressUpdate(
     string Mode,
     string Provider,
@@ -345,7 +512,7 @@ internal sealed record ScaffoldFileSpec(string Path, string Content);
 internal sealed record CodingLoopAction(string Type, string Path, string Content, string Command);
 internal sealed record CodingLoopPlan(string Analysis, string FinalMessage, bool Done, IReadOnlyList<CodingLoopAction> Actions);
 internal sealed record CodingLoopActionResult(string Message, CodeExecutionResult? Execution, string CodePreview, string LastWrittenFile, string ChangedPath, bool Changed);
-internal sealed record AutonomousCodingOutcome(string Language, string Code, string RawResponse, CodeExecutionResult Execution, IReadOnlyList<string> ChangedFiles, string Summary);
+internal sealed record AutonomousCodingOutcome(string Language, string Code, string RawResponse, CodeExecutionResult Execution, IReadOnlyList<string> ChangedFiles, string Summary, TokenUsage? TokenUsage = null);
 internal sealed record ShellRunResult(int ExitCode, string StdOut, string StdErr, bool TimedOut);
 internal sealed record InputPreparationResult(
     string Text,

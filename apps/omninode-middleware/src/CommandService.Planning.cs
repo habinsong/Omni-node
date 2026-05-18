@@ -99,6 +99,14 @@ public sealed partial class CommandService
         );
     }
 
+    public PlanActionResult UpdatePlan(string planId, string? rawJson)
+    {
+        lock (_planLock)
+        {
+            return _planService.UpdatePlanFromJson(planId, rawJson);
+        }
+    }
+
     public PlanListResult ListPlans()
     {
         return new PlanListResult(_planService.ListPlans());

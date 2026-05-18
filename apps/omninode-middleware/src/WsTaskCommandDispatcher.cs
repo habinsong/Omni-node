@@ -92,6 +92,13 @@ internal sealed class WsTaskCommandDispatcher
             return true;
         }
 
+        if (message.Type == "task_graph_update")
+        {
+            var result = _taskGraphService.UpdateTaskGraph(message.GraphId ?? string.Empty, message.RawJson);
+            await _sendTaskGraphActionResultAsync(socket, sendLock, "update", result, cancellationToken);
+            return true;
+        }
+
         if (message.Type == "task_graph_get")
         {
             var snapshot = _taskGraphService.GetTaskGraph(message.GraphId ?? string.Empty);
@@ -128,6 +135,45 @@ internal sealed class WsTaskCommandDispatcher
                 message.TaskId ?? string.Empty
             );
             await _sendTaskGraphActionResultAsync(socket, sendLock, "cancel", result, cancellationToken);
+            return true;
+        }
+
+        if (message.Type == "task_retry")
+        {
+            var sink = new TaskGraphEventSink
+            {
+                OnTaskUpdatedAsync = (graphId, task, token) =>
+                    _sendTaskUpdatedAsync(socket, sendLock, graphId, task, token),
+                OnTaskLogAsync = (graphId, taskId, line, token) =>
+                    _sendTaskLogAsync(socket, sendLock, graphId, taskId, line, token)
+            };
+            var result = await _taskGraphService.RetryTaskAsync(
+                message.GraphId ?? string.Empty,
+                message.TaskId ?? string.Empty,
+                "web",
+                sink,
+                cancellationToken
+            );
+            await _sendTaskGraphActionResultAsync(socket, sendLock, "retry", result, cancellationToken);
+            return true;
+        }
+
+        if (message.Type == "task_resume")
+        {
+            var sink = new TaskGraphEventSink
+            {
+                OnTaskUpdatedAsync = (graphId, task, token) =>
+                    _sendTaskUpdatedAsync(socket, sendLock, graphId, task, token),
+                OnTaskLogAsync = (graphId, taskId, line, token) =>
+                    _sendTaskLogAsync(socket, sendLock, graphId, taskId, line, token)
+            };
+            var result = await _taskGraphService.ResumeTaskGraphAsync(
+                message.GraphId ?? string.Empty,
+                "web",
+                sink,
+                cancellationToken
+            );
+            await _sendTaskGraphActionResultAsync(socket, sendLock, "resume", result, cancellationToken);
             return true;
         }
 

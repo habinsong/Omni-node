@@ -244,7 +244,8 @@ public sealed class ConversationStore : IConversationStore
                             Role = NormalizeRole(message.Role),
                             Text = (message.Text ?? string.Empty).Trim(),
                             Meta = (message.Meta ?? string.Empty).Trim(),
-                            CreatedUtc = message.CreatedUtc == default ? DateTimeOffset.UtcNow : message.CreatedUtc
+                            CreatedUtc = message.CreatedUtc == default ? DateTimeOffset.UtcNow : message.CreatedUtc,
+                            TokenUsage = message.TokenUsage == null ? null : TokenUsageEstimator.Normalize(message.TokenUsage)
                         })
                         .ToList()
                 };
@@ -291,11 +292,12 @@ public sealed class ConversationStore : IConversationStore
         }
     }
 
-    public ConversationThreadView AppendMessage(string conversationId, string role, string text, string meta)
+    public ConversationThreadView AppendMessage(string conversationId, string role, string text, string meta, TokenUsage? tokenUsage = null)
     {
         var normalizedRole = NormalizeRole(role);
         var safeText = (text ?? string.Empty).Trim();
         var safeMeta = (meta ?? string.Empty).Trim();
+        var safeUsage = tokenUsage == null ? null : TokenUsageEstimator.Normalize(tokenUsage);
 
         lock (_lock)
         {
@@ -305,7 +307,8 @@ public sealed class ConversationStore : IConversationStore
                 Role = normalizedRole,
                 Text = safeText,
                 Meta = safeMeta,
-                CreatedUtc = DateTimeOffset.UtcNow
+                CreatedUtc = DateTimeOffset.UtcNow,
+                TokenUsage = safeUsage
             });
             thread.UpdatedUtc = DateTimeOffset.UtcNow;
             SaveLocked();
@@ -691,9 +694,21 @@ public sealed class ConversationStore : IConversationStore
             thread.Tags.ToArray(),
             thread.CreatedUtc,
             thread.UpdatedUtc,
-            thread.Messages.Select(x => new ConversationMessageView(x.Role, x.Text, x.Meta, x.CreatedUtc)).ToArray(),
+            thread.Messages.Select(x =>
+            {
+                var usage = x.TokenUsage;
+                if (usage == null && string.Equals(x.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+                {
+                    usage = TokenUsageEstimator.Estimate(string.Empty, x.Text, TokenUsageEstimator.SourceLegacyEstimated);
+                }
+
+                return new ConversationMessageView(x.Role, x.Text, x.Meta, x.CreatedUtc, usage);
+            }).ToArray(),
             thread.LinkedMemoryNotes.ToArray(),
-            thread.LatestCodingResult
+            thread.LatestCodingResult,
+            TokenUsageEstimator.Combine(thread.Messages
+                .Where(x => string.Equals(x.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+                .Select(x => x.TokenUsage ?? TokenUsageEstimator.Estimate(string.Empty, x.Text, TokenUsageEstimator.SourceLegacyEstimated)))
         );
     }
 
@@ -871,6 +886,7 @@ public sealed class ConversationMessage
     public string Text { get; set; } = string.Empty;
     public string Meta { get; set; } = string.Empty;
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
+    public TokenUsage? TokenUsage { get; set; }
 }
 
 public sealed record ConversationThreadSummary(
@@ -892,7 +908,8 @@ public sealed record ConversationMessageView(
     string Role,
     string Text,
     string Meta,
-    DateTimeOffset CreatedUtc
+    DateTimeOffset CreatedUtc,
+    TokenUsage? TokenUsage = null
 );
 
 public sealed record ConversationThreadView(
@@ -907,5 +924,6 @@ public sealed record ConversationThreadView(
     DateTimeOffset UpdatedUtc,
     IReadOnlyList<ConversationMessageView> Messages,
     IReadOnlyList<string> LinkedMemoryNotes,
-    ConversationCodingResultSnapshot? LatestCodingResult
+    ConversationCodingResultSnapshot? LatestCodingResult,
+    TokenUsage? TokenUsageTotal = null
 );

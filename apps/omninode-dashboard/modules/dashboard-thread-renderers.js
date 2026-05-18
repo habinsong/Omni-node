@@ -270,6 +270,48 @@ function InlineResultCarousel(props) {
   );
 }
 
+function readTokenTotal(usage) {
+  if (!usage || typeof usage !== "object") {
+    return 0;
+  }
+  const total = Number(usage.totalTokens ?? usage.total_tokens ?? 0);
+  return Number.isFinite(total) && total > 0 ? Math.round(total) : 0;
+}
+
+function formatTokenShort(total) {
+  const safeTotal = Number.isFinite(Number(total)) ? Math.max(0, Math.round(Number(total))) : 0;
+  if (safeTotal >= 1000000) {
+    const value = (safeTotal / 1000000).toFixed(1).replace(/\.0$/, "");
+    return `${value}M tokens`;
+  }
+  if (safeTotal >= 1000) {
+    const value = (safeTotal / 1000).toFixed(1).replace(/\.0$/, "");
+    return `${value}K tokens`;
+  }
+  return `${safeTotal} tokens`;
+}
+
+function formatTokenFull(total) {
+  const safeTotal = Number.isFinite(Number(total)) ? Math.max(0, Math.round(Number(total))) : 0;
+  return `${safeTotal.toLocaleString("en-US")} tokens`;
+}
+
+function renderMessageTokenUsage(e, usage) {
+  const total = readTokenTotal(usage);
+  if (total <= 0) {
+    return null;
+  }
+  return e(
+    "div",
+    {
+      className: "message-token-usage",
+      title: formatTokenFull(total),
+      "aria-label": `메시지 토큰 사용량 ${formatTokenFull(total)}`
+    },
+    formatTokenShort(total)
+  );
+}
+
 export function renderMessagesPanel(props) {
   const {
     e,
@@ -396,9 +438,13 @@ export function renderMessagesPanel(props) {
                 e(MarkdownBubbleText, { key: "body", text: bubbleText })
               ]
         );
-        const bubbleActions = [ttsButton, saveNotebookButton, createPlanButton].filter(Boolean);
-        const bubbleWithTts = bubbleActions.length > 0
-          ? e("div", { className: "bubble-with-tts" }, bubbleNode, ...bubbleActions)
+        const bubbleActions = [saveNotebookButton, createPlanButton, ttsButton].filter(Boolean);
+        const tokenUsageLabel = !isUser ? renderMessageTokenUsage(e, item.tokenUsage) : null;
+        const actionColumn = !isUser && (bubbleActions.length > 0 || tokenUsageLabel)
+          ? e("div", { className: "assistant-action-column" }, ...bubbleActions, tokenUsageLabel)
+          : null;
+        const bubbleWithTts = actionColumn
+          ? e("div", { className: "bubble-with-tts" }, bubbleNode, actionColumn)
           : bubbleNode;
         return e(
           "div",

@@ -26,4 +26,6 @@ public sealed class ToolApplicationService : IToolApplicationService
     public BrowserToolResult ExecuteBrowser(string? action, string? targetUrl = null, string? profile = null, string? targetId = null, int? limit = null) => _inner.ExecuteBrowser(action, targetUrl, profile, targetId, limit);
     public CanvasToolResult ExecuteCanvas(string? action, string? profile = null, string? target = null, string? targetUrl = null, string? javaScript = null, string? jsonl = null, string? outputFormat = null, int? maxWidth = null) => _inner.ExecuteCanvas(action, profile, target, targetUrl, javaScript, jsonl, outputFormat, maxWidth);
     public NodesToolResult ExecuteNodes(string? action, string? profile = null, string? node = null, string? requestId = null, string? title = null, string? body = null, string? priority = null, string? delivery = null, string? invokeCommand = null, string? invokeParamsJson = null) => _inner.ExecuteNodes(action, profile, node, requestId, title, body, priority, delivery, invokeCommand, invokeParamsJson);
+    public CleanupPreviewResult PreviewCleanup() => _inner.PreviewCleanup();
+    public CleanupApplyResult ApplyCleanup(string? previewId) => _inner.ApplyCleanup(previewId);
 }

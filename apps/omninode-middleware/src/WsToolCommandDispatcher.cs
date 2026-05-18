@@ -700,6 +700,20 @@ internal sealed class WsToolCommandDispatcher
             return true;
         }
 
+        if (message.Type == "cleanup_preview")
+        {
+            var result = _toolService.PreviewCleanup();
+            await WebSocketGateway.SendTextAsync(socket, sendLock, BuildCleanupPreviewResultJson(result), cancellationToken);
+            return true;
+        }
+
+        if (message.Type == "cleanup_apply")
+        {
+            var result = _toolService.ApplyCleanup(message.PreviewId);
+            await WebSocketGateway.SendTextAsync(socket, sendLock, BuildCleanupApplyResultJson(result), cancellationToken);
+            return true;
+        }
+
         if (message.Type == "telegram_stub_command")
         {
             var requestedText = string.IsNullOrWhiteSpace(message.Text)
@@ -841,5 +855,47 @@ internal sealed class WsToolCommandDispatcher
         }
 
         return false;
+    }
+
+    private static string BuildCleanupPreviewResultJson(CleanupPreviewResult result)
+    {
+        var candidatesJson = string.Join(",", result.Candidates.Select(item =>
+            "{"
+            + $"\"path\":\"{WebSocketGateway.EscapeJson(item.Path)}\","
+            + $"\"kind\":\"{WebSocketGateway.EscapeJson(item.Kind)}\","
+            + $"\"sizeBytes\":{Math.Max(0L, item.SizeBytes)},"
+            + $"\"lastModifiedUtc\":\"{WebSocketGateway.EscapeJson(item.LastModifiedUtc.ToString("O"))}\","
+            + $"\"reason\":\"{WebSocketGateway.EscapeJson(item.Reason)}\""
+            + "}"
+        ));
+        return "{"
+            + "\"type\":\"cleanup_preview_result\","
+            + $"\"ok\":{(result.Ok ? "true" : "false")},"
+            + $"\"message\":\"{WebSocketGateway.EscapeJson(result.Message)}\","
+            + $"\"previewId\":\"{WebSocketGateway.EscapeJson(result.PreviewId)}\","
+            + $"\"totalSizeBytes\":{Math.Max(0L, result.TotalSizeBytes)},"
+            + $"\"error\":\"{WebSocketGateway.EscapeJson(result.Error ?? string.Empty)}\","
+            + $"\"candidates\":[{candidatesJson}]"
+            + "}";
+    }
+
+    private static string BuildCleanupApplyResultJson(CleanupApplyResult result)
+    {
+        static string StringArrayJson(IReadOnlyList<string> values)
+        {
+            return "[" + string.Join(",", values.Select(value => $"\"{WebSocketGateway.EscapeJson(value)}\"")) + "]";
+        }
+
+        return "{"
+            + "\"type\":\"cleanup_apply_result\","
+            + $"\"ok\":{(result.Ok ? "true" : "false")},"
+            + $"\"message\":\"{WebSocketGateway.EscapeJson(result.Message)}\","
+            + $"\"previewId\":\"{WebSocketGateway.EscapeJson(result.PreviewId)}\","
+            + $"\"removedCount\":{Math.Max(0, result.RemovedCount)},"
+            + $"\"removedSizeBytes\":{Math.Max(0L, result.RemovedSizeBytes)},"
+            + $"\"removedPaths\":{StringArrayJson(result.RemovedPaths)},"
+            + $"\"failedPaths\":{StringArrayJson(result.FailedPaths)},"
+            + $"\"error\":\"{WebSocketGateway.EscapeJson(result.Error ?? string.Empty)}\""
+            + "}";
     }
 }

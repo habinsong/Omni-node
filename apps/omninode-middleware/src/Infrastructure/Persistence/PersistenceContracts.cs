@@ -26,7 +26,7 @@ public interface IConversationStore
     bool Delete(string conversationId);
     ConversationImportResult ImportConversations(IReadOnlyList<ConversationThreadView> conversations, bool overwrite);
     int DeleteByScope(string scope, string? mode = null);
-    ConversationThreadView AppendMessage(string conversationId, string role, string text, string meta);
+    ConversationThreadView AppendMessage(string conversationId, string role, string text, string meta, TokenUsage? tokenUsage = null);
     ConversationThreadView SetLatestCodingResult(string conversationId, ConversationCodingResultSnapshot? result);
     void SetActiveSkillName(string conversationId, string? skillName);
     IReadOnlyList<(string ConversationId, string SkillName)> ListActiveSkillBindings();

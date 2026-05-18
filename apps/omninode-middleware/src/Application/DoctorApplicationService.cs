@@ -18,4 +18,14 @@ public sealed class DoctorApplicationService : IDoctorApplicationService
     {
         return _inner.GetLastDoctorReportAsync(cancellationToken);
     }
+
+    public Task<DoctorFixPlanResult> PreviewDoctorFixAsync(CancellationToken cancellationToken)
+    {
+        return _inner.PreviewDoctorFixAsync(cancellationToken);
+    }
+
+    public DoctorFixPlanResult ApplyDoctorFix(string previewId)
+    {
+        return _inner.ApplyDoctorFix(previewId);
+    }
 }

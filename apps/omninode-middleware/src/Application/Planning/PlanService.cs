@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace OmniNode.Middleware;
@@ -134,6 +135,202 @@ public sealed class PlanService
     public void SaveExecution(PlanExecutionRecord execution)
     {
         _store.SaveExecution(execution);
+    }
+
+    public PlanActionResult UpdatePlanFromJson(string planId, string? rawJson)
+    {
+        var normalizedPlanId = NormalizePlanId(planId);
+        if (string.IsNullOrWhiteSpace(normalizedPlanId))
+        {
+            return new PlanActionResult(false, "계획 ID를 입력하세요.", null);
+        }
+
+        var current = GetPlan(normalizedPlanId);
+        if (current == null)
+        {
+            return new PlanActionResult(false, "계획을 찾을 수 없습니다.", null);
+        }
+
+        if (current.Plan.Status is PlanStatus.Approved or PlanStatus.Running or PlanStatus.Completed)
+        {
+            return new PlanActionResult(false, "승인 전 계획만 수정할 수 있습니다.", current);
+        }
+
+        var payload = ExtractPayloadObject(rawJson, "plan");
+        if (payload.ValueKind != JsonValueKind.Object)
+        {
+            return new PlanActionResult(false, "수정할 계획 payload가 필요합니다.", current);
+        }
+
+        var title = ReadOptionalString(payload, "title") ?? current.Plan.Title;
+        var objective = ReadOptionalString(payload, "objective") ?? current.Plan.Objective;
+        var constraints = payload.TryGetProperty("constraints", out var constraintsElement)
+            ? NormalizeConstraints(ReadStringArray(constraintsElement))
+            : current.Plan.Constraints;
+        var steps = payload.TryGetProperty("steps", out var stepsElement)
+            ? BuildUpdatedPlanSteps(stepsElement, current.Plan.Steps, objective, constraints)
+            : current.Plan.Steps;
+
+        if (steps.Count == 0)
+        {
+            return new PlanActionResult(false, "계획에는 최소 1개 이상의 step이 필요합니다.", current);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var updated = current.Plan with
+        {
+            Title = TrimText(title, 72),
+            Objective = NormalizeObjective(objective),
+            Constraints = constraints,
+            Steps = steps,
+            Status = PlanStatus.Draft,
+            UpdatedAtUtc = now,
+            ReviewerSummary = null,
+            DecisionLog = current.Plan.DecisionLog
+                .Concat(new[] { $"updatedAt={now:O} review=invalidated" })
+                .TakeLast(80)
+                .ToArray()
+        };
+
+        _store.SavePlan(updated);
+        _store.DeleteReview(updated.PlanId);
+        _store.DeleteExecution(updated.PlanId);
+        return new PlanActionResult(true, "계획을 수정했습니다.", new PlanSnapshot(updated, null, null));
+    }
+
+    private static IReadOnlyList<PlanStep> BuildUpdatedPlanSteps(
+        JsonElement stepsElement,
+        IReadOnlyList<PlanStep> currentSteps,
+        string objective,
+        IReadOnlyList<string> constraints
+    )
+    {
+        if (stepsElement.ValueKind != JsonValueKind.Array)
+        {
+            return currentSteps;
+        }
+
+        var currentById = currentSteps.ToDictionary(step => step.StepId, StringComparer.OrdinalIgnoreCase);
+        var result = new List<PlanStep>();
+        var index = 0;
+        foreach (var item in stepsElement.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var stepId = ReadOptionalString(item, "stepId") ?? $"step-{index + 1:00}";
+            if (!currentById.TryGetValue(stepId, out var existing))
+            {
+                existing = BuildFallbackPlanStep(
+                    ReadOptionalString(item, "description") ?? ReadOptionalString(item, "title") ?? $"단계 {index + 1}",
+                    index,
+                    constraints,
+                    BuildVerificationHints(objective)
+                );
+            }
+
+            var title = ReadOptionalString(item, "title") ?? existing.Title;
+            var description = ReadOptionalString(item, "description") ?? existing.Description;
+            var mustDo = item.TryGetProperty("mustDo", out var mustDoElement)
+                ? NormalizePlanList(ReadStringArray(mustDoElement)).DefaultIfEmpty(description).Take(8).ToArray()
+                : existing.MustDo;
+            var mustNotDo = item.TryGetProperty("mustNotDo", out var mustNotDoElement)
+                ? NormalizePlanList(ReadStringArray(mustNotDoElement)).Take(8).ToArray()
+                : existing.MustNotDo;
+            var verification = item.TryGetProperty("verification", out var verificationElement)
+                ? NormalizePlanList(ReadStringArray(verificationElement)).DefaultIfEmpty("이 단계 산출물이 다음 단계 입력으로 충분한지 확인한다.").Take(8).ToArray()
+                : existing.Verification;
+
+            result.Add(new PlanStep(
+                SanitizeStepId(stepId, index),
+                TrimText(title, 56),
+                NormalizeObjective(description),
+                mustDo,
+                mustNotDo,
+                verification
+            ));
+            index += 1;
+            if (result.Count >= 12)
+            {
+                break;
+            }
+        }
+
+        return result;
+    }
+
+    private static JsonElement ExtractPayloadObject(string? rawJson, string propertyName)
+    {
+        var normalized = (rawJson ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return default;
+        }
+
+        using var doc = JsonDocument.Parse(normalized);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return default;
+        }
+
+        if (root.TryGetProperty(propertyName, out var nested) && nested.ValueKind == JsonValueKind.Object)
+        {
+            return nested.Clone();
+        }
+
+        return root.Clone();
+    }
+
+    private static string? ReadOptionalString(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        var text = Regex.Replace((value.GetString() ?? string.Empty).Trim(), @"\s+", " ");
+        return string.IsNullOrWhiteSpace(text) ? null : text;
+    }
+
+    private static IReadOnlyList<string> ReadStringArray(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.String)
+        {
+            var single = element.GetString();
+            return string.IsNullOrWhiteSpace(single) ? Array.Empty<string>() : new[] { single };
+        }
+
+        if (element.ValueKind != JsonValueKind.Array)
+        {
+            return Array.Empty<string>();
+        }
+
+        return element.EnumerateArray()
+            .Where(item => item.ValueKind == JsonValueKind.String)
+            .Select(item => item.GetString() ?? string.Empty)
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .ToArray();
+    }
+
+    private static string SanitizeStepId(string value, int index)
+    {
+        var normalized = Regex.Replace((value ?? string.Empty).Trim(), @"[^A-Za-z0-9._-]+", "-", RegexOptions.CultureInvariant);
+        normalized = normalized.Trim('-', '.', '_');
+        return string.IsNullOrWhiteSpace(normalized) ? $"step-{index + 1:00}" : normalized;
+    }
+
+    private static string TrimText(string value, int maxChars)
+    {
+        var normalized = Regex.Replace((value ?? string.Empty).Trim(), @"\s+", " ");
+        if (normalized.Length <= maxChars)
+        {
+            return normalized;
+        }
+
+        return normalized[..maxChars].TrimEnd();
     }
 
     private string BuildPlannerContext(string? sourceConversationId)

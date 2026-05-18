@@ -425,6 +425,18 @@ internal sealed class WsConversationMemoryDispatcher
             return true;
         }
 
+        if (message.Type == "memory_index_rebuild")
+        {
+            var result = _memoryService.RebuildMemoryIndex();
+            await WebSocketGateway.SendTextAsync(
+                socket,
+                sendLock,
+                BuildMemoryIndexRebuildResultJson(result),
+                cancellationToken
+            );
+            return true;
+        }
+
         if (message.Type == "update_conversation_meta")
         {
             if (string.IsNullOrWhiteSpace(message.ConversationId))
@@ -525,8 +537,31 @@ internal sealed class WsConversationMemoryDispatcher
             or "backup_import_preview"
             or "backup_import_apply"
             or "memory_get"
+            or "memory_index_rebuild"
             or "update_conversation_meta"
             or "read_workspace_file";
+    }
+
+    private static string BuildMemoryIndexRebuildResultJson(MemoryIndexRebuildResult result)
+    {
+        var snapshot = result.Snapshot;
+        return "{"
+            + "\"type\":\"memory_index_rebuild_result\","
+            + $"\"ok\":{(result.Ok ? "true" : "false")},"
+            + $"\"message\":\"{WebSocketGateway.EscapeJson(result.Message)}\","
+            + $"\"error\":\"{WebSocketGateway.EscapeJson(result.Error ?? string.Empty)}\","
+            + "\"snapshot\":"
+            + (snapshot == null
+                ? "null"
+                : "{"
+                  + $"\"dbPath\":\"{WebSocketGateway.EscapeJson(snapshot.DbPath)}\","
+                  + $"\"scannedDocuments\":{snapshot.ScannedDocuments},"
+                  + $"\"indexedDocuments\":{snapshot.IndexedDocuments},"
+                  + $"\"skippedDocuments\":{snapshot.SkippedDocuments},"
+                  + $"\"removedDocuments\":{snapshot.RemovedDocuments},"
+                  + $"\"ftsAvailable\":{(snapshot.FtsAvailable ? "true" : "false")}"
+                  + "}")
+            + "}";
     }
 
     private static string BuildConversationSearchResultJson(ConversationSearchResult result)

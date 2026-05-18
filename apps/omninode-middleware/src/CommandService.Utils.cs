@@ -251,14 +251,20 @@ public sealed partial class CommandService
         string conversationId,
         string input,
         IReadOnlyList<string>? requestMemoryNotes,
-        bool includeLocalTimeHint = false
+        bool includeLocalTimeHint = false,
+        string? contextDecisionInput = null
     )
     {
-        var includePriorContext = ShouldUsePriorConversationContext(conversationId, input);
+        var contextDecisionText = contextDecisionInput ?? input;
+        var suppressPriorContext = LooksLikeStandaloneFreshGreeting(contextDecisionText);
+        var includePriorContext = !suppressPriorContext && ShouldUsePriorConversationContext(conversationId, contextDecisionText);
         var explicitRequestNotes = NormalizeExplicitMemoryNoteNames(requestMemoryNotes);
         // linked memory notes는 압축된 대화 맥락이므로 includePriorContext와 무관하게 항상 로드.
         // 그렇지 않으면 압축 직후 첫 질문에서 맥락이 단절됨.
-        var autoLinkedNotes = _conversationStore.Get(conversationId)?.LinkedMemoryNotes ?? Array.Empty<string>();
+        // 단독 인사는 새 대화 행위라서 이전 주제 메모리도 함께 붙이지 않는다.
+        var autoLinkedNotes = suppressPriorContext
+            ? Array.Empty<string>()
+            : _conversationStore.Get(conversationId)?.LinkedMemoryNotes ?? Array.Empty<string>();
         var notes = MergeMemoryNoteNames(
             autoLinkedNotes,
             explicitRequestNotes
@@ -307,7 +313,7 @@ public sealed partial class CommandService
             builder.AppendLine();
         }
 
-        if (includeLocalTimeHint && LooksLikeLocalDateTimeQuestion(input))
+        if (includeLocalTimeHint && LooksLikeLocalDateTimeQuestion(contextDecisionText))
         {
             builder.AppendLine("[로컬 시간]");
             builder.AppendLine(BuildLocalNowText());
@@ -385,6 +391,11 @@ public sealed partial class CommandService
 
     private bool ShouldUsePriorConversationContext(string conversationId, string input)
     {
+        if (LooksLikeStandaloneFreshGreeting(input))
+        {
+            return false;
+        }
+
         if (ShouldUsePriorConversationContext(input, out var isAmbiguous))
         {
             var normalized = (input ?? string.Empty).Trim();
@@ -2944,7 +2955,8 @@ public sealed partial class CommandService
             outcome.Execution,
             outcome.ChangedFiles,
             role,
-            outcome.Summary
+            outcome.Summary,
+            outcome.TokenUsage
         );
     }
 
@@ -2973,6 +2985,7 @@ public sealed partial class CommandService
 
         var rawResponse = (generated.Text ?? string.Empty).Trim();
         var parsed = ExtractFallbackCode(rawResponse, languageHint, objective);
+        var draftTokenUsage = generated.TokenUsage;
         if (string.IsNullOrWhiteSpace(parsed.Code))
         {
             var codeOnlyPrompt = BuildFallbackCodeOnlyPrompt(objective, languageHint);
@@ -2993,6 +3006,8 @@ public sealed partial class CommandService
                 parsed = fallbackParsed;
                 rawResponse = string.IsNullOrWhiteSpace(rawResponse) ? fallbackRaw : $"{rawResponse}\n\n[code-only-fallback]\n{fallbackRaw}";
             }
+
+            draftTokenUsage = TokenUsageEstimator.Combine(draftTokenUsage, fallback.TokenUsage);
         }
 
         var resolvedLanguage = string.IsNullOrWhiteSpace(parsed.Language)
@@ -3018,7 +3033,8 @@ public sealed partial class CommandService
             execution,
             Array.Empty<string>(),
             role,
-            string.IsNullOrWhiteSpace(rawResponse) ? "초안 생성 결과가 비어 있습니다." : TrimForOutput(rawResponse, 1800)
+            string.IsNullOrWhiteSpace(rawResponse) ? "초안 생성 결과가 비어 있습니다." : TrimForOutput(rawResponse, 1800),
+            draftTokenUsage
         );
     }
 
@@ -3043,6 +3059,7 @@ public sealed partial class CommandService
         var maxIterations = ResolveMaxIterations(profile, oneShotMode);
         var maxActions = ResolveMaxActions(profile, oneShotMode);
         var iterations = new List<string>();
+        TokenUsage? totalTokenUsage = null;
         var progressMode = string.IsNullOrWhiteSpace(progressModeOverride) ? modeLabel : progressModeOverride;
 
         var currentLanguage = ResolveInitialCodingLanguage(languageHint, objective);
@@ -3232,6 +3249,7 @@ public sealed partial class CommandService
                 optimizeCodexForCoding: profile.OptimizeCodexCli,
                 timeoutOverrideSeconds: profile.RequestTimeoutSeconds
             );
+            totalTokenUsage = TokenUsageEstimator.Combine(totalTokenUsage, generated.TokenUsage);
             lastRawResponse = generated.Text;
             var plan = ParseCodingLoopPlan(generated.Text);
             if (plan == null)
@@ -3426,6 +3444,7 @@ public sealed partial class CommandService
                     optimizeCodexForCoding: profile.OptimizeCodexCli,
                     timeoutOverrideSeconds: profile.RequestTimeoutSeconds
                 );
+                totalTokenUsage = TokenUsageEstimator.Combine(totalTokenUsage, bundleGenerated.TokenUsage);
                 lastRawResponse = bundleGenerated.Text;
                 var fallbackBundle = ExtractFallbackFileBundle(bundleGenerated.Text, currentLanguage, objective);
                 if (fallbackBundle.Files.Count > 0)
@@ -3477,6 +3496,7 @@ public sealed partial class CommandService
                     optimizeCodexForCoding: profile.OptimizeCodexCli,
                     timeoutOverrideSeconds: profile.RequestTimeoutSeconds
                 );
+                totalTokenUsage = TokenUsageEstimator.Combine(totalTokenUsage, fallbackGenerated.TokenUsage);
                 lastRawResponse = fallbackGenerated.Text;
                 var fallbackCode = ExtractFallbackCode(fallbackGenerated.Text, currentLanguage, objective);
                 if (!string.IsNullOrWhiteSpace(fallbackCode.Code))
@@ -3517,6 +3537,7 @@ public sealed partial class CommandService
                         optimizeCodexForCoding: profile.OptimizeCodexCli,
                         timeoutOverrideSeconds: profile.RequestTimeoutSeconds
                     );
+                    totalTokenUsage = TokenUsageEstimator.Combine(totalTokenUsage, bundleGenerated.TokenUsage);
                     lastRawResponse = string.IsNullOrWhiteSpace(bundleGenerated.Text)
                         ? fallbackGenerated.Text
                         : bundleGenerated.Text;
@@ -3854,7 +3875,8 @@ public sealed partial class CommandService
                 mergedRawResponse,
                 repairOutcome.Execution,
                 mergedChangedFiles,
-                mergedSummary
+                mergedSummary,
+                TokenUsageEstimator.Combine(totalTokenUsage, repairOutcome.TokenUsage)
             );
         }
 
@@ -3884,7 +3906,7 @@ public sealed partial class CommandService
             6,
             VisibleCodingStageTotal
         ));
-        return new AutonomousCodingOutcome(currentLanguage, lastCode, lastRawResponse, lastExecution, orderedChangedFiles, summary);
+        return new AutonomousCodingOutcome(currentLanguage, lastCode, lastRawResponse, lastExecution, orderedChangedFiles, summary, totalTokenUsage);
     }
 
     private static bool ShouldTrustDeferredVerificationCommand(string language, string objective, string command)

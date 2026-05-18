@@ -1135,7 +1135,8 @@ body,
 .coding-result-primary-column,
 .coding-result-secondary-column,
 .coding-output-panel,
-.coding-execution-details {
+.coding-execution-details,
+.coding-evidence-panel {
   display: grid;
   gap: 12px;
   min-height: 0;
@@ -1225,6 +1226,23 @@ body,
 .file-chip.active {
   background: #dbe8ff;
   border-color: #adc6f7;
+}
+
+.file-chip.readonly {
+  cursor: default;
+  background: #f6f8fb;
+  color: var(--text-secondary);
+}
+
+.coding-evidence-panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.92);
+  padding: 10px;
+}
+
+.coding-evidence-panel .evidence-files {
+  padding: 8px;
 }
 
 .coding-preview {
@@ -1852,6 +1870,10 @@ body,
   gap: 10px;
 }
 
+.messenger-composer .toolbar.token-toolbar {
+  grid-template-columns: minmax(112px, 0.62fr) repeat(auto-fit, minmax(142px, 1fr));
+}
+
 .composer .toolbar>.input,
 .composer .toolbar>select.input,
 .composer .toolbar>.textarea,
@@ -1868,10 +1890,28 @@ body,
 .messenger-composer .toolbar>.fixed-chip,
 .messenger-composer .toolbar>.toggle-inline,
 .messenger-composer .toolbar>.btn,
-.messenger-composer .toolbar>.file-upload-label {
+.messenger-composer .toolbar>.file-upload-label,
+.messenger-composer .toolbar>.composer-token-pill {
   width: 100%;
   max-width: none;
   min-width: 0;
+}
+
+.composer-token-pill {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--muted);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .fixed-chip {
@@ -18749,7 +18789,7 @@ video {
 .bubble-with-tts {
   display: inline-flex;
   align-items: flex-end;
-  gap: 0;
+  gap: 4px;
   min-width: 0;
   max-width: 100%;
 }
@@ -18760,9 +18800,31 @@ video {
   margin-right: 0px !important;
 }
 
-.bubble-with-tts>.tts-pill {
+.bubble-with-tts>.tts-pill,
+.assistant-action-column>.tts-pill {
   flex: 0 0 auto;
-  margin-left: 2px;
+  margin-left: 0;
+}
+
+.assistant-action-column {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 34px;
+}
+
+.message-token-usage {
+  max-width: 66px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.15;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .message-tts-aside {
@@ -18921,6 +18983,16 @@ video {
   background: linear-gradient(180deg, #4f8cff 0%, #2f6ee0 100%) !important;
   border-color: #2f6ee0 !important;
   color: #ffffff !important;
+}
+
+:root[data-theme="dark"] body .composer-token-pill {
+  background: var(--dark-surface-2) !important;
+  border-color: var(--dark-border-strong) !important;
+  color: var(--dark-muted) !important;
+}
+
+:root[data-theme="dark"] body .message-token-usage {
+  color: var(--dark-muted) !important;
 }
 
 @media (max-width: 640px) {

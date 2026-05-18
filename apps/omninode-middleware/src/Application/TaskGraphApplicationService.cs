@@ -14,6 +14,11 @@ public sealed class TaskGraphApplicationService : ITaskGraphApplicationService
         return _inner.CreateTaskGraph(planId);
     }
 
+    public TaskGraphActionResult UpdateTaskGraph(string graphId, string? rawJson)
+    {
+        return _inner.UpdateTaskGraph(graphId, rawJson);
+    }
+
     public TaskGraphListResult ListTaskGraphs()
     {
         return _inner.ListTaskGraphs();
@@ -37,6 +42,27 @@ public sealed class TaskGraphApplicationService : ITaskGraphApplicationService
     public TaskGraphActionResult CancelTask(string graphId, string taskId)
     {
         return _inner.CancelTask(graphId, taskId);
+    }
+
+    public Task<TaskGraphActionResult> RetryTaskAsync(
+        string graphId,
+        string taskId,
+        string source,
+        TaskGraphEventSink? eventSink,
+        CancellationToken cancellationToken
+    )
+    {
+        return _inner.RetryTaskAsync(graphId, taskId, source, eventSink, cancellationToken);
+    }
+
+    public Task<TaskGraphActionResult> ResumeTaskGraphAsync(
+        string graphId,
+        string source,
+        TaskGraphEventSink? eventSink,
+        CancellationToken cancellationToken
+    )
+    {
+        return _inner.ResumeTaskGraphAsync(graphId, source, eventSink, cancellationToken);
     }
 
     public TaskOutputResult? GetTaskOutput(string graphId, string taskId)

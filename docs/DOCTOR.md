@@ -14,6 +14,8 @@ dotnet run --project apps/omninode-middleware/OmniNode.Middleware.csproj -- doct
 
 대시보드 설정 탭의 환경 진단 패널에서도 최근 doctor 결과를 볼 수 있다.
 
+도구 통합 패널의 `doctor.fix.preview`는 최근 Doctor 결과와 현재 설정을 바탕으로 적용 가능한 복구 계획을 만든다. `doctor.fix.apply`는 해당 previewId가 있는 경우에만 실행되며, 자동 적용 범위는 누락된 상태/워크스페이스 디렉터리 생성으로 제한된다. API 키 입력, CLI 인증, 파괴적 정리는 자동 실행하지 않는다.
+
 ## 읽는 법
 
 - `ok`: 정상

@@ -9,11 +9,15 @@ export const TOOL_RESULT_TYPES = new Set([
   "web_fetch_result",
   "memory_search_result",
   "memory_get_result",
+  "memory_index_rebuild_result",
   "cron_result",
   "browser_result",
   "canvas_result",
   "nodes_result",
-  "telegram_stub_result"
+  "telegram_stub_result",
+  "doctor_fix_result",
+  "cleanup_preview_result",
+  "cleanup_apply_result"
 ]);
 
 export const TOOL_RESULT_GROUPS = [
@@ -24,7 +28,9 @@ export const TOOL_RESULT_GROUPS = [
   { key: "nodes", label: "nodes" },
   { key: "web", label: "web(rag)" },
   { key: "memory", label: "memory(rag)" },
-  { key: "telegram", label: "telegram(stub)" }
+  { key: "telegram", label: "telegram(stub)" },
+  { key: "doctor", label: "doctor" },
+  { key: "cleanup", label: "cleanup" }
 ];
 
 const TOOL_RESULT_GROUP_BY_TYPE = {
@@ -36,11 +42,15 @@ const TOOL_RESULT_GROUP_BY_TYPE = {
   web_fetch_result: "web",
   memory_search_result: "memory",
   memory_get_result: "memory",
+  memory_index_rebuild_result: "memory",
   cron_result: "cron",
   browser_result: "browser",
   canvas_result: "canvas",
   nodes_result: "nodes",
-  telegram_stub_result: "telegram"
+  telegram_stub_result: "telegram",
+  doctor_fix_result: "doctor",
+  cleanup_preview_result: "cleanup",
+  cleanup_apply_result: "cleanup"
 };
 
 export const TOOL_RESULT_FILTERS = [
@@ -53,6 +63,8 @@ export const TOOL_RESULT_FILTERS = [
   { key: "web", label: "web(rag)" },
   { key: "memory", label: "memory(rag)" },
   { key: "telegram", label: "telegram(stub)" },
+  { key: "doctor", label: "doctor" },
+  { key: "cleanup", label: "cleanup" },
   { key: "errors", label: "오류" }
 ];
 
@@ -63,6 +75,8 @@ const TOOL_RESULT_DOMAIN_BY_GROUP = {
   canvas: "tool",
   nodes: "tool",
   telegram: "tool",
+  doctor: "tool",
+  cleanup: "tool",
   web: "rag",
   memory: "rag"
 };
@@ -254,8 +268,16 @@ export function inferToolResultAction(msg) {
       return "search";
     case "memory_get_result":
       return "get";
+    case "memory_index_rebuild_result":
+      return "rebuild";
     case "telegram_stub_result":
       return "command";
+    case "doctor_fix_result":
+      return msg.action || "fix";
+    case "cleanup_preview_result":
+      return "preview";
+    case "cleanup_apply_result":
+      return "apply";
     default:
       return "-";
   }

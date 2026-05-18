@@ -62,6 +62,8 @@ assertIncludes(markdown, "html = renderTableAwareFallbackHtml(text)", "markdown 
 
 const dashboardApp = read("apps/omninode-dashboard/app.js");
 assertIncludes(dashboardApp, "if (!remoteDashboardClient && token)", "remote dashboard must not send resume_auth");
+assertIncludes(dashboardApp, "if (!remoteDashboardClient && !authed)", "conversation list requests must wait for local authentication");
+assertIncludes(dashboardApp, "send({ type: \"get_settings\" });\n      if (!remoteDashboardClient) {\n        return;", "initial dashboard bootstrap must not send protected local requests before auth");
 
 const settingsRenderer = read("apps/omninode-dashboard/modules/dashboard-settings-renderers.js");
 assertIncludes(settingsRenderer, "basic-remote-limited", "remote dashboard settings use limited-mode panel");
@@ -82,4 +84,4 @@ const inputPreparation = read("apps/omninode-middleware/src/CommandService.Input
 assertNotIncludes(gateway, "dataBase64[..700_000]", "gateway must reject rather than truncate attachments");
 assertNotIncludes(inputPreparation, "base64[..700_000]", "input preparation must not truncate attachments");
 
-console.log(JSON.stringify({ ok: true, assertions: 40 }, null, 2));
+console.log(JSON.stringify({ ok: true, assertions: 42 }, null, 2));

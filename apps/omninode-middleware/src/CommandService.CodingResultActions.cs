@@ -49,7 +49,14 @@ public sealed partial class CommandService
                 target.Model,
                 null,
                 previewUrl,
-                previewEntry
+                previewEntry,
+                BuildCodingEvidencePack(
+                    "browser",
+                    target.Execution,
+                    target.ChangedFiles,
+                    previewUrl,
+                    previewEntry
+                )
             );
         }
 
@@ -97,7 +104,8 @@ public sealed partial class CommandService
             rerunMessage,
             target.Provider,
             target.Model,
-            execution
+            execution,
+            Evidence: BuildCodingEvidencePack("command", execution, target.ChangedFiles)
         );
     }
 

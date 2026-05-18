@@ -64,6 +64,27 @@ public sealed class BackgroundTaskCoordinator
         CancellationToken cancellationToken
     )
     {
+        return RunGraphInternalAsync(graphId, source, eventSink, resetAll: true, cancellationToken);
+    }
+
+    public Task<TaskGraphActionResult> ResumeGraphAsync(
+        string graphId,
+        string source,
+        TaskGraphEventSink? eventSink,
+        CancellationToken cancellationToken
+    )
+    {
+        return RunGraphInternalAsync(graphId, source, eventSink, resetAll: false, cancellationToken);
+    }
+
+    private Task<TaskGraphActionResult> RunGraphInternalAsync(
+        string graphId,
+        string source,
+        TaskGraphEventSink? eventSink,
+        bool resetAll,
+        CancellationToken cancellationToken
+    )
+    {
         _ = cancellationToken;
         if (_codingService == null || _commandExecutionService == null)
         {
@@ -89,7 +110,9 @@ public sealed class BackgroundTaskCoordinator
             }
         }
 
-        var prepared = _taskGraphService.PrepareForRun(current.Graph.GraphId);
+        var prepared = resetAll
+            ? _taskGraphService.PrepareForRun(current.Graph.GraphId)
+            : _taskGraphService.PrepareForResume(current.Graph.GraphId);
         var runState = new GraphRunState(prepared.Graph.GraphId);
         if (eventSink != null)
         {

@@ -100,6 +100,11 @@ function main() {
     [toRelative(path.join(repoRoot, "scripts", "check-coding-python-game-contract.mjs"))]
   );
   runStep(
+    "browser intent contract",
+    "node",
+    [toRelative(path.join(repoRoot, "scripts", "check-browser-intent-contract.mjs"))]
+  );
+  runStep(
     "chat telegram contract",
     "node",
     [toRelative(path.join(repoRoot, "scripts", "check-chat-telegram-contract.mjs"))]

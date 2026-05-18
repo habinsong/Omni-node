@@ -30,6 +30,45 @@ function renderComposerSupportDocks(e, codingResultDock, safeRefactorDock) {
   );
 }
 
+function readTokenTotal(usage) {
+  if (!usage || typeof usage !== "object") {
+    return 0;
+  }
+  const total = Number(usage.totalTokens ?? usage.total_tokens ?? 0);
+  return Number.isFinite(total) && total > 0 ? Math.round(total) : 0;
+}
+
+function formatTokenShort(total) {
+  const safeTotal = Number.isFinite(Number(total)) ? Math.max(0, Math.round(Number(total))) : 0;
+  if (safeTotal >= 1000000) {
+    const value = (safeTotal / 1000000).toFixed(1).replace(/\.0$/, "");
+    return `${value}M tokens`;
+  }
+  if (safeTotal >= 1000) {
+    const value = (safeTotal / 1000).toFixed(1).replace(/\.0$/, "");
+    return `${value}K tokens`;
+  }
+  return `${safeTotal} tokens`;
+}
+
+function formatTokenFull(total) {
+  const safeTotal = Number.isFinite(Number(total)) ? Math.max(0, Math.round(Number(total))) : 0;
+  return `${safeTotal.toLocaleString("en-US")} tokens`;
+}
+
+function renderComposerTokenPill(e, tokenUsageTotal) {
+  const total = readTokenTotal(tokenUsageTotal);
+  return e(
+    "div",
+    {
+      className: "composer-token-pill",
+      title: formatTokenFull(total),
+      "aria-label": `전체 토큰 사용량 ${formatTokenFull(total)}`
+    },
+    formatTokenShort(total)
+  );
+}
+
 export function renderChatComposerPanel(props) {
   const {
     e,
@@ -41,7 +80,8 @@ export function renderChatComposerPanel(props) {
     values,
     setters,
     helpers,
-    actions
+    actions,
+    tokenUsageTotal
   } = props;
 
   const {
@@ -126,7 +166,8 @@ export function renderChatComposerPanel(props) {
     return e(
       "div",
       { className: "composer messenger-composer" },
-      e("div", { className: "toolbar" },
+      e("div", { className: "toolbar token-toolbar" },
+        renderComposerTokenPill(e, tokenUsageTotal),
         e("select", {
           className: "input compact",
           value: chatSingleProvider,
@@ -209,7 +250,8 @@ export function renderChatComposerPanel(props) {
       "div",
       { className: "composer messenger-composer" },
       e("div", { className: "preset-hint" }, "오케스트레이션은 요청 성격을 보고 워커 역할을 자동 분담합니다. 초안, 리스크 점검, 예시 구체화, 최종 검토를 나눠 통합합니다."),
-      e("div", { className: "toolbar" },
+      e("div", { className: "toolbar token-toolbar" },
+        renderComposerTokenPill(e, tokenUsageTotal),
         e("select", {
           className: "input compact",
           value: chatOrchProvider,
@@ -333,7 +375,8 @@ export function renderChatComposerPanel(props) {
     "div",
     { className: "composer messenger-composer" },
     e("div", { className: "preset-hint" }, "다중 LLM은 모델별 답변을 각각 넘겨보고, 아래 공통 정리에서 겹치는 핵심과 차이를 확인할 때 쓰는 모드입니다."),
-    e("div", { className: "toolbar" },
+    e("div", { className: "toolbar token-toolbar" },
+      renderComposerTokenPill(e, tokenUsageTotal),
       e("select", {
         className: "input compact",
         value: chatMultiGroqModel,
@@ -402,7 +445,8 @@ export function renderCodingComposerPanel(props) {
     values,
     setters,
     helpers,
-    actions
+    actions,
+    tokenUsageTotal
   } = props;
 
   const {
@@ -494,7 +538,8 @@ export function renderCodingComposerPanel(props) {
     return e(
       "div",
       { className: "composer messenger-composer" },
-      e("div", { className: "toolbar" },
+      e("div", { className: "toolbar token-toolbar" },
+        renderComposerTokenPill(e, tokenUsageTotal),
         e("select", {
           className: "input compact",
           value: codingSingleProvider,
@@ -586,7 +631,8 @@ export function renderCodingComposerPanel(props) {
       "div",
       { className: "composer messenger-composer" },
       e("div", { className: "preset-hint" }, "오케스트레이션 코딩은 기획, 개발, 검증 및 테스트, 수정 단계를 모델들이 나눠 맡습니다. `주 구현`을 지정하면 개발 단계에 우선 배치하고, 입력 없이 실행하면 자동 역할 분배로 시작합니다."),
-      e("div", { className: "toolbar" },
+      e("div", { className: "toolbar token-toolbar" },
+        renderComposerTokenPill(e, tokenUsageTotal),
         e("select", {
           className: "input compact",
           value: codingOrchProvider,
@@ -716,7 +762,8 @@ export function renderCodingComposerPanel(props) {
     "div",
     { className: "composer messenger-composer" },
     e("div", { className: "preset-hint" }, "다중 코딩은 선택한 각 모델이 서로 독립된 폴더에서 처음부터 끝까지 완주하고, 아래에서 모델별 결과와 공통점/차이를 비교합니다."),
-    e("div", { className: "toolbar" },
+    e("div", { className: "toolbar token-toolbar" },
+      renderComposerTokenPill(e, tokenUsageTotal),
       e("select", {
         className: "input compact",
         value: codingMultiProvider,

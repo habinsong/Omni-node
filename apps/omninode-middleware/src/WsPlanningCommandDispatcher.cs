@@ -68,6 +68,13 @@ internal sealed class WsPlanningCommandDispatcher
             return true;
         }
 
+        if (message.Type == "plan_update")
+        {
+            var result = _planService.UpdatePlan(message.PlanId ?? string.Empty, message.RawJson);
+            await _sendPlanActionResultAsync(socket, sendLock, "update", result, cancellationToken);
+            return true;
+        }
+
         if (message.Type == "plan_list")
         {
             await _sendPlanListResultAsync(socket, sendLock, _planService.ListPlans(), cancellationToken);

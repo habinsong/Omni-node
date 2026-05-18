@@ -138,6 +138,11 @@ public sealed partial class CommandService
         );
         var thread = session.Thread;
         var rawInput = (request.Input ?? string.Empty).Trim();
+        if (TryHandleBrowserChatIntent(session, rawInput, "single", request.RequestId) is { } browserIntentResult)
+        {
+            return browserIntentResult;
+        }
+
         var localAssistantInfoReply = TryBuildLocalAssistantInfoResponse(rawInput, session.SessionId, request.Source);
         if (!string.IsNullOrWhiteSpace(localAssistantInfoReply))
         {
@@ -512,7 +517,8 @@ public sealed partial class CommandService
             session.SessionId,
             skillPreparedText,
             session.LinkedMemoryNotes,
-            includeLocalTimeHint: true
+            includeLocalTimeHint: true,
+            contextDecisionInput: rawInput
         );
         LlmSingleChatResult generated;
         try
@@ -566,10 +572,12 @@ public sealed partial class CommandService
                     }
                     else
                     {
+                        var guardText = BuildOffTopicGuardMessage(rawInput);
                         generated = new LlmSingleChatResult(
                             generated.Provider,
                             generated.Model,
-                            BuildOffTopicGuardMessage(rawInput)
+                            guardText,
+                            TokenUsageEstimator.Estimate(rawInput, guardText)
                         );
                     }
                 }
@@ -597,10 +605,12 @@ public sealed partial class CommandService
                 }
                 else
                 {
+                    var guardText = BuildOffTopicGuardMessage(rawInput);
                     generated = new LlmSingleChatResult(
                         generated.Provider,
                         generated.Model,
-                        BuildOffTopicGuardMessage(rawInput)
+                        guardText,
+                        TokenUsageEstimator.Estimate(rawInput, guardText)
                     );
                 }
             }
@@ -618,7 +628,7 @@ public sealed partial class CommandService
         responseText = CleanLeakedSystemMarkers(responseText);
 
         _conversationStore.AppendMessage(thread.Id, "user", rawInput, $"{requestedProvider}:{request.Model ?? "-"}");
-        _conversationStore.AppendMessage(thread.Id, "assistant", responseText, $"{generated.Provider}:{generated.Model}");
+        _conversationStore.AppendMessage(thread.Id, "assistant", responseText, $"{generated.Provider}:{generated.Model}", generated.TokenUsage);
         ScheduleConversationMaintenance(
             thread.Id,
             $"{session.Scope}-{session.Mode}",
@@ -1705,6 +1715,11 @@ public sealed partial class CommandService
         );
         var thread = session.Thread;
         var rawInput = (request.Input ?? string.Empty).Trim();
+        if (TryHandleBrowserChatIntent(session, rawInput, "orchestration", request.RequestId) is { } browserIntentResult)
+        {
+            return browserIntentResult;
+        }
+
         var localAssistantInfoReply = TryBuildLocalAssistantInfoResponse(rawInput, session.SessionId, request.Source);
         if (!string.IsNullOrWhiteSpace(localAssistantInfoReply))
         {
@@ -1822,7 +1837,8 @@ public sealed partial class CommandService
             session.SessionId,
             thinkPlusPreText,
             session.LinkedMemoryNotes,
-            includeLocalTimeHint: true
+            includeLocalTimeHint: true,
+            contextDecisionInput: rawInput
         );
 
         var generated = await ChatOrchestrationAsync(
@@ -1851,7 +1867,7 @@ public sealed partial class CommandService
         responseText = CleanLeakedSystemMarkers(responseText);
 
         _conversationStore.AppendMessage(thread.Id, "user", rawInput, $"orchestration:{request.Provider ?? "auto"}");
-        _conversationStore.AppendMessage(thread.Id, "assistant", responseText, generated.Route);
+        _conversationStore.AppendMessage(thread.Id, "assistant", responseText, generated.Route, generated.TokenUsage);
         await EnsureConversationTitleFromFirstTurnAsync(
             thread.Id,
             request.Provider ?? "auto",
@@ -1905,6 +1921,11 @@ public sealed partial class CommandService
         );
         var thread = session.Thread;
         var rawInput = (request.Input ?? string.Empty).Trim();
+        if (TryHandleBrowserMultiIntent(session, rawInput, request) is { } browserIntentResult)
+        {
+            return browserIntentResult;
+        }
+
         var localGroqModel = IsDisabledModelSelection(request.GroqModel)
             ? "none"
             : string.IsNullOrWhiteSpace(request.GroqModel)
@@ -2082,7 +2103,8 @@ public sealed partial class CommandService
             session.SessionId,
             thinkPlusPreText,
             session.LinkedMemoryNotes,
-            includeLocalTimeHint: true
+            includeLocalTimeHint: true,
+            contextDecisionInput: rawInput
         );
 
         var generated = await ChatMultiAsync(
@@ -2146,12 +2168,13 @@ public sealed partial class CommandService
             generated.Differences
         );
         _conversationStore.AppendMessage(thread.Id, "user", rawInput, "multi");
-        _conversationStore.AppendMessage(thread.Id, "assistant", comparisonMessageText, "다중 LLM 모델 비교");
+        _conversationStore.AppendMessage(thread.Id, "assistant", comparisonMessageText, "다중 LLM 모델 비교", generated.WorkerTokenUsage);
         _conversationStore.AppendMessage(
             thread.Id,
             "assistant",
             summaryMessageText,
-            $"공통 정리 · {(string.IsNullOrWhiteSpace(generated.ResolvedSummaryProvider) ? "-" : generated.ResolvedSummaryProvider)}"
+            $"공통 정리 · {(string.IsNullOrWhiteSpace(generated.ResolvedSummaryProvider) ? "-" : generated.ResolvedSummaryProvider)}",
+            generated.SummaryTokenUsage
         );
         await EnsureConversationTitleFromFirstTurnAsync(
             thread.Id,
@@ -2224,7 +2247,7 @@ public sealed partial class CommandService
         );
         var cleaned = SanitizeChatOutput(generated.Text);
         _auditLogger.Log(source, "chat_single", "ok", $"provider={generated.Provider} model={generated.Model}");
-        return new LlmSingleChatResult(generated.Provider, generated.Model, cleaned);
+        return generated with { Text = cleaned };
     }
 
     private async Task<LlmOrchestrationResult> ChatOrchestrationCoreAsync(
@@ -2245,7 +2268,7 @@ public sealed partial class CommandService
         var text = (input ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(text))
         {
-            return new LlmOrchestrationResult("unknown", "empty input");
+            return new LlmOrchestrationResult("unknown", "empty input", TokenUsageEstimator.Estimate(input, "empty input"));
         }
 
         var workerSpecs = new List<(string Provider, string? Model)>();
@@ -2289,7 +2312,8 @@ public sealed partial class CommandService
 
         if (workerSpecs.Count == 0)
         {
-            return new LlmOrchestrationResult("no_provider", "사용 가능한 LLM이 없습니다. Groq/Gemini/Cerebras/NVIDIA 키 또는 Copilot/Codex 인증을 확인하세요.");
+            var noProviderText = "사용 가능한 LLM이 없습니다. Groq/Gemini/Cerebras/NVIDIA 키 또는 Copilot/Codex 인증을 확인하세요.";
+            return new LlmOrchestrationResult("no_provider", noProviderText, TokenUsageEstimator.Estimate(input, noProviderText));
         }
 
         var participatingProviders = workerSpecs
@@ -2316,7 +2340,7 @@ public sealed partial class CommandService
             .Select(x =>
             {
                 var result = x.Task.Result;
-                return new LlmSingleChatResult(result.Provider, result.Model, SanitizeChatOutput(result.Text));
+                return result with { Text = SanitizeChatOutput(result.Text) };
             })
             .ToList();
         var availabilityByProvider = await GetProviderAvailabilityMapAsync(cancellationToken);
@@ -2378,7 +2402,11 @@ public sealed partial class CommandService
         );
         var route = $"orchestration_parallel[{workerRoute}]=>{finalResult.Provider}:{finalResult.Model}";
         _auditLogger.Log(source, "chat_orchestration", "ok", route);
-        return new LlmOrchestrationResult(route, cleanedFinal);
+        return new LlmOrchestrationResult(
+            route,
+            cleanedFinal,
+            TokenUsageEstimator.Combine(workerResults.Select(item => item.TokenUsage).Append(finalResult.TokenUsage))
+        );
     }
 
     private async Task<LlmMultiChatResult> ChatMultiCoreAsync(
@@ -2473,12 +2501,12 @@ public sealed partial class CommandService
         await Task.WhenAll(groqTask, geminiTask, cerebrasTask, nvidiaTask, copilotTask, codexTask);
         var workerResults = new[]
         {
-            new LlmSingleChatResult(groqTask.Result.Provider, groqTask.Result.Model, SanitizeChatOutput(groqTask.Result.Text)),
-            new LlmSingleChatResult(geminiTask.Result.Provider, geminiTask.Result.Model, SanitizeChatOutput(geminiTask.Result.Text)),
-            new LlmSingleChatResult(cerebrasTask.Result.Provider, cerebrasTask.Result.Model, SanitizeChatOutput(cerebrasTask.Result.Text)),
-            new LlmSingleChatResult(nvidiaTask.Result.Provider, nvidiaTask.Result.Model, SanitizeChatOutput(nvidiaTask.Result.Text)),
-            new LlmSingleChatResult(copilotTask.Result.Provider, copilotTask.Result.Model, SanitizeChatOutput(copilotTask.Result.Text)),
-            new LlmSingleChatResult(codexTask.Result.Provider, codexTask.Result.Model, SanitizeChatOutput(codexTask.Result.Text))
+            groqTask.Result with { Text = SanitizeChatOutput(groqTask.Result.Text) },
+            geminiTask.Result with { Text = SanitizeChatOutput(geminiTask.Result.Text) },
+            cerebrasTask.Result with { Text = SanitizeChatOutput(cerebrasTask.Result.Text) },
+            nvidiaTask.Result with { Text = SanitizeChatOutput(nvidiaTask.Result.Text) },
+            copilotTask.Result with { Text = SanitizeChatOutput(copilotTask.Result.Text) },
+            codexTask.Result with { Text = SanitizeChatOutput(codexTask.Result.Text) }
         };
         var availabilityByProvider = await GetProviderAvailabilityMapAsync(cancellationToken);
         var selectionByProvider = BuildProviderSelectionMap(groqModel, geminiModel, cerebrasModel, copilotModel, codexModel, nvidiaModel);
@@ -2540,6 +2568,7 @@ public sealed partial class CommandService
         );
 
         string summary;
+        TokenUsage? summaryTokenUsage = null;
         if (resolvedSummaryProvider == "none")
         {
             summary = "공통 요약을 만들 수 없어 자동 정리를 건너뜁니다.";
@@ -2548,6 +2577,7 @@ public sealed partial class CommandService
         {
             var summaryResult = await GenerateByProviderSafeAsync(resolvedSummaryProvider, null, summaryPrompt, cancellationToken);
             summary = SanitizeChatOutput(summaryResult.Text);
+            summaryTokenUsage = summaryResult.TokenUsage;
         }
         var summarySections = ParseMultiSummarySections(summary);
 
@@ -2569,7 +2599,9 @@ public sealed partial class CommandService
             summarySections.CommonCore,
             summarySections.Differences,
             nvidia,
-            nvidiaResolvedModel
+            nvidiaResolvedModel,
+            TokenUsageEstimator.Combine(workerResults.Select(item => item.TokenUsage)),
+            summaryTokenUsage
         );
     }
 

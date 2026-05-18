@@ -3347,8 +3347,15 @@ import {
     ]);
 
     useEffect(() => {
+      const remoteDashboardClient = isRemoteDashboardHost()
+        || !!authMetaRef.current?.remoteDashboardClient
+        || !!settingsStateRef.current?.remoteDashboardClient;
+      if (!remoteDashboardClient && !authed) {
+        return;
+      }
+
       requestConversations(scope, mode);
-    }, [scope, mode]);
+    }, [scope, mode, authed, authMeta.remoteDashboardClient, settingsState.remoteDashboardClient]);
 
     useEffect(() => {
       currentKeyRef.current = currentKey;
@@ -3595,18 +3602,8 @@ import {
 
       send({ type: "get_settings" });
       if (!remoteDashboardClient) {
-        send({ type: "get_copilot_status" });
-        send({ type: "get_codex_status" });
+        return;
       }
-      send({ type: "get_groq_models" });
-      send({ type: "get_copilot_models" });
-      send({ type: "get_usage_stats" });
-      send({ type: "list_memory_notes" });
-      ["chat", "coding"].forEach((s) => {
-        ["single", "orchestration", "multi"].forEach((m) => {
-          send({ type: "list_conversations", scope: s, mode: m });
-        });
-      });
     }
 
     function scheduleReconnect() {
@@ -3838,6 +3835,7 @@ import {
         previewUrl: "",
         previewEntry: "",
         execution: null,
+        evidence: null,
         updatedAt: Date.now()
       };
     }
@@ -5306,6 +5304,50 @@ import {
       );
     }
 
+    function readPreviewIdFromToolPreview(expectedType) {
+      try {
+        const parsed = JSON.parse(toolResultPreview || "{}");
+        if (expectedType && parsed.type !== expectedType) {
+          return "";
+        }
+        return `${parsed.previewId || ""}`.trim();
+      } catch (_err) {
+        return "";
+      }
+    }
+
+    function submitMemoryIndexRebuild() {
+      sendToolControlRequest({ type: "memory_index_rebuild" }, "memory_index.rebuild");
+    }
+
+    function submitDoctorFixPreview() {
+      sendToolControlRequest({ type: "doctor_fix_preview" }, "doctor.fix.preview");
+    }
+
+    function submitDoctorFixApply() {
+      const previewId = readPreviewIdFromToolPreview("doctor_fix_result");
+      if (!previewId) {
+        setToolControlError("doctor_fix_apply 실행에는 선택된 doctor_fix_result previewId가 필요합니다.");
+        return;
+      }
+
+      sendToolControlRequest({ type: "doctor_fix_apply", previewId }, "doctor.fix.apply");
+    }
+
+    function submitCleanupPreview() {
+      sendToolControlRequest({ type: "cleanup_preview" }, "cleanup.preview");
+    }
+
+    function submitCleanupApply() {
+      const previewId = readPreviewIdFromToolPreview("cleanup_preview_result");
+      if (!previewId) {
+        setToolControlError("cleanup_apply 실행에는 선택된 cleanup_preview_result previewId가 필요합니다.");
+        return;
+      }
+
+      sendToolControlRequest({ type: "cleanup_apply", previewId }, "cleanup.apply");
+    }
+
     function submitGuardAlertDispatch() {
       if (!ensureAuthed()) {
         return;
@@ -5389,6 +5431,8 @@ import {
       handleDashboardServerMessage(msg, {
         state: {
           rootTab,
+          authed,
+          authMeta,
           currentConversationId,
           currentKey,
           isPortraitMobileLayout,
@@ -7982,7 +8026,8 @@ import {
           sendChatMulti,
           createRoutineFromCurrentInput,
           createPlanFromCurrentInput
-        }
+        },
+        tokenUsageTotal: currentConversation?.tokenUsageTotal || null
       });
     }
 
@@ -8078,7 +8123,8 @@ import {
           sendCodingMulti,
           createRoutineFromCurrentInput,
           createPlanFromCurrentInput
-        }
+        },
+        tokenUsageTotal: currentConversation?.tokenUsageTotal || null
       });
     }
 
@@ -8320,6 +8366,11 @@ import {
         toolMemoryGetPath,
         setToolMemoryGetPath,
         submitMemoryGetProbe,
+        submitMemoryIndexRebuild,
+        submitDoctorFixPreview,
+        submitDoctorFixApply,
+        submitCleanupPreview,
+        submitCleanupApply,
         clearToolControlResults,
         toolResultPreview,
         filteredToolResultItems,

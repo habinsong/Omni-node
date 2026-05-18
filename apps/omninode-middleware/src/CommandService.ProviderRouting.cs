@@ -18,6 +18,7 @@ public sealed partial class CommandService
     {
         var normalized = NormalizeProvider(provider, allowAuto: false);
         var requestedMaxOutputTokens = Math.Max(256, maxOutputTokens ?? _config.ChatMaxOutputTokens);
+        _llmRouter.ClearLastResponseTokenUsage();
 
         if (normalized == "gemini")
         {
@@ -26,7 +27,7 @@ public sealed partial class CommandService
             var response = streamCallback == null
                 ? await _llmRouter.GenerateGeminiChatAsync(input, selected, requestedMaxOutputTokens, cancellationToken)
                 : await _llmRouter.GenerateGeminiChatStreamingAsync(input, selected, requestedMaxOutputTokens, streamCallback, cancellationToken);
-            return new LlmSingleChatResult("gemini", selected, response);
+            return CompleteTokenUsage("gemini", selected, input, response);
         }
 
         if (normalized == "cerebras")
@@ -35,7 +36,7 @@ public sealed partial class CommandService
             var response = streamCallback == null
                 ? await _llmRouter.GenerateCerebrasChatAsync(input, selected, requestedMaxOutputTokens, cancellationToken)
                 : await _llmRouter.GenerateCerebrasChatStreamingAsync(input, selected, requestedMaxOutputTokens, streamCallback, cancellationToken);
-            return new LlmSingleChatResult("cerebras", selected, response);
+            return CompleteTokenUsage("cerebras", selected, input, response);
         }
 
         if (normalized == "nvidia")
@@ -44,7 +45,7 @@ public sealed partial class CommandService
             var response = streamCallback == null
                 ? await _llmRouter.GenerateNvidiaChatAsync(input, selected, requestedMaxOutputTokens, cancellationToken)
                 : await _llmRouter.GenerateNvidiaChatStreamingAsync(input, selected, requestedMaxOutputTokens, streamCallback, cancellationToken);
-            return new LlmSingleChatResult("nvidia", selected, response);
+            return CompleteTokenUsage("nvidia", selected, input, response);
         }
 
         if (normalized == "copilot")
@@ -52,11 +53,12 @@ public sealed partial class CommandService
             var selected = NormalizeModelSelection(model) ?? _copilotWrapper.GetSelectedModel();
             if (IsCopilotResponseTestPrompt(input))
             {
-                return new LlmSingleChatResult("copilot", selected, BuildMockCopilotTestResponse(selected));
+                var mock = BuildMockCopilotTestResponse(selected);
+                return CompleteTokenUsage("copilot", selected, input, mock);
             }
 
             var response = await _copilotWrapper.GenerateChatAsync(input, selected, cancellationToken);
-            return new LlmSingleChatResult("copilot", selected, response);
+            return CompleteTokenUsage("copilot", selected, input, response);
         }
 
         if (normalized == "codex")
@@ -70,7 +72,7 @@ public sealed partial class CommandService
                 workingDirectoryOverride: codexWorkingDirectoryOverride,
                 useCodingProfile: optimizeCodexForCoding
             );
-            return new LlmSingleChatResult("codex", selected, response);
+            return CompleteTokenUsage("codex", selected, input, response);
         }
 
         var groqModel = ResolveGroqModelForInput(input, model);
@@ -96,24 +98,34 @@ public sealed partial class CommandService
 
                 if (!IsGroqRateLimitResponse(retryResponse))
                 {
-                    return new LlmSingleChatResult("groq", groqModel, retryResponse);
+                    return CompleteTokenUsage("groq", groqModel, input, retryResponse);
                 }
             }
 
             var fallback = await TryFallbackFromGroqRateLimitAsync(input, cancellationToken);
             if (fallback != null)
             {
-                return fallback;
+                return fallback.TokenUsage == null
+                    ? CompleteTokenUsage(fallback.Provider, fallback.Model, input, fallback.Text)
+                    : fallback;
             }
 
-            return new LlmSingleChatResult(
+            return CompleteTokenUsage(
                 "groq",
                 groqModel,
+                input,
                 "현재 Groq 요청 한도를 초과했습니다. 잠시 후 다시 시도하거나 Gemini/Copilot을 선택하세요."
             );
         }
 
-        return new LlmSingleChatResult("groq", groqModel, groqResponse);
+        return CompleteTokenUsage("groq", groqModel, input, groqResponse);
+    }
+
+    private LlmSingleChatResult CompleteTokenUsage(string provider, string model, string input, string response)
+    {
+        var measured = _llmRouter.ConsumeLastResponseTokenUsage();
+        var usage = measured ?? TokenUsageEstimator.Estimate(input, response, TokenUsageEstimator.SourceEstimated);
+        return new LlmSingleChatResult(provider, model, response, usage);
     }
 
     private string ResolveGeminiSingleModelForLatency(string requestedModel, string input)
@@ -219,7 +231,12 @@ public sealed partial class CommandService
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                lastResult = new LlmSingleChatResult(normalized, effectiveModel, $"{normalized} 응답 시간이 초과되었습니다.");
+                lastResult = new LlmSingleChatResult(
+                    normalized,
+                    effectiveModel,
+                    $"{normalized} 응답 시간이 초과되었습니다.",
+                    TokenUsageEstimator.Estimate(input, $"{normalized} 응답 시간이 초과되었습니다.", TokenUsageEstimator.SourceEstimated)
+                );
                 lastException = null;
                 if (normalized == "gemini" && attempt < maxAttempts)
                 {
@@ -253,10 +270,12 @@ public sealed partial class CommandService
             return lastResult;
         }
 
+        var errorText = $"{normalized} 호출 오류: {lastException?.Message ?? "unknown"}";
         return new LlmSingleChatResult(
             normalized,
             effectiveModel,
-            $"{normalized} 호출 오류: {lastException?.Message ?? "unknown"}"
+            errorText,
+            TokenUsageEstimator.Estimate(input, errorText, TokenUsageEstimator.SourceEstimated)
         );
     }
 
@@ -295,7 +314,7 @@ public sealed partial class CommandService
         var originalInput = (input ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(originalInput))
         {
-            return new LlmSingleChatResult("groq", primaryModel, "empty input");
+            return new LlmSingleChatResult("groq", primaryModel, "empty input", TokenUsageEstimator.Estimate(input, "empty input"));
         }
 
         var effectiveMaxTokens = Math.Max(512, maxOutputTokens);
@@ -323,7 +342,7 @@ public sealed partial class CommandService
             var cleaned = SanitizeChatOutput(generated.Text);
             if (!IsGroqRateLimitResponse(cleaned))
             {
-                return new LlmSingleChatResult("groq", generated.Model, cleaned);
+                return generated with { Provider = "groq", Text = cleaned };
             }
 
             if (models.Length > 1 && i + 1 < models.Length)
@@ -335,11 +354,17 @@ public sealed partial class CommandService
             return new LlmSingleChatResult(
                 "groq",
                 model,
-                "Groq 모델 한도에 도달했습니다. 잠시 후 재시도하세요."
+                "Groq 모델 한도에 도달했습니다. 잠시 후 재시도하세요.",
+                TokenUsageEstimator.Estimate(input, "Groq 모델 한도에 도달했습니다. 잠시 후 재시도하세요.")
             );
         }
 
-        return new LlmSingleChatResult("groq", DefaultGroqFastModel, "Groq 체인 실행 실패");
+        return new LlmSingleChatResult(
+            "groq",
+            DefaultGroqFastModel,
+            "Groq 체인 실행 실패",
+            TokenUsageEstimator.Estimate(input, "Groq 체인 실행 실패")
+        );
     }
 
     private bool IsGroqRateLimitImminent(string model, int expectedOutputTokens)

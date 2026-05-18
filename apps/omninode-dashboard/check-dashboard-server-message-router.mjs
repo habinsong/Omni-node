@@ -120,6 +120,8 @@ function createContext(store, calls) {
   return {
     state: {
       rootTab: store.rootTab,
+      authed: store.authed,
+      authMeta: store.authMeta,
       currentConversationId: store.currentConversationId,
       currentKey: store.currentKey,
       isPortraitMobileLayout: store.isPortraitMobileLayout,
@@ -133,7 +135,8 @@ function createContext(store, calls) {
       filePreviewByConversation: store.filePreviewByConversation,
       codingResultByConversation: store.codingResultByConversation,
       logicDraftGraph: store.logicDraftGraph,
-      logicPathBrowser: store.logicPathBrowser
+      logicPathBrowser: store.logicPathBrowser,
+      settingsState: store.settingsState
     },
     refs: {
       autoCreateConversationRef: { current: {} },
@@ -398,6 +401,24 @@ function run() {
   assert.equal(store.status, "세션 인증됨");
   assert.equal(store.authExpiry, "2026-03-10T12:00:00Z");
   assert.deepEqual(
+    calls.sent,
+    [
+      { type: "get_copilot_status" },
+      { type: "get_codex_status" },
+      { type: "get_groq_models" },
+      { type: "get_copilot_models" },
+      { type: "get_usage_stats" },
+      { type: "list_memory_notes" },
+      { type: "list_conversations", scope: "chat", mode: "single" },
+      { type: "list_conversations", scope: "chat", mode: "orchestration" },
+      { type: "list_conversations", scope: "chat", mode: "multi" },
+      { type: "list_conversations", scope: "coding", mode: "single" },
+      { type: "list_conversations", scope: "coding", mode: "orchestration" },
+      { type: "list_conversations", scope: "coding", mode: "multi" },
+      { type: "get_routines" }
+    ]
+  );
+  assert.deepEqual(
     calls.requests.map((entry) => entry.type),
     [
       "doctor_last",
@@ -412,6 +433,20 @@ function run() {
       "notebook_get"
     ]
   );
+
+  const remoteStore = createStateStore();
+  const remoteCalls = createCallStore();
+  handleDashboardServerMessage({
+    type: "auth_result",
+    ok: true,
+    remoteDashboardClient: true
+  }, createContext(remoteStore, remoteCalls));
+
+  assert.equal(remoteStore.authed, true);
+  assert.equal(remoteStore.status, "외부 접속 제한 모드");
+  assert.equal(remoteCalls.sent.some((entry) => entry.type === "get_copilot_status"), false);
+  assert.equal(remoteCalls.sent.some((entry) => entry.type === "get_codex_status"), false);
+  assert.equal(remoteCalls.sent.some((entry) => entry.type === "list_conversations"), true);
 
   handleDashboardServerMessage({
     type: "telegram_stub_result",
@@ -645,7 +680,7 @@ function run() {
 
   console.log(JSON.stringify({
     ok: true,
-    assertions: 35,
+    assertions: 41,
     delegated: calls.delegated,
     requestTypes: calls.requests.map((entry) => entry.type),
     toolResultType: store.toolResultItems[0].type,

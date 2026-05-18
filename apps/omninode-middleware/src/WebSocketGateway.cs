@@ -2970,6 +2970,7 @@ public sealed partial class WebSocketGateway
             + $"\"execution\":{BuildExecutionJson(result.Execution)},"
             + $"\"workers\":{BuildCodingWorkersJson(result.Workers)},"
             + $"\"changedFiles\":{BuildStringArrayJson(result.ChangedFiles)},"
+            + $"\"evidence\":{BuildCodingEvidenceJson(result.Evidence)},"
             + $"\"conversation\":{BuildConversationJson(result.Conversation)},"
             + $"\"autoMemoryNote\":{BuildMemoryNoteJson(result.AutoMemoryNote)},"
             + $"\"citations\":{BuildSearchCitationArrayJson(result.Citations)},"
