@@ -139,6 +139,7 @@ const cerebrasErrorPolicy = read("apps/omninode-middleware/src/CerebrasErrorPoli
 const providerResponseParser = read("apps/omninode-middleware/src/ProviderResponseParser.cs");
 const groqRateLimitHeaderParser = read("apps/omninode-middleware/src/GroqRateLimitHeaderParser.cs");
 const openAiCompatibleProtocol = read("apps/omninode-middleware/src/OpenAiCompatibleProtocol.cs");
+const geminiCitationParser = read("apps/omninode-middleware/src/GeminiCitationParser.cs");
 const atomicFileStore = read("apps/omninode-middleware/src/AtomicFileStore.cs");
 const conversationStore = read("apps/omninode-middleware/src/ConversationStore.cs");
 const sessionManager = read("apps/omninode-middleware/src/SessionManager.cs");
@@ -230,6 +231,16 @@ assertNotIncludes(llmRouterSource, "private static string BuildOpenAiCompatibleC
 assertNotIncludes(llmRouterSource, "private static string BuildOpenAiCompatibleFailureMessage(", "llm router no longer owns openai-compatible failure message builder");
 assertNotIncludes(llmRouterSource, "private static string ProviderDisplayName(", "llm router no longer owns provider display name");
 assertNotIncludes(llmRouterSource, "private static OpenAiCompatibleStreamChunk ExtractOpenAiStreamChunk(", "llm router no longer owns openai-compatible sse extractor");
+assertIncludes(geminiCitationParser, "ExtractUrlContextCitations", "gemini citation parser owns url-context citation extraction");
+assertIncludes(geminiCitationParser, "ExtractGroundingCitations", "gemini citation parser owns grounding citation extraction");
+assertIncludes(geminiCitationParser, "BuildDedupKey", "gemini citation parser owns citation dedup key builder");
+assertIncludes(llmRouterSource, "GeminiCitationParser.ExtractUrlContextCitations", "llm router uses gemini citation parser for url-context");
+assertIncludes(llmRouterSource, "GeminiCitationParser.ExtractGroundingCitations", "llm router uses gemini citation parser for grounding");
+assertIncludes(llmRouterSource, "GeminiCitationParser.BuildDedupKey", "llm router uses gemini citation parser for dedup key");
+assertNotIncludes(llmRouterSource, "private static SearchCitationReference[] ExtractGeminiUrlContextCitations(", "llm router no longer owns gemini url-context citation extractor");
+assertNotIncludes(llmRouterSource, "private static SearchCitationReference[] ExtractGeminiGroundingCitations(", "llm router no longer owns gemini grounding citation extractor");
+assertNotIncludes(llmRouterSource, "private static string BuildCitationDedupKey(", "llm router no longer owns citation dedup key builder");
+assertNotIncludes(llmRouterSource, "private static bool TryGetPropertyIgnoreCase(", "llm router no longer owns case-insensitive json property reader");
 assertIncludes(codingExecution, "if (!IsDynamicCodeExecutionEnabled())", "workspace shell execution checks dynamic code flag");
 assertIncludes(codingExecution, "new ShellRunResult(126", "workspace shell execution returns blocked result");
 assertIncludes(codingExecution, "if (_execution.EnableAutoInstall)", "auto install pipeline checks explicit flag");

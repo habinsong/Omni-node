@@ -1296,8 +1296,8 @@ public sealed class LlmRouter : IDisposable
                 }
 
                 CaptureGeminiUsage(responseBody);
-                MergeCitations(ExtractGeminiUrlContextCitations(responseBody));
-                MergeCitations(ExtractGeminiGroundingCitations(responseBody));
+                MergeCitations(GeminiCitationParser.ExtractUrlContextCitations(responseBody));
+                MergeCitations(GeminiCitationParser.ExtractGroundingCitations(responseBody));
                 var chunk = ExtractGeminiChatChunk(responseBody);
                 var chunkText = chunk.Content.Trim();
                 if (!string.IsNullOrWhiteSpace(chunkText))
@@ -1330,7 +1330,7 @@ public sealed class LlmRouter : IDisposable
             {
                 foreach (var citation in citations)
                 {
-                    var key = BuildCitationDedupKey(citation);
+                    var key = GeminiCitationParser.BuildDedupKey(citation);
                     if (key.Length == 0)
                     {
                         continue;
@@ -1494,14 +1494,14 @@ public sealed class LlmRouter : IDisposable
                     usagePayload = trimmedPayload;
                 }
 
-                foreach (var citation in ExtractGeminiUrlContextCitations(trimmedPayload))
+                foreach (var citation in GeminiCitationParser.ExtractUrlContextCitations(trimmedPayload))
                 {
-                    citationByUrl[BuildCitationDedupKey(citation)] = citation;
+                    citationByUrl[GeminiCitationParser.BuildDedupKey(citation)] = citation;
                 }
 
-                foreach (var citation in ExtractGeminiGroundingCitations(trimmedPayload))
+                foreach (var citation in GeminiCitationParser.ExtractGroundingCitations(trimmedPayload))
                 {
-                    citationByUrl[BuildCitationDedupKey(citation)] = citation;
+                    citationByUrl[GeminiCitationParser.BuildDedupKey(citation)] = citation;
                 }
 
                 var chunk = ExtractGeminiChatChunk(trimmedPayload);
@@ -2705,199 +2705,6 @@ public sealed class LlmRouter : IDisposable
 
     private static ProviderChatChunk ExtractGeminiChatChunk(string json)
         => ProviderResponseParser.ExtractGeminiChunk(json);
-
-    private static SearchCitationReference[] ExtractGeminiUrlContextCitations(string json)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            if (!TryGetPropertyIgnoreCase(doc.RootElement, "candidates", out var candidates)
-                || candidates.ValueKind != JsonValueKind.Array
-                || candidates.GetArrayLength() == 0)
-            {
-                return Array.Empty<SearchCitationReference>();
-            }
-
-            var first = candidates[0];
-            if (!TryGetPropertyIgnoreCase(first, "urlContextMetadata", out var metadata)
-                || metadata.ValueKind != JsonValueKind.Object)
-            {
-                return Array.Empty<SearchCitationReference>();
-            }
-
-            if (!TryGetPropertyIgnoreCase(metadata, "urlMetadata", out var urlMetadata)
-                || urlMetadata.ValueKind != JsonValueKind.Array)
-            {
-                return Array.Empty<SearchCitationReference>();
-            }
-
-            var citations = new List<SearchCitationReference>();
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in urlMetadata.EnumerateArray())
-            {
-                if (item.ValueKind != JsonValueKind.Object)
-                {
-                    continue;
-                }
-
-                var url = GetJsonString(item, "retrievedUrl", "retrieved_url");
-                if (string.IsNullOrWhiteSpace(url) || !seen.Add(url))
-                {
-                    continue;
-                }
-
-                var status = GetJsonString(item, "urlRetrievalStatus", "url_retrieval_status");
-                var citationId = $"urlctx-{citations.Count + 1}";
-                citations.Add(new SearchCitationReference(
-                    citationId,
-                    BuildUrlContextCitationTitle(url),
-                    url,
-                    string.Empty,
-                    string.IsNullOrWhiteSpace(status) ? "URL_CONTEXT" : status,
-                    "url_context"
-                ));
-            }
-
-            return citations.ToArray();
-        }
-        catch
-        {
-            return Array.Empty<SearchCitationReference>();
-        }
-    }
-
-    private static SearchCitationReference[] ExtractGeminiGroundingCitations(string json)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            if (!TryGetPropertyIgnoreCase(doc.RootElement, "candidates", out var candidates)
-                || candidates.ValueKind != JsonValueKind.Array
-                || candidates.GetArrayLength() == 0)
-            {
-                return Array.Empty<SearchCitationReference>();
-            }
-
-            var first = candidates[0];
-            if (!TryGetPropertyIgnoreCase(first, "groundingMetadata", out var metadata)
-                || metadata.ValueKind != JsonValueKind.Object)
-            {
-                return Array.Empty<SearchCitationReference>();
-            }
-
-            if (!TryGetPropertyIgnoreCase(metadata, "groundingChunks", out var groundingChunks)
-                || groundingChunks.ValueKind != JsonValueKind.Array)
-            {
-                return Array.Empty<SearchCitationReference>();
-            }
-
-            var citations = new List<SearchCitationReference>();
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in groundingChunks.EnumerateArray())
-            {
-                if (item.ValueKind != JsonValueKind.Object)
-                {
-                    continue;
-                }
-
-                if (!TryGetPropertyIgnoreCase(item, "web", out var webChunk)
-                    || webChunk.ValueKind != JsonValueKind.Object)
-                {
-                    continue;
-                }
-
-                var url = GetJsonString(webChunk, "uri");
-                if (string.IsNullOrWhiteSpace(url) || !seen.Add(url))
-                {
-                    continue;
-                }
-
-                var title = GetJsonString(webChunk, "title");
-                var citationId = $"gsearch-{citations.Count + 1}";
-                citations.Add(new SearchCitationReference(
-                    citationId,
-                    string.IsNullOrWhiteSpace(title) ? BuildUrlContextCitationTitle(url) : title,
-                    url,
-                    string.Empty,
-                    "GOOGLE_SEARCH",
-                    "google_search"
-                ));
-            }
-
-            return citations.ToArray();
-        }
-        catch
-        {
-            return Array.Empty<SearchCitationReference>();
-        }
-    }
-
-    private static string BuildUrlContextCitationTitle(string url)
-    {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
-        {
-            return url;
-        }
-
-        var host = uri.Host?.Trim() ?? string.Empty;
-        if (host.StartsWith("www.", StringComparison.OrdinalIgnoreCase))
-        {
-            host = host[4..];
-        }
-
-        return string.IsNullOrWhiteSpace(host) ? url : host;
-    }
-
-    private static string GetJsonString(JsonElement element, params string[] names)
-    {
-        foreach (var name in names)
-        {
-            if (TryGetPropertyIgnoreCase(element, name, out var property)
-                && property.ValueKind == JsonValueKind.String)
-            {
-                return property.GetString() ?? string.Empty;
-            }
-        }
-
-        return string.Empty;
-    }
-
-    private static string BuildCitationDedupKey(SearchCitationReference citation)
-    {
-        var url = (citation.Url ?? string.Empty).Trim();
-        if (url.Length > 0)
-        {
-            return url;
-        }
-
-        var title = (citation.Title ?? string.Empty).Trim();
-        return title;
-    }
-
-    private static bool TryGetPropertyIgnoreCase(JsonElement element, string propertyName, out JsonElement value)
-    {
-        value = default;
-        if (element.ValueKind != JsonValueKind.Object)
-        {
-            return false;
-        }
-
-        if (element.TryGetProperty(propertyName, out value))
-        {
-            return true;
-        }
-
-        foreach (var property in element.EnumerateObject())
-        {
-            if (property.NameEquals(propertyName) || property.Name.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
-            {
-                value = property.Value;
-                return true;
-            }
-        }
-
-        return false;
-    }
 
     private static void AppendGeneratedChunk(StringBuilder builder, string chunk)
     {
