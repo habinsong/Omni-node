@@ -5,111 +5,44 @@ namespace OmniNode.Middleware;
 public sealed partial class CommandService
 {
     public TaskGraphActionResult CreateTaskGraph(string planId)
-    {
-        return _taskGraphService.CreateGraphFromPlan(planId);
-    }
+        => _taskGraphAppService.CreateTaskGraph(planId);
 
     public TaskGraphActionResult UpdateTaskGraph(string graphId, string? rawJson)
-    {
-        return _taskGraphService.UpdateGraphFromJson(graphId, rawJson);
-    }
+        => _taskGraphAppService.UpdateTaskGraph(graphId, rawJson);
 
     public TaskGraphListResult ListTaskGraphs()
-    {
-        return _taskGraphService.ListGraphs();
-    }
+        => _taskGraphAppService.ListTaskGraphs();
 
     public TaskGraphSnapshot? GetTaskGraph(string graphId)
-    {
-        return _taskGraphService.GetGraph(graphId);
-    }
+        => _taskGraphAppService.GetTaskGraph(graphId);
 
-    public async Task<TaskGraphActionResult> RunTaskGraphAsync(
+    public Task<TaskGraphActionResult> RunTaskGraphAsync(
         string graphId,
         string source,
         TaskGraphEventSink? eventSink,
         CancellationToken cancellationToken
-    )
-    {
-        var snapshot = _taskGraphService.GetGraph(graphId);
-        if (snapshot == null)
-        {
-            return new TaskGraphActionResult(false, "Task graph를 찾을 수 없습니다.", null);
-        }
-
-        var sourcePlan = _planService.GetPlan(snapshot.Graph.SourcePlanId);
-        if (sourcePlan != null
-            && sourcePlan.Plan.Status != PlanStatus.Approved
-            && sourcePlan.Plan.Status != PlanStatus.Completed
-            && sourcePlan.Plan.Status != PlanStatus.Running)
-        {
-            return new TaskGraphActionResult(
-                false,
-                "Task graph 실행 전 원본 계획 승인 단계가 필요합니다.",
-                snapshot
-            );
-        }
-
-        return await _taskGraphCoordinator.RunGraphAsync(
-            snapshot.Graph.GraphId,
-            source,
-            eventSink,
-            cancellationToken
-        );
-    }
+    ) => _taskGraphAppService.RunTaskGraphAsync(graphId, source, eventSink, cancellationToken);
 
     public TaskGraphActionResult CancelTask(string graphId, string taskId)
-    {
-        return _taskGraphCoordinator.CancelTask(graphId, taskId);
-    }
+        => _taskGraphAppService.CancelTask(graphId, taskId);
 
-    public async Task<TaskGraphActionResult> RetryTaskAsync(
+    public Task<TaskGraphActionResult> RetryTaskAsync(
         string graphId,
         string taskId,
         string source,
         TaskGraphEventSink? eventSink,
         CancellationToken cancellationToken
-    )
-    {
-        var retry = _taskGraphService.RetryTask(graphId, taskId);
-        if (!retry.Ok)
-        {
-            return retry;
-        }
+    ) => _taskGraphAppService.RetryTaskAsync(graphId, taskId, source, eventSink, cancellationToken);
 
-        return await _taskGraphCoordinator.ResumeGraphAsync(
-            retry.Snapshot?.Graph.GraphId ?? graphId,
-            source,
-            eventSink,
-            cancellationToken
-        );
-    }
-
-    public async Task<TaskGraphActionResult> ResumeTaskGraphAsync(
+    public Task<TaskGraphActionResult> ResumeTaskGraphAsync(
         string graphId,
         string source,
         TaskGraphEventSink? eventSink,
         CancellationToken cancellationToken
-    )
-    {
-        var snapshot = _taskGraphService.GetGraph(graphId);
-        if (snapshot == null)
-        {
-            return new TaskGraphActionResult(false, "Task graph를 찾을 수 없습니다.", null);
-        }
-
-        return await _taskGraphCoordinator.ResumeGraphAsync(
-            snapshot.Graph.GraphId,
-            source,
-            eventSink,
-            cancellationToken
-        );
-    }
+    ) => _taskGraphAppService.ResumeTaskGraphAsync(graphId, source, eventSink, cancellationToken);
 
     public TaskOutputResult? GetTaskOutput(string graphId, string taskId)
-    {
-        return _taskGraphService.GetTaskOutput(graphId, taskId);
-    }
+        => _taskGraphAppService.GetTaskOutput(graphId, taskId);
 
     private async Task<string> ExecuteTaskSlashCommandAsync(
         IReadOnlyList<string> tokens,
