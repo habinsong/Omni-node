@@ -5,56 +5,22 @@ namespace OmniNode.Middleware;
 public sealed partial class CommandService
 {
     public Task<NotebookActionResult> GetNotebookAsync(string? projectKey, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(new NotebookActionResult(
-            true,
-            "노트북을 불러왔습니다.",
-            _notebookService.GetNotebook(projectKey)
-        ));
-    }
+        => _notebookAppService.GetNotebookAsync(projectKey, cancellationToken);
 
-    public Task<NotebookActionResult> AppendLearningAsync(
-        string? projectKey,
-        string content,
-        CancellationToken cancellationToken
-    )
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(_notebookService.AppendEntry(projectKey, "learning", content));
-    }
+    public Task<NotebookActionResult> AppendLearningAsync(string? projectKey, string content, CancellationToken cancellationToken)
+        => _notebookAppService.AppendLearningAsync(projectKey, content, cancellationToken);
 
-    public Task<NotebookActionResult> AppendDecisionAsync(
-        string? projectKey,
-        string content,
-        CancellationToken cancellationToken
-    )
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(_notebookService.AppendEntry(projectKey, "decision", content));
-    }
+    public Task<NotebookActionResult> AppendDecisionAsync(string? projectKey, string content, CancellationToken cancellationToken)
+        => _notebookAppService.AppendDecisionAsync(projectKey, content, cancellationToken);
 
-    public Task<NotebookActionResult> AppendVerificationAsync(
-        string? projectKey,
-        string content,
-        CancellationToken cancellationToken
-    )
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(_notebookService.AppendEntry(projectKey, "verification", content));
-    }
+    public Task<NotebookActionResult> AppendVerificationAsync(string? projectKey, string content, CancellationToken cancellationToken)
+        => _notebookAppService.AppendVerificationAsync(projectKey, content, cancellationToken);
 
     public Task<NotebookActionResult> CreateHandoffAsync(string? projectKey, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(_notebookService.CreateHandoff(projectKey));
-    }
+        => _notebookAppService.CreateHandoffAsync(projectKey, cancellationToken);
 
     public Task<string> BuildNotebookContextBlockAsync(string? projectKey, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(_notebookService.BuildContextBlock(projectKey));
-    }
+        => _notebookAppService.BuildNotebookContextBlockAsync(projectKey, cancellationToken);
 
     private async Task<string> ExecuteNotebookSlashCommandAsync(
         IReadOnlyList<string> tokens,

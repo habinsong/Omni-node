@@ -171,6 +171,7 @@ internal static class Program
         }
         var auditLogger = new AuditLogger(config.AuditLogPath);
         var doctorApplicationService = new DoctorApplicationService(doctorService, config);
+        var notebookApplicationService = new NotebookApplicationService(notebookService);
         var commandService = new CommandService(
             config,
             llmRouter,
@@ -215,7 +216,8 @@ internal static class Program
             diffPreviewService,
             lspRefactorService,
             astGrepRefactorService,
-            doctorApplicationService
+            doctorApplicationService,
+            notebookApplicationService
         );
         var commandExecutionService = new CommandExecutionService(commandService);
         var settingsApplicationService = new SettingsApplicationService(commandService);
@@ -230,7 +232,6 @@ internal static class Program
         var taskGraphApplicationService = new TaskGraphApplicationService(commandService);
         var refactorApplicationService = new RefactorApplicationService(commandService);
         var contextApplicationService = new ContextApplicationService(commandService);
-        var notebookApplicationService = new NotebookApplicationService(commandService);
         var chatApplicationService = new ChatApplicationService(commandService);
         var codingApplicationService = new CodingApplicationService(commandService);
         taskGraphCoordinator.ConfigureExecutors(codingApplicationService, commandExecutionService);
