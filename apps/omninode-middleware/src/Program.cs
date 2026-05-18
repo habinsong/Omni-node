@@ -212,6 +212,13 @@ internal static class Program
             taskGraphService,
             taskGraphCoordinator
         );
+        var conversationApplicationService = new ConversationApplicationService(
+            conversationStoreService,
+            memoryNoteStoreService,
+            auditLogger,
+            config,
+            memorySearchTool
+        );
         var commandService = new CommandService(
             config,
             llmRouter,
@@ -264,11 +271,12 @@ internal static class Program
             cleanupService,
             taskGraphApplicationService,
             memoryApplicationService,
-            planApplicationService
+            planApplicationService,
+            conversationApplicationService
         );
         memoryApplicationService.ConfigureCreateMemoryNoteDelegate(commandService.CreateMemoryNoteAsync);
+        conversationApplicationService.ConfigureClearActiveSkillDelegate(commandService.ClearActiveSkillForConversation);
         var commandExecutionService = new CommandExecutionService(commandService);
-        var conversationApplicationService = new ConversationApplicationService(commandService);
         var toolApplicationService = new ToolApplicationService(commandService);
         var routineApplicationService = new RoutineApplicationService(commandService);
         var logicGraphRuntimeCoordinator = new LogicGraphRuntimeCoordinator(pathResolver);
