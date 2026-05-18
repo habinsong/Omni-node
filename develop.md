@@ -60,8 +60,8 @@ git diff --check
 최근 확인 결과:
 
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 63 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 135
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 77 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 150
 - `npm test`: 통과
 - `make -C apps/omninode-core -B`: 통과
 - `git diff --check`: 통과
@@ -441,13 +441,23 @@ git diff --check
   - `LlmRouter`는 더 이상 이 helper의 원본을 들고 있지 않으며, Groq 호출 경로 전체가 `GroqPromptPolicy.*` 단일 진입점을 통과한다.
 - `apps/omninode-middleware-tests/GroqPromptPolicyTests.cs`
   - compound 모델 cap, prompt 축약 마커, multi-turn split 동작, max_tokens 에러 추출, request_too_large 식별, retry-after 헤더 처리를 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/GeminiRequestPolicy.cs`
+  - Gemini grounded body, URL-context body, streaming delta dedupe를 single static policy로 분리했다.
+  - `LlmRouter`는 `GeminiRequestPolicy.BuildGroundedBody/BuildUrlContextBody/NormalizeStreamDelta`만 호출한다.
+- `apps/omninode-middleware-tests/GeminiRequestPolicyTests.cs`
+  - grounded/url-context body의 tool 구성, generationConfig, prompt escaping, stream delta dedupe 분기를 JSON 파싱 기반 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/CerebrasErrorPolicy.cs`
+  - Cerebras `model_not_found` 식별과 429/503 메시지 분기(zai-glm-4.7, qwen-3-preview 분기 포함)를 분리했다.
+- `apps/omninode-middleware-tests/CerebrasErrorPolicyTests.cs`
+  - 명시적 code 필드, substring 폴백, preview 모델 429/503 안내, 기본 statusCode 메시지 동작을 단위 테스트로 고정했다.
 - `scripts/check-security-boundaries.mjs`
-  - 두 policy 클래스가 실제로 책임을 들고 있는지, `LlmRouter`가 정책 객체만 호출하도록 정리되었는지 계약 검사를 추가했다.
+  - 네 policy 클래스가 책임을 들고 있고, `LlmRouter`가 정책 객체만 호출하도록 정리되었는지 계약 검사를 추가했다 (assertions 117 → 150).
 
 남은 범위:
 
 - Groq/Gemini/Cerebras/NVIDIA/STT 별 HTTP 호출 어댑터를 인터페이스화한다.
-- usage tracking과 응답 normalization을 별도 정책 객체로 분리한다.
+- usage tracking과 응답 normalization(Groq/Gemini/OpenAI-compat token usage 캡처 메서드)을 별도 정책 객체로 분리한다.
+- Cerebras 모델 resolver(`ResolveAvailableCerebrasModelAsync`)의 cache 동작은 LlmRouter 인스턴스 상태에 묶여 있어 어댑터화 시 별도 설계가 필요하다.
 
 ### P5. 상태 저장소 복구 정책 확대
 

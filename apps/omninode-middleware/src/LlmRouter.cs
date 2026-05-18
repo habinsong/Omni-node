@@ -974,7 +974,7 @@ public sealed class LlmRouter : IDisposable
                 }
 
                 var chunk = ExtractGeminiChatChunk(trimmedPayload);
-                var delta = NormalizeGeminiStreamDelta(chunk.Content, mergedBuilder.ToString());
+                var delta = GeminiRequestPolicy.NormalizeStreamDelta(chunk.Content, mergedBuilder.ToString());
                 if (delta.Length == 0)
                 {
                     return;
@@ -1016,7 +1016,7 @@ public sealed class LlmRouter : IDisposable
         var endpoint = $"{_providers.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:generateContent";
         var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, Math.Min(_context.ChatMaxOutputTokens, 4096));
         var effectiveTimeoutMs = ProviderTimeoutPolicy.NormalizeGeminiGroundedTimeoutMs(timeoutMs);
-        var body = BuildGeminiGroundedBody(prompt, effectiveMaxOutputTokens);
+        var body = GeminiRequestPolicy.BuildGroundedBody(prompt, effectiveMaxOutputTokens);
 
         try
         {
@@ -1072,7 +1072,7 @@ public sealed class LlmRouter : IDisposable
         var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, Math.Min(_context.ChatMaxOutputTokens, 4096));
         var effectiveTimeoutMs = ProviderTimeoutPolicy.NormalizeGeminiGroundedTimeoutMs(timeoutMs);
         var effectiveFirstChunkTimeoutMs = ProviderTimeoutPolicy.NormalizeGeminiGroundedFirstChunkTimeoutMs(effectiveTimeoutMs);
-        var body = BuildGeminiGroundedBody(prompt, effectiveMaxOutputTokens);
+        var body = GeminiRequestPolicy.BuildGroundedBody(prompt, effectiveMaxOutputTokens);
         var stopwatch = Stopwatch.StartNew();
         var firstChunkMs = 0L;
         var streamedTextStarted = false;
@@ -1174,7 +1174,7 @@ public sealed class LlmRouter : IDisposable
                 }
 
                 var chunk = ExtractGeminiChatChunk(trimmedPayload);
-                var delta = NormalizeGeminiStreamDelta(chunk.Content, mergedBuilder.ToString());
+                var delta = GeminiRequestPolicy.NormalizeStreamDelta(chunk.Content, mergedBuilder.ToString());
                 if (delta.Length == 0)
                 {
                     return;
@@ -1275,7 +1275,7 @@ public sealed class LlmRouter : IDisposable
         {
             for (var turn = 0; turn < ChatContinuationRounds; turn++)
             {
-                var body = BuildGeminiUrlContextBody(promptForTurn, effectiveMaxOutputTokens, includeGoogleSearch);
+                var body = GeminiRequestPolicy.BuildUrlContextBody(promptForTurn, effectiveMaxOutputTokens, includeGoogleSearch);
                 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(effectiveTimeoutMs));
                 using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
@@ -1390,7 +1390,7 @@ public sealed class LlmRouter : IDisposable
         var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, Math.Min(_context.ChatMaxOutputTokens, 2048));
         var effectiveTimeoutMs = ProviderTimeoutPolicy.NormalizeGeminiGroundedTimeoutMs(timeoutMs);
         var effectiveFirstChunkTimeoutMs = ProviderTimeoutPolicy.NormalizeGeminiUrlContextFirstChunkTimeoutMs(effectiveTimeoutMs);
-        var body = BuildGeminiUrlContextBody(prompt, effectiveMaxOutputTokens, includeGoogleSearch);
+        var body = GeminiRequestPolicy.BuildUrlContextBody(prompt, effectiveMaxOutputTokens, includeGoogleSearch);
         var stopwatch = Stopwatch.StartNew();
         var firstChunkMs = 0L;
         var streamedTextStarted = false;
@@ -1505,7 +1505,7 @@ public sealed class LlmRouter : IDisposable
                 }
 
                 var chunk = ExtractGeminiChatChunk(trimmedPayload);
-                var delta = NormalizeGeminiStreamDelta(chunk.Content, mergedBuilder.ToString());
+                var delta = GeminiRequestPolicy.NormalizeStreamDelta(chunk.Content, mergedBuilder.ToString());
                 if (delta.Length == 0)
                 {
                     return;
@@ -1652,70 +1652,6 @@ public sealed class LlmRouter : IDisposable
         }
     }
 
-    private static string BuildGeminiGroundedBody(string prompt, int maxOutputTokens)
-    {
-        return "{"
-            + "\"contents\":[{"
-            + "\"role\":\"user\","
-            + "\"parts\":["
-            + $"{{\"text\":\"{EscapeJson(prompt)}\"}}"
-            + "]"
-            + "}],"
-            + "\"tools\":[{\"google_search\":{}}],"
-            + "\"generationConfig\":{"
-            + "\"temperature\":0.1,"
-            + $"\"maxOutputTokens\":{maxOutputTokens}"
-            + "}"
-            + "}";
-    }
-
-    private static string BuildGeminiUrlContextBody(string prompt, int maxOutputTokens, bool includeGoogleSearch)
-    {
-        var tools = includeGoogleSearch
-            ? "[{\"url_context\":{}},{\"google_search\":{}}]"
-            : "[{\"url_context\":{}}]";
-        return "{"
-            + "\"contents\":[{"
-            + "\"role\":\"user\","
-            + "\"parts\":["
-            + $"{{\"text\":\"{EscapeJson(prompt)}\"}}"
-            + "]"
-            + "}],"
-            + $"\"tools\":{tools},"
-            + "\"generationConfig\":{"
-            + "\"temperature\":0.1,"
-            + $"\"maxOutputTokens\":{maxOutputTokens}"
-            + "}"
-            + "}";
-    }
-
-    private static string NormalizeGeminiStreamDelta(string chunkText, string currentText)
-    {
-        var nextChunk = chunkText ?? string.Empty;
-        if (nextChunk.Length == 0)
-        {
-            return string.Empty;
-        }
-
-        var merged = currentText ?? string.Empty;
-        if (merged.Length == 0)
-        {
-            return nextChunk;
-        }
-
-        if (nextChunk.StartsWith(merged, StringComparison.Ordinal))
-        {
-            return nextChunk[merged.Length..];
-        }
-
-        if (merged.EndsWith(nextChunk, StringComparison.Ordinal))
-        {
-            return string.Empty;
-        }
-
-        return nextChunk;
-    }
-
     public async Task<string> GenerateCerebrasChatAsync(
         string userInput,
         string? modelOverride,
@@ -1766,7 +1702,7 @@ public sealed class LlmRouter : IDisposable
                 {
                     if (!fallbackRetried
                         && response.StatusCode == System.Net.HttpStatusCode.NotFound
-                        && IsCerebrasModelNotFound(responseBody))
+                        && CerebrasErrorPolicy.IsModelNotFound(responseBody))
                     {
                         // catalog API로 사용자 키가 access 가능한 실제 모델 fetching → 첫 모델로 retry.
                         var resolved = await ResolveAvailableCerebrasModelAsync(cerebrasApiKey, cancellationToken);
@@ -1787,7 +1723,7 @@ public sealed class LlmRouter : IDisposable
                     }
 
                     Console.Error.WriteLine($"[cerebras] chat failed ({(int)response.StatusCode}): {responseBody}");
-                    return BuildCerebrasHttpFailureText(response.StatusCode, effectiveModel);
+                    return CerebrasErrorPolicy.BuildHttpFailureText(response.StatusCode, effectiveModel);
                 }
 
                 CaptureOpenAiCompatibleTokenUsage(responseBody);
@@ -2068,59 +2004,6 @@ public sealed class LlmRouter : IDisposable
             Console.Error.WriteLine($"[cerebras] catalog fetch error: {ex.Message}");
             return null;
         }
-    }
-
-    private static bool IsCerebrasModelNotFound(string responseBody)
-    {
-        if (string.IsNullOrWhiteSpace(responseBody))
-        {
-            return false;
-        }
-
-        try
-        {
-            using var doc = JsonDocument.Parse(responseBody);
-            if (TryGetPropertyCaseInsensitive(doc.RootElement, "code", out var codeElement)
-                && codeElement.ValueKind == JsonValueKind.String
-                && codeElement.GetString()?.Trim().Equals("model_not_found", StringComparison.OrdinalIgnoreCase) == true)
-            {
-                return true;
-            }
-        }
-        catch
-        {
-        }
-
-        return responseBody.IndexOf("model_not_found", StringComparison.OrdinalIgnoreCase) >= 0
-               || responseBody.IndexOf("does not exist or you do not have access", StringComparison.OrdinalIgnoreCase) >= 0;
-    }
-
-    private static string BuildCerebrasHttpFailureText(System.Net.HttpStatusCode statusCode, string model)
-    {
-        var normalizedModel = (model ?? string.Empty).Trim();
-        if (statusCode == System.Net.HttpStatusCode.TooManyRequests)
-        {
-            if (string.Equals(normalizedModel, "zai-glm-4.7", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(normalizedModel, "qwen-3-235b-a22b-instruct-2507", StringComparison.OrdinalIgnoreCase))
-            {
-                return $"Cerebras 요청 실패: 429 (rate limit). 현재 {normalizedModel} (preview)는 수요가 높아 free-tier rate limit이 일시적으로 줄어든 상태입니다. 오늘 처음 써도 걸릴 수 있으니 잠시 후 다시 시도하거나 `gpt-oss-120b`로 바꿔 보세요.";
-            }
-
-            return "Cerebras 요청 실패: 429 (rate limit). 짧은 시간에 허용된 요청 수를 넘었거나 현재 free-tier 제한에 걸린 상태입니다. 잠시 후 다시 시도해 주세요.";
-        }
-
-        if (statusCode == System.Net.HttpStatusCode.ServiceUnavailable)
-        {
-            if (string.Equals(normalizedModel, "zai-glm-4.7", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(normalizedModel, "qwen-3-235b-a22b-instruct-2507", StringComparison.OrdinalIgnoreCase))
-            {
-                return $"Cerebras 요청 실패: 503 (service unavailable). 현재 {normalizedModel} (preview) 쪽 서버가 일시적으로 과부하이거나 불안정한 상태일 수 있습니다. 잠시 후 다시 시도하거나 `gpt-oss-120b`로 바꿔 보세요.";
-            }
-
-            return "Cerebras 요청 실패: 503 (service unavailable). Cerebras 서버가 일시적으로 과부하이거나 불안정한 상태입니다. 잠시 후 다시 시도해 주세요.";
-        }
-
-        return $"Cerebras 요청 실패: {(int)statusCode}";
     }
 
     private static bool TryGetPropertyCaseInsensitive(JsonElement element, string propertyName, out JsonElement value)
