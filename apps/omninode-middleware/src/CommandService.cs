@@ -148,6 +148,7 @@ public sealed partial class CommandService :
     private readonly IDoctorApplicationService _doctorAppService;
     private readonly INotebookApplicationService _notebookAppService;
     private readonly ISettingsApplicationService _settingsAppService;
+    private readonly IRefactorApplicationService _refactorAppService;
     private readonly ConcurrentDictionary<string, CleanupPreviewResult> _cleanupPreviews = new(StringComparer.Ordinal);
     private readonly AsyncLocal<TelegramExecutionMetadata?> _telegramExecutionMetadata = new();
     private readonly AsyncLocal<TelegramTurnContext?> _telegramTurnContext = new();
@@ -213,7 +214,8 @@ public sealed partial class CommandService :
         AstGrepRefactorService astGrepRefactorService,
         IDoctorApplicationService doctorAppService,
         INotebookApplicationService notebookAppService,
-        ISettingsApplicationService settingsAppService
+        ISettingsApplicationService settingsAppService,
+        IRefactorApplicationService refactorAppService
     )
     {
         _config = config;
@@ -262,6 +264,7 @@ public sealed partial class CommandService :
         _doctorAppService = doctorAppService;
         _notebookAppService = notebookAppService;
         _settingsAppService = settingsAppService;
+        _refactorAppService = refactorAppService;
         _killAllowlist = (_config.KillAllowlistCsv ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(x => !string.IsNullOrWhiteSpace(x))

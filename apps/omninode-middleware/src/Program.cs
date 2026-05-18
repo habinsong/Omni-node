@@ -182,6 +182,15 @@ internal static class Program
             telegramClient,
             coreClient
         );
+        var refactorApplicationService = new RefactorApplicationService(
+            anchorReadService,
+            anchorEditService,
+            diffPreviewService,
+            lspRefactorService,
+            astGrepRefactorService,
+            auditLogger,
+            config
+        );
         var commandService = new CommandService(
             config,
             llmRouter,
@@ -228,7 +237,8 @@ internal static class Program
             astGrepRefactorService,
             doctorApplicationService,
             notebookApplicationService,
-            settingsApplicationService
+            settingsApplicationService,
+            refactorApplicationService
         );
         var commandExecutionService = new CommandExecutionService(commandService);
         var conversationApplicationService = new ConversationApplicationService(commandService);
@@ -240,7 +250,6 @@ internal static class Program
         var logicApplicationService = new LogicApplicationService(commandService);
         var planApplicationService = new PlanApplicationService(commandService);
         var taskGraphApplicationService = new TaskGraphApplicationService(commandService);
-        var refactorApplicationService = new RefactorApplicationService(commandService);
         var contextApplicationService = new ContextApplicationService(commandService);
         var chatApplicationService = new ChatApplicationService(commandService);
         var codingApplicationService = new CodingApplicationService(commandService);
