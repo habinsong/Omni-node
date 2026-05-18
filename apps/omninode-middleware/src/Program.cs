@@ -172,6 +172,16 @@ internal static class Program
         var auditLogger = new AuditLogger(config.AuditLogPath);
         var doctorApplicationService = new DoctorApplicationService(doctorService, config);
         var notebookApplicationService = new NotebookApplicationService(notebookService);
+        var settingsApplicationService = new SettingsApplicationService(
+            runtimeSettings,
+            routingPolicyResolver,
+            auditLogger,
+            llmRouter,
+            copilotWrapper,
+            codexWrapper,
+            telegramClient,
+            coreClient
+        );
         var commandService = new CommandService(
             config,
             llmRouter,
@@ -217,10 +227,10 @@ internal static class Program
             lspRefactorService,
             astGrepRefactorService,
             doctorApplicationService,
-            notebookApplicationService
+            notebookApplicationService,
+            settingsApplicationService
         );
         var commandExecutionService = new CommandExecutionService(commandService);
-        var settingsApplicationService = new SettingsApplicationService(commandService);
         var conversationApplicationService = new ConversationApplicationService(commandService);
         var memoryApplicationService = new MemoryApplicationService(commandService);
         var toolApplicationService = new ToolApplicationService(commandService);
