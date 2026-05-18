@@ -60,8 +60,8 @@ git diff --check
 최근 확인 결과:
 
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 100 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 173
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 113 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 185
 - `npm test`: 통과
 - `make -C apps/omninode-core -B`: 통과
 - `git diff --check`: 통과
@@ -462,13 +462,18 @@ git diff --check
   - 더 이상 사용처가 없는 `GetInt(JsonElement, string)` private helper도 함께 제거했다.
 - `apps/omninode-middleware-tests/GroqRateLimitHeaderParserTests.cs`
   - 전 헤더 채워진 정상 응답, 헤더 부재 시 nullable 유지, 잘못된 정수 헤더 무시 동작을 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/OpenAiCompatibleProtocol.cs`
+  - Groq/Cerebras/NVIDIA 공통 OpenAI 호환 chat body 빌더, provider 표시 이름, HTTP 실패 메시지 변환(NVIDIA 무료 할당량/429/503/401 분기), SSE delta chunk 추출을 묶었다.
+  - `LlmRouter`에서는 `OpenAiCompatibleProtocol.BuildChatBody/BuildFailureMessage/DisplayName/ExtractStreamChunk`만 호출하고 원본 helper는 제거했다.
+- `apps/omninode-middleware-tests/OpenAiCompatibleProtocolTests.cs`
+  - 기본 system+user message 구성, multi-turn 시퀀스 확장, NVIDIA 할당량 안내, Groq rate limit 메시지, provider 표시 이름 매핑, stream chunk 문자열/배열 content와 손상 JSON 폴백을 단위 테스트로 고정했다.
 - `scripts/check-security-boundaries.mjs`
-  - 여섯 정책/파서 클래스가 책임을 들고 있고, `LlmRouter`가 정책/파서만 호출하도록 정리되었는지 계약 검사를 추가했다 (assertions 117 → 173).
-- `LlmRouter` 본문 크기: 3755 → 3194 라인 (≈ 15% 감축).
+  - 일곱 정책/파서/프로토콜 클래스가 책임을 들고 있고, `LlmRouter`가 정책/파서/프로토콜만 호출하도록 정리되었는지 계약 검사를 추가했다 (assertions 117 → 185).
+- `LlmRouter` 본문 크기: 3755 → 3046 라인 (≈ 19% 감축).
 
 남은 범위:
 
-- Groq/Gemini/Cerebras/NVIDIA/STT 별 HTTP 호출 자체(요청 build → 호출 → 응답 변환)는 여전히 `LlmRouter`의 메서드로 남아 있다. 다음 단계는 provider 어댑터 인터페이스(`IProviderChatAdapter`) 도입과 `LlmRouter`의 routing/fallback 조정자 역할 분리다.
+- Groq/Gemini/Cerebras/NVIDIA/STT 별 HTTP 호출 자체(요청 build → 호출 → 응답 변환)는 여전히 `LlmRouter`의 인스턴스 메서드로 남아 있다. 다음 단계는 provider 어댑터 인터페이스(`IProviderChatAdapter`) 도입과 `LlmRouter`의 routing/fallback 조정자 역할 분리다.
 - Cerebras 모델 resolver(`ResolveAvailableCerebrasModelAsync`)의 cache 동작은 LlmRouter 인스턴스 상태에 묶여 있어 어댑터화 시 별도 설계가 필요하다.
 - Gemini grounded/url-context streaming pipeline, NVIDIA polling pipeline은 호출 chain이 길고 외부 부수효과가 강하다. 어댑터 인터페이스가 자리잡은 뒤에 분리하는 게 안전하다.
 
@@ -520,10 +525,10 @@ git diff --check
 | P1. 문서 불일치 정리 | 완료 | 100% | — |
 | P2. WebSocket runtime 통합 테스트 | 진행 중 | 60% | 비 loopback 원격 endpoint에서 remote limited 실행 차단/read-only 허용 시나리오 자동화 |
 | P3. CommandService 도메인 분리 | 시작됨 | 10% | search/telegram/coding/routine/logic graph 서비스 단위 실제 추출 |
-| P4. Provider adapter 구조 정리 | 진행 중 | 70% | provider별 HTTP 호출 자체를 `IProviderChatAdapter` 인터페이스로 분리, Cerebras 모델 resolver cache 재설계, Gemini/NVIDIA streaming pipeline 어댑터화 |
+| P4. Provider adapter 구조 정리 | 진행 중 | 75% | provider별 HTTP 호출 자체를 `IProviderChatAdapter` 인터페이스로 분리, Cerebras 모델 resolver cache 재설계, Gemini/NVIDIA streaming pipeline 어댑터화 |
 | P5. 상태 저장소 복구 정책 확대 | 완료 | 100% | — |
 
-전체 산술 평균: 73% (P0 100, P1 100, P2 60, P3 10, P4 70, P5 100 → 평균 73.3%).
+전체 산술 평균: 74% (P0 100, P1 100, P2 60, P3 10, P4 75, P5 100 → 평균 74.2%).
 
 이 수치는 책임 분량을 동등 가중치로 본 추정이다. P3는 후보 도메인이 매우 크고 P4는 어댑터 인터페이스 도입이 남은 작업의 무게중심이라, 실제 코드 양 기준으로 가중치를 다시 잡으면 60%대 후반이 더 보수적이다.
 

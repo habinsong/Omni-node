@@ -1857,7 +1857,7 @@ public sealed class LlmRouter : IDisposable
         {
             for (var turn = 0; turn < ChatContinuationRounds; turn++)
             {
-                var body = BuildOpenAiCompatibleChatBody(
+                var body = OpenAiCompatibleProtocol.BuildChatBody(
                     model,
                     systemPrompt,
                     promptForTurn,
@@ -2413,7 +2413,7 @@ public sealed class LlmRouter : IDisposable
         {
             for (var turn = 0; turn < ChatContinuationRounds; turn++)
             {
-                var body = BuildOpenAiCompatibleChatBody(
+                var body = OpenAiCompatibleProtocol.BuildChatBody(
                     model,
                     systemPrompt,
                     promptForTurn,
@@ -2463,7 +2463,7 @@ public sealed class LlmRouter : IDisposable
                 {
                     var failureBody = await response.Content.ReadAsStringAsync(cancellationToken);
                     Console.Error.WriteLine($"[{provider}] chat stream failed ({(int)response.StatusCode}): {failureBody}");
-                    return BuildOpenAiCompatibleFailureMessage(provider, response.StatusCode, failureBody);
+                    return OpenAiCompatibleProtocol.BuildFailureMessage(provider, response.StatusCode, failureBody);
                 }
 
                 if (provider.Equals("groq", StringComparison.OrdinalIgnoreCase))
@@ -2524,7 +2524,7 @@ public sealed class LlmRouter : IDisposable
                     }
 
                     CaptureOpenAiCompatibleTokenUsage(payload);
-                    var chunk = ExtractOpenAiStreamChunk(payload);
+                    var chunk = OpenAiCompatibleProtocol.ExtractStreamChunk(payload);
                     if (!string.IsNullOrWhiteSpace(chunk.FinishReason))
                     {
                         turnFinishReason = chunk.FinishReason;
@@ -2544,7 +2544,7 @@ public sealed class LlmRouter : IDisposable
 
             var content = mergedBuilder.ToString().Trim();
             return string.IsNullOrWhiteSpace(content)
-                ? $"{ProviderDisplayName(provider)} 응답이 비어 있습니다."
+                ? $"{OpenAiCompatibleProtocol.DisplayName(provider)} 응답이 비어 있습니다."
                 : content;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -2563,7 +2563,7 @@ public sealed class LlmRouter : IDisposable
             var partial = mergedBuilder.ToString().Trim();
             if (string.IsNullOrWhiteSpace(partial))
             {
-                return $"{ProviderDisplayName(provider)} 호출 오류: {ex.Message}";
+                return $"{OpenAiCompatibleProtocol.DisplayName(provider)} 호출 오류: {ex.Message}";
             }
             return partial + "\n\n" + BuildPartialTruncationSuffix(provider, ex.Message);
         }
@@ -2572,7 +2572,7 @@ public sealed class LlmRouter : IDisposable
     // 부분 스트림이 끊겼을 때 사용자가 즉시 인식할 수 있도록 한 줄 안내를 본문 끝에 덧붙인다.
     private static string BuildPartialTruncationSuffix(string provider, string reasonHint)
     {
-        var name = ProviderDisplayName(provider);
+        var name = OpenAiCompatibleProtocol.DisplayName(provider);
         var safeReason = string.IsNullOrWhiteSpace(reasonHint) ? "stream interrupted" : reasonHint.Trim();
         if (safeReason.Length > 80)
         {
@@ -2588,49 +2588,10 @@ public sealed class LlmRouter : IDisposable
         {
             return "NVIDIA NIM 응답 시간이 초과되었습니다. 무료 할당량 한계나 큐잉 지연일 수 있습니다. 잠시 후 다시 시도하거나 다른 provider로 바꿔 보세요.";
         }
-        return $"{ProviderDisplayName(provider)} 응답 시간이 초과되었습니다.";
+        return $"{OpenAiCompatibleProtocol.DisplayName(provider)} 응답 시간이 초과되었습니다.";
     }
 
     // OpenAI 호환 응답이 비정상 상태일 때 provider별로 알기 쉬운 메시지를 만든다. NVIDIA의 quota/rate-limit 본문을 식별해 안내.
-    private static string BuildOpenAiCompatibleFailureMessage(
-        string provider,
-        System.Net.HttpStatusCode statusCode,
-        string failureBody
-    )
-    {
-        var name = ProviderDisplayName(provider);
-        var statusInt = (int)statusCode;
-        var lowered = (failureBody ?? string.Empty).ToLowerInvariant();
-        var looksLikeQuota = lowered.Contains("quota")
-                             || lowered.Contains("rate limit")
-                             || lowered.Contains("rate_limit")
-                             || lowered.Contains("too many requests")
-                             || lowered.Contains("credits");
-
-        if (string.Equals(provider, "nvidia", StringComparison.OrdinalIgnoreCase))
-        {
-            if (statusCode == System.Net.HttpStatusCode.TooManyRequests || looksLikeQuota)
-            {
-                return $"{name} 무료 할당량(또는 rate limit)에 도달했습니다 ({statusInt}). 잠시 후 다시 시도하거나 다른 provider(예: Cerebras·Groq·Gemini)로 바꿔 보세요.";
-            }
-            if (statusCode == System.Net.HttpStatusCode.Unauthorized || statusCode == System.Net.HttpStatusCode.Forbidden)
-            {
-                return $"{name} 인증 실패 ({statusInt}). API 키를 확인해 주세요.";
-            }
-            if (statusCode == System.Net.HttpStatusCode.ServiceUnavailable || statusCode == System.Net.HttpStatusCode.BadGateway)
-            {
-                return $"{name} 서버가 일시적으로 불안정합니다 ({statusInt}). 잠시 후 다시 시도해 주세요.";
-            }
-        }
-
-        if (statusCode == System.Net.HttpStatusCode.TooManyRequests)
-        {
-            return $"{name} rate limit ({statusInt}). 잠시 후 다시 시도해 주세요.";
-        }
-
-        return $"{name} 요청 실패: {statusInt}";
-    }
-
     private static void SafeEmitDelta(Action<string>? deltaCallback, string delta)
     {
         if (deltaCallback == null || string.IsNullOrEmpty(delta))
@@ -2645,45 +2606,6 @@ public sealed class LlmRouter : IDisposable
         catch
         {
         }
-    }
-
-    private static string BuildOpenAiCompatibleChatBody(
-        string model,
-        string systemPrompt,
-        string userInput,
-        List<(string Role, string Content)>? multiTurn,
-        string maxTokensProperty,
-        int maxOutputTokens,
-        bool stream
-    )
-    {
-        string messagesJson;
-        if (multiTurn != null && multiTurn.Count > 1 && multiTurn[0].Role != "user")
-        {
-            var mb = new StringBuilder();
-            mb.Append($"{{\"role\":\"system\",\"content\":\"{EscapeJson(systemPrompt)}\"}}");
-            foreach (var (role, msgContent) in multiTurn)
-            {
-                var apiRole = role == "assistant" ? "assistant" : "user";
-                mb.Append($",{{\"role\":\"{apiRole}\",\"content\":\"{EscapeJson(msgContent)}\"}}");
-            }
-            messagesJson = mb.ToString();
-        }
-        else
-        {
-            messagesJson = $"{{\"role\":\"system\",\"content\":\"{EscapeJson(systemPrompt)}\"}},"
-                + $"{{\"role\":\"user\",\"content\":\"{EscapeJson(userInput)}\"}}";
-        }
-
-        return "{"
-            + $"\"model\":\"{EscapeJson(model)}\","
-            + "\"temperature\":0.3,"
-            + $"\"stream\":{(stream ? "true" : "false")},"
-            + $"\"{EscapeJson(maxTokensProperty)}\":{maxOutputTokens},"
-            + "\"messages\":["
-            + messagesJson
-            + "]"
-            + "}";
     }
 
     private async Task<string> PollNvidiaStatusAsync(
@@ -2751,76 +2673,6 @@ public sealed class LlmRouter : IDisposable
         }
 
         return string.Empty;
-    }
-
-    private static string ProviderDisplayName(string provider)
-    {
-        return provider.ToLowerInvariant() switch
-        {
-            "groq" => "Groq",
-            "gemini" => "Gemini",
-            "cerebras" => "Cerebras",
-            "nvidia" => "NVIDIA NIM",
-            _ => provider
-        };
-    }
-
-    private static OpenAiCompatibleStreamChunk ExtractOpenAiStreamChunk(string json)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.TryGetProperty("choices", out var choices)
-                || choices.ValueKind != JsonValueKind.Array
-                || choices.GetArrayLength() == 0)
-            {
-                return new OpenAiCompatibleStreamChunk(string.Empty, string.Empty);
-            }
-
-            var first = choices[0];
-            var finishReason = first.TryGetProperty("finish_reason", out var finishReasonElement)
-                ? finishReasonElement.GetString() ?? string.Empty
-                : string.Empty;
-            if (!first.TryGetProperty("delta", out var delta) || delta.ValueKind != JsonValueKind.Object)
-            {
-                return new OpenAiCompatibleStreamChunk(string.Empty, finishReason);
-            }
-
-            if (!delta.TryGetProperty("content", out var content))
-            {
-                return new OpenAiCompatibleStreamChunk(string.Empty, finishReason);
-            }
-
-            if (content.ValueKind == JsonValueKind.String)
-            {
-                return new OpenAiCompatibleStreamChunk(content.GetString() ?? string.Empty, finishReason);
-            }
-
-            if (content.ValueKind == JsonValueKind.Array)
-            {
-                var builder = new StringBuilder();
-                foreach (var part in content.EnumerateArray())
-                {
-                    if (part.ValueKind == JsonValueKind.String)
-                    {
-                        builder.Append(part.GetString());
-                    }
-                    else if (part.ValueKind == JsonValueKind.Object
-                             && part.TryGetProperty("text", out var textPart)
-                             && textPart.ValueKind == JsonValueKind.String)
-                    {
-                        builder.Append(textPart.GetString());
-                    }
-                }
-
-                return new OpenAiCompatibleStreamChunk(builder.ToString(), finishReason);
-            }
-        }
-        catch (JsonException)
-        {
-        }
-
-        return new OpenAiCompatibleStreamChunk(string.Empty, string.Empty);
     }
 
     private static string ExtractSttText(string json)

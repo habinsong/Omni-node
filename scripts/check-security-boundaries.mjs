@@ -138,6 +138,7 @@ const geminiRequestPolicy = read("apps/omninode-middleware/src/GeminiRequestPoli
 const cerebrasErrorPolicy = read("apps/omninode-middleware/src/CerebrasErrorPolicy.cs");
 const providerResponseParser = read("apps/omninode-middleware/src/ProviderResponseParser.cs");
 const groqRateLimitHeaderParser = read("apps/omninode-middleware/src/GroqRateLimitHeaderParser.cs");
+const openAiCompatibleProtocol = read("apps/omninode-middleware/src/OpenAiCompatibleProtocol.cs");
 const atomicFileStore = read("apps/omninode-middleware/src/AtomicFileStore.cs");
 const conversationStore = read("apps/omninode-middleware/src/ConversationStore.cs");
 const sessionManager = read("apps/omninode-middleware/src/SessionManager.cs");
@@ -217,6 +218,18 @@ assertIncludes(llmRouterSource, "GroqRateLimitHeaderParser.Parse", "llm router u
 assertNotIncludes(llmRouterSource, "private static long? ReadHeaderLong(", "llm router no longer owns long header reader");
 assertNotIncludes(llmRouterSource, "private static string? ReadHeaderString(", "llm router no longer owns string header reader");
 assertNotIncludes(llmRouterSource, "x-ratelimit-limit-requests", "llm router no longer reads ratelimit headers inline");
+assertIncludes(openAiCompatibleProtocol, "BuildChatBody", "openai-compatible protocol owns chat body builder");
+assertIncludes(openAiCompatibleProtocol, "BuildFailureMessage", "openai-compatible protocol owns failure message builder");
+assertIncludes(openAiCompatibleProtocol, "DisplayName", "openai-compatible protocol owns provider display name");
+assertIncludes(openAiCompatibleProtocol, "ExtractStreamChunk", "openai-compatible protocol owns sse delta extractor");
+assertIncludes(llmRouterSource, "OpenAiCompatibleProtocol.BuildChatBody", "llm router uses openai-compatible protocol for body");
+assertIncludes(llmRouterSource, "OpenAiCompatibleProtocol.BuildFailureMessage", "llm router uses openai-compatible protocol for failure message");
+assertIncludes(llmRouterSource, "OpenAiCompatibleProtocol.DisplayName", "llm router uses openai-compatible protocol for display name");
+assertIncludes(llmRouterSource, "OpenAiCompatibleProtocol.ExtractStreamChunk", "llm router uses openai-compatible protocol for stream chunk");
+assertNotIncludes(llmRouterSource, "private static string BuildOpenAiCompatibleChatBody(", "llm router no longer owns openai-compatible chat body builder");
+assertNotIncludes(llmRouterSource, "private static string BuildOpenAiCompatibleFailureMessage(", "llm router no longer owns openai-compatible failure message builder");
+assertNotIncludes(llmRouterSource, "private static string ProviderDisplayName(", "llm router no longer owns provider display name");
+assertNotIncludes(llmRouterSource, "private static OpenAiCompatibleStreamChunk ExtractOpenAiStreamChunk(", "llm router no longer owns openai-compatible sse extractor");
 assertIncludes(codingExecution, "if (!IsDynamicCodeExecutionEnabled())", "workspace shell execution checks dynamic code flag");
 assertIncludes(codingExecution, "new ShellRunResult(126", "workspace shell execution returns blocked result");
 assertIncludes(codingExecution, "if (_execution.EnableAutoInstall)", "auto install pipeline checks explicit flag");
