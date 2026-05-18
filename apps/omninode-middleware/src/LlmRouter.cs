@@ -229,7 +229,7 @@ public sealed class LlmRouter : IDisposable
                 return $"음성 변환 실패: {(int)response.StatusCode}";
             }
 
-            var text = ExtractSttText(responseBody).Trim();
+            var text = ProviderResponseParser.ExtractSttText(responseBody).Trim();
             return string.IsNullOrWhiteSpace(text) ? "음성 변환 결과가 비어 있습니다." : text;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -283,7 +283,7 @@ public sealed class LlmRouter : IDisposable
             }
 
             CaptureGroqUsage(model, responseBody);
-            var content = ExtractGroqContent(responseBody);
+            var content = ProviderResponseParser.ExtractOpenAiCompatibleChunk(responseBody).Content;
             var mapped = RouterIntentClassifier.MapFromLlmContent(content);
             return mapped == RouterIntent.Unknown ? fallback : mapped;
         }
@@ -335,7 +335,7 @@ public sealed class LlmRouter : IDisposable
             }
 
             CaptureGeminiUsage(responseBody);
-            var plan = ExtractGeminiText(responseBody);
+            var plan = ProviderResponseParser.ExtractGeminiChunk(responseBody).Content;
             if (string.IsNullOrWhiteSpace(plan))
             {
                 var blockReason = ProviderResponseParser.ExtractGeminiBlockReason(responseBody);
@@ -574,7 +574,7 @@ public sealed class LlmRouter : IDisposable
                 rateLimitRetries = 0;
                 requestTooLargeRetries = 0;
                 CaptureGroqUsage(model, responseBody);
-                var chunk = ExtractGroqChatChunk(responseBody);
+                var chunk = ProviderResponseParser.ExtractOpenAiCompatibleChunk(responseBody);
                 var chunkText = chunk.Content.Trim();
                 if (!string.IsNullOrWhiteSpace(chunkText))
                 {
@@ -738,7 +738,7 @@ public sealed class LlmRouter : IDisposable
             }
 
             CaptureGroqUsage(model, responseBody);
-            var content = ExtractGroqContent(responseBody).Trim();
+            var content = ProviderResponseParser.ExtractOpenAiCompatibleChunk(responseBody).Content.Trim();
             return string.IsNullOrWhiteSpace(content) ? "Groq 응답이 비어 있습니다." : content;
         }
         catch (Exception ex)
@@ -808,7 +808,7 @@ public sealed class LlmRouter : IDisposable
                 }
 
                 CaptureGeminiUsage(responseBody);
-                var chunk = ExtractGeminiChatChunk(responseBody);
+                var chunk = ProviderResponseParser.ExtractGeminiChunk(responseBody);
                 var chunkText = chunk.Content.Trim();
                 if (!string.IsNullOrWhiteSpace(chunkText))
                 {
@@ -949,7 +949,7 @@ public sealed class LlmRouter : IDisposable
                     usagePayload = trimmedPayload;
                 }
 
-                var chunk = ExtractGeminiChatChunk(trimmedPayload);
+                var chunk = ProviderResponseParser.ExtractGeminiChunk(trimmedPayload);
                 var delta = GeminiRequestPolicy.NormalizeStreamDelta(chunk.Content, mergedBuilder.ToString());
                 if (delta.Length == 0)
                 {
@@ -1011,7 +1011,7 @@ public sealed class LlmRouter : IDisposable
             }
 
             CaptureGeminiUsage(responseBody);
-            var content = ExtractGeminiText(responseBody).Trim();
+            var content = ProviderResponseParser.ExtractGeminiChunk(responseBody).Content.Trim();
             return string.IsNullOrWhiteSpace(content) ? "Gemini 웹검색 응답이 비어 있습니다." : content;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -1149,7 +1149,7 @@ public sealed class LlmRouter : IDisposable
                     usagePayload = trimmedPayload;
                 }
 
-                var chunk = ExtractGeminiChatChunk(trimmedPayload);
+                var chunk = ProviderResponseParser.ExtractGeminiChunk(trimmedPayload);
                 var delta = GeminiRequestPolicy.NormalizeStreamDelta(chunk.Content, mergedBuilder.ToString());
                 if (delta.Length == 0)
                 {
@@ -1274,7 +1274,7 @@ public sealed class LlmRouter : IDisposable
                 CaptureGeminiUsage(responseBody);
                 MergeCitations(GeminiCitationParser.ExtractUrlContextCitations(responseBody));
                 MergeCitations(GeminiCitationParser.ExtractGroundingCitations(responseBody));
-                var chunk = ExtractGeminiChatChunk(responseBody);
+                var chunk = ProviderResponseParser.ExtractGeminiChunk(responseBody);
                 var chunkText = chunk.Content.Trim();
                 if (!string.IsNullOrWhiteSpace(chunkText))
                 {
@@ -1480,7 +1480,7 @@ public sealed class LlmRouter : IDisposable
                     citationByUrl[GeminiCitationParser.BuildDedupKey(citation)] = citation;
                 }
 
-                var chunk = ExtractGeminiChatChunk(trimmedPayload);
+                var chunk = ProviderResponseParser.ExtractGeminiChunk(trimmedPayload);
                 var delta = GeminiRequestPolicy.NormalizeStreamDelta(chunk.Content, mergedBuilder.ToString());
                 if (delta.Length == 0)
                 {
@@ -1613,7 +1613,7 @@ public sealed class LlmRouter : IDisposable
             }
 
             CaptureGeminiUsage(responseBody);
-            var text = ExtractGeminiText(responseBody).Trim();
+            var text = ProviderResponseParser.ExtractGeminiChunk(responseBody).Content.Trim();
             return string.IsNullOrWhiteSpace(text) ? "Gemini 응답이 비어 있습니다." : text;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -1703,7 +1703,7 @@ public sealed class LlmRouter : IDisposable
                 }
 
                 CaptureOpenAiCompatibleTokenUsage(responseBody);
-                var chunk = ExtractGroqChatChunk(responseBody);
+                var chunk = ProviderResponseParser.ExtractOpenAiCompatibleChunk(responseBody);
                 var chunkText = chunk.Content.Trim();
                 if (!string.IsNullOrWhiteSpace(chunkText))
                 {
@@ -1860,7 +1860,7 @@ public sealed class LlmRouter : IDisposable
                 }
 
                 CaptureOpenAiCompatibleTokenUsage(responseBody);
-                var chunk = ExtractGroqChatChunk(responseBody);
+                var chunk = ProviderResponseParser.ExtractOpenAiCompatibleChunk(responseBody);
                 var chunkText = chunk.Content.Trim();
                 if (!string.IsNullOrWhiteSpace(chunkText))
                 {
@@ -1980,26 +1980,6 @@ public sealed class LlmRouter : IDisposable
             Console.Error.WriteLine($"[cerebras] catalog fetch error: {ex.Message}");
             return null;
         }
-    }
-
-    private static bool TryGetPropertyCaseInsensitive(JsonElement element, string propertyName, out JsonElement value)
-    {
-        value = default;
-        if (element.ValueKind != JsonValueKind.Object)
-        {
-            return false;
-        }
-
-        foreach (var property in element.EnumerateObject())
-        {
-            if (property.Name.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
-            {
-                value = property.Value;
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private int NormalizeNvidiaMaxOutputTokens(int requested)
@@ -2200,16 +2180,6 @@ public sealed class LlmRouter : IDisposable
         }
     }
 
-    private static string ExtractGroqContent(string json)
-    {
-        return ExtractGroqChatChunk(json).Content;
-    }
-
-    private static string ExtractGeminiText(string json)
-    {
-        return ExtractGeminiChatChunk(json).Content;
-    }
-
     private async Task<string> GenerateOpenAiCompatibleChatStreamingAsync(
         string provider,
         string endpoint,
@@ -2259,7 +2229,7 @@ public sealed class LlmRouter : IDisposable
                     var acceptedBody = await response.Content.ReadAsStringAsync(cancellationToken);
                     var polled = await PollNvidiaStatusAsync(apiKey, acceptedBody, cancellationToken);
                     CaptureOpenAiCompatibleTokenUsage(polled);
-                    var polledChunk = ExtractGroqChatChunk(polled);
+                    var polledChunk = ProviderResponseParser.ExtractOpenAiCompatibleChunk(polled);
                     var finalContent = polledChunk.Content.Trim();
                     if (!string.IsNullOrWhiteSpace(finalContent))
                     {
@@ -2394,7 +2364,7 @@ public sealed class LlmRouter : IDisposable
         CancellationToken cancellationToken
     )
     {
-        var requestId = ExtractNvidiaRequestId(acceptedBody);
+        var requestId = ProviderResponseParser.ExtractNvidiaRequestId(acceptedBody);
         if (string.IsNullOrWhiteSpace(requestId))
         {
             throw new InvalidOperationException("NVIDIA NIM 202 응답에 requestId가 없습니다.");
@@ -2425,66 +2395,6 @@ public sealed class LlmRouter : IDisposable
 
         throw new TimeoutException("NVIDIA NIM status polling timed out.");
     }
-
-    private static string ExtractNvidiaRequestId(string json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return string.Empty;
-        }
-
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            if (TryGetPropertyCaseInsensitive(doc.RootElement, "requestId", out var requestId)
-                && requestId.ValueKind == JsonValueKind.String)
-            {
-                return requestId.GetString() ?? string.Empty;
-            }
-
-            if (TryGetPropertyCaseInsensitive(doc.RootElement, "id", out var id)
-                && id.ValueKind == JsonValueKind.String)
-            {
-                return id.GetString() ?? string.Empty;
-            }
-        }
-        catch
-        {
-        }
-
-        return string.Empty;
-    }
-
-    private static string ExtractSttText(string json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return string.Empty;
-        }
-
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind == JsonValueKind.Object
-                && doc.RootElement.TryGetProperty("text", out var textElement)
-                && textElement.ValueKind == JsonValueKind.String)
-            {
-                return textElement.GetString() ?? string.Empty;
-            }
-        }
-        catch
-        {
-            return json;
-        }
-
-        return json;
-    }
-
-    private static ProviderChatChunk ExtractGroqChatChunk(string json)
-        => ProviderResponseParser.ExtractOpenAiCompatibleChunk(json);
-
-    private static ProviderChatChunk ExtractGeminiChatChunk(string json)
-        => ProviderResponseParser.ExtractGeminiChunk(json);
 
     private static string EscapeJson(string value)
     {

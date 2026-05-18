@@ -280,6 +280,17 @@ assertNotIncludes(llmRouterSource, "private static string BuildOpenAiCompatibleT
 assertNotIncludes(llmRouterSource, "private static void SafeEmitDelta(", "llm router no longer owns safe delta emitter");
 assertNotIncludes(llmRouterSource, "private static void AppendGeneratedChunk(", "llm router no longer owns chunk appender");
 assertNotIncludes(llmRouterSource, "private static string BuildContinuationPrompt(", "llm router no longer owns continuation prompt builder");
+assertIncludes(providerResponseParser, "ExtractNvidiaRequestId", "provider response parser owns nvidia request id extractor");
+assertIncludes(providerResponseParser, "ExtractSttText", "provider response parser owns stt text extractor");
+assertIncludes(llmRouterSource, "ProviderResponseParser.ExtractNvidiaRequestId", "llm router uses provider response parser for nvidia request id");
+assertIncludes(llmRouterSource, "ProviderResponseParser.ExtractSttText", "llm router uses provider response parser for stt text");
+assertNotIncludes(llmRouterSource, "private static string ExtractNvidiaRequestId(", "llm router no longer owns nvidia request id extractor");
+assertNotIncludes(llmRouterSource, "private static string ExtractSttText(", "llm router no longer owns stt text extractor");
+assertNotIncludes(llmRouterSource, "private static string ExtractGroqContent(", "llm router no longer owns groq content wrapper");
+assertNotIncludes(llmRouterSource, "private static string ExtractGeminiText(", "llm router no longer owns gemini text wrapper");
+assertNotIncludes(llmRouterSource, "private static ProviderChatChunk ExtractGroqChatChunk(", "llm router no longer owns groq chunk wrapper");
+assertNotIncludes(llmRouterSource, "private static ProviderChatChunk ExtractGeminiChatChunk(", "llm router no longer owns gemini chunk wrapper");
+assertNotIncludes(llmRouterSource, "private static bool TryGetPropertyCaseInsensitive(", "llm router no longer owns case-insensitive json property reader (case sensitive variant)");
 assertIncludes(codingExecution, "if (!IsDynamicCodeExecutionEnabled())", "workspace shell execution checks dynamic code flag");
 assertIncludes(codingExecution, "new ShellRunResult(126", "workspace shell execution returns blocked result");
 assertIncludes(codingExecution, "if (_execution.EnableAutoInstall)", "auto install pipeline checks explicit flag");

@@ -179,6 +179,66 @@ internal static class ProviderResponseParser
         }
     }
 
+    /// <summary>
+    /// NVIDIA NIM 202 응답 body에서 status polling용 request id를 추출한다. `requestId`와 `id` 키를 대소문자 무시로 본다.
+    /// </summary>
+    public static string ExtractNvidiaRequestId(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (TryGetPropertyCaseInsensitive(doc.RootElement, "requestId", out var requestId)
+                && requestId.ValueKind == JsonValueKind.String)
+            {
+                return requestId.GetString() ?? string.Empty;
+            }
+
+            if (TryGetPropertyCaseInsensitive(doc.RootElement, "id", out var id)
+                && id.ValueKind == JsonValueKind.String)
+            {
+                return id.GetString() ?? string.Empty;
+            }
+        }
+        catch
+        {
+        }
+
+        return string.Empty;
+    }
+
+    /// <summary>
+    /// Speech-to-text(STT) 응답 JSON에서 `text` 필드를 꺼낸다. 파싱 실패 시 원본 문자열을 그대로 돌려준다.
+    /// </summary>
+    public static string ExtractSttText(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("text", out var textElement)
+                && textElement.ValueKind == JsonValueKind.String)
+            {
+                return textElement.GetString() ?? string.Empty;
+            }
+        }
+        catch
+        {
+            return json;
+        }
+
+        return json;
+    }
+
     private static int GetInt(JsonElement element, string name)
     {
         if (!element.TryGetProperty(name, out var prop))
@@ -192,5 +252,25 @@ internal static class ProviderResponseParser
         }
 
         return 0;
+    }
+
+    private static bool TryGetPropertyCaseInsensitive(JsonElement element, string propertyName, out JsonElement value)
+    {
+        value = default;
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        return false;
     }
 }

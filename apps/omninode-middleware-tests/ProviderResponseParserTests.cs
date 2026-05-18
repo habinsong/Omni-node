@@ -136,4 +136,66 @@ public sealed class ProviderResponseParserTests
     {
         Assert.False(ProviderResponseParser.TryParseOpenAiCompatibleUsage("{broken", out _));
     }
+
+    [Fact]
+    public void ExtractNvidiaRequestIdPrefersRequestIdField()
+    {
+        var json = """{"requestId":"req-123","id":"fallback"}""";
+
+        Assert.Equal("req-123", ProviderResponseParser.ExtractNvidiaRequestId(json));
+    }
+
+    [Fact]
+    public void ExtractNvidiaRequestIdFallsBackToIdFieldWhenRequestIdMissing()
+    {
+        var json = """{"id":"fallback-id"}""";
+
+        Assert.Equal("fallback-id", ProviderResponseParser.ExtractNvidiaRequestId(json));
+    }
+
+    [Fact]
+    public void ExtractNvidiaRequestIdHandlesCaseInsensitiveKeys()
+    {
+        var json = """{"REQUESTID":"req-upper"}""";
+
+        Assert.Equal("req-upper", ProviderResponseParser.ExtractNvidiaRequestId(json));
+    }
+
+    [Fact]
+    public void ExtractNvidiaRequestIdReturnsEmptyForMissingOrBrokenJson()
+    {
+        Assert.Equal(string.Empty, ProviderResponseParser.ExtractNvidiaRequestId("{}"));
+        Assert.Equal(string.Empty, ProviderResponseParser.ExtractNvidiaRequestId("{broken"));
+        Assert.Equal(string.Empty, ProviderResponseParser.ExtractNvidiaRequestId(string.Empty));
+    }
+
+    [Fact]
+    public void ExtractSttTextReadsTextField()
+    {
+        var json = """{"text":"transcribed audio"}""";
+
+        Assert.Equal("transcribed audio", ProviderResponseParser.ExtractSttText(json));
+    }
+
+    [Fact]
+    public void ExtractSttTextReturnsOriginalBodyOnParseError()
+    {
+        var raw = "this is not json";
+
+        Assert.Equal(raw, ProviderResponseParser.ExtractSttText(raw));
+    }
+
+    [Fact]
+    public void ExtractSttTextReturnsOriginalBodyWhenTextFieldMissing()
+    {
+        var json = """{"other":"value"}""";
+
+        Assert.Equal(json, ProviderResponseParser.ExtractSttText(json));
+    }
+
+    [Fact]
+    public void ExtractSttTextReturnsEmptyForBlankInput()
+    {
+        Assert.Equal(string.Empty, ProviderResponseParser.ExtractSttText(string.Empty));
+    }
 }
