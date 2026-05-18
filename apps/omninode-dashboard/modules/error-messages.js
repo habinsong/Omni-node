@@ -24,6 +24,7 @@ const FRIENDLY_MAP = {
   forbidden_remote_auth: "외부 접속 제한 모드에서는 인증 관련 작업을 사용할 수 없습니다.",
   forbidden_remote_secret_settings: "외부 접속 제한 모드에서는 API 키와 Telegram 같은 민감 설정을 바꿀 수 없습니다.",
   forbidden_remote_external_access: "외부 접속 제한 모드에서는 외부접속 설정을 바꿀 수 없습니다.",
+  forbidden_remote_limited_action: "외부 접속 제한 모드에서는 이 작업을 사용할 수 없습니다. 로컬 대시보드에서 실행하세요.",
   ws_disconnected: "WebSocket 연결이 끊어졌습니다. 잠시 후 자동으로 재연결됩니다.",
 };
 

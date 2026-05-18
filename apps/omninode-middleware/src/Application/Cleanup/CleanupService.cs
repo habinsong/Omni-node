@@ -4,13 +4,13 @@ namespace OmniNode.Middleware;
 
 public sealed class CleanupService
 {
-    private readonly AppConfig _config;
+    private readonly PathOptions _paths;
     private readonly ConcurrentDictionary<string, CleanupPreviewResult> _previews
         = new(StringComparer.Ordinal);
 
-    public CleanupService(AppConfig config)
+    public CleanupService(PathOptions paths)
     {
-        _config = config;
+        _paths = paths;
     }
 
     public CleanupPreviewResult PreviewCleanup()
@@ -234,9 +234,9 @@ public sealed class CleanupService
     private string ResolveCleanupProjectRoot()
     {
         var candidates = new List<string>();
-        if (!string.IsNullOrWhiteSpace(_config.DashboardIndexPath))
+        if (!string.IsNullOrWhiteSpace(_paths.DashboardIndexPath))
         {
-            var current = new FileInfo(Path.GetFullPath(_config.DashboardIndexPath)).Directory;
+            var current = new FileInfo(Path.GetFullPath(_paths.DashboardIndexPath)).Directory;
             while (current != null)
             {
                 candidates.Add(current.FullName);

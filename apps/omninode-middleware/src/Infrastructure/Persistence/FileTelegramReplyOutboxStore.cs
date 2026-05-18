@@ -104,7 +104,11 @@ public sealed class FileTelegramReplyOutboxStore
                 return new TelegramReplyOutboxState();
             }
 
-            var text = File.ReadAllText(_storePath);
+            var text = AtomicFileStore.ReadAllTextWithBackup(
+                _storePath,
+                value => FileTelegramReplyOutboxJson.DeserializeState(value) != null,
+                logScope: "telegram-outbox"
+            );
             if (string.IsNullOrWhiteSpace(text))
             {
                 return new TelegramReplyOutboxState();

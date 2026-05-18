@@ -133,6 +133,12 @@ public sealed partial class WebSocketGateway
                     continue;
                 }
 
+                if (remoteDashboardClient && !IsAllowedRemoteLimitedMessage(message.Type))
+                {
+                    await SendTextAsync(socket, sendLock, "{\"type\":\"error\",\"message\":\"forbidden_remote_limited_action\"}", cancellationToken);
+                    continue;
+                }
+
                 if (await _conversationMemoryDispatcher.TryHandleAsync(
                         message,
                         authenticated,
@@ -341,7 +347,7 @@ public sealed partial class WebSocketGateway
 
     private async Task StreamMetricsAsync(WebSocket socket, SemaphoreSlim sendLock, CancellationToken cancellationToken)
     {
-        var interval = TimeSpan.FromSeconds(Math.Max(1, _config.MetricsPushIntervalSec));
+        var interval = TimeSpan.FromSeconds(Math.Max(1, _gatewayOptions.MetricsPushIntervalSec));
         var warnedCoreUnavailable = false;
         while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
         {
@@ -367,7 +373,7 @@ public sealed partial class WebSocketGateway
 
                 warnedCoreUnavailable = warnedCoreUnavailable || isConnectionRefused;
                 var delay = isConnectionRefused
-                    ? TimeSpan.FromSeconds(Math.Max(3, _config.MetricsPushIntervalSec))
+                    ? TimeSpan.FromSeconds(Math.Max(3, _gatewayOptions.MetricsPushIntervalSec))
                     : TimeSpan.FromSeconds(1);
                 await Task.Delay(delay, cancellationToken);
             }
@@ -391,7 +397,7 @@ public sealed partial class WebSocketGateway
                 return true;
             }
 
-            if (window.Count >= _config.WebSocketCommandsPerMinute)
+            if (window.Count >= _gatewayOptions.WebSocketCommandsPerMinute)
             {
                 return false;
             }
@@ -435,7 +441,7 @@ public sealed partial class WebSocketGateway
         var origin = context.Request.Headers["Origin"];
         if (string.IsNullOrWhiteSpace(origin))
         {
-            return true;
+            return !IsRemoteDashboardClient(context);
         }
 
         if (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri))
@@ -492,6 +498,22 @@ public sealed partial class WebSocketGateway
 
         return IPAddress.IsLoopback(address)
             || (address.IsIPv4MappedToIPv6 && IPAddress.IsLoopback(address.MapToIPv4()));
+    }
+
+    private static bool IsAllowedRemoteLimitedMessage(string? messageType)
+    {
+        return messageType is
+            "list_conversations" or
+            "get_conversation" or
+            "list_memory_notes" or
+            "read_memory_note" or
+            "memory_search" or
+            "conversation_search" or
+            "memory_get" or
+            "context_scan" or
+            "skills_list" or
+            "commands_list" or
+            "notebook_get";
     }
 
     private static bool TryValidateClientPayloadLimits(string json, out string errorMessage)
@@ -576,9 +598,9 @@ public sealed partial class WebSocketGateway
             }
 
             total += result.Count;
-            if (total > _config.WebSocketMaxMessageBytes)
+            if (total > _gatewayOptions.WebSocketMaxMessageBytes)
             {
-                throw new InvalidOperationException($"payload too large (max={_config.WebSocketMaxMessageBytes})");
+                throw new InvalidOperationException($"payload too large (max={_gatewayOptions.WebSocketMaxMessageBytes})");
             }
 
             ms.Write(buffer, 0, result.Count);

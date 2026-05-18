@@ -2,12 +2,12 @@ namespace OmniNode.Middleware;
 
 public sealed class CoreSocketDoctorCheck : IDoctorCheck
 {
-    private readonly AppConfig _config;
+    private readonly PathOptions _paths;
     private readonly UdsCoreClient _coreClient;
 
-    public CoreSocketDoctorCheck(AppConfig config, UdsCoreClient coreClient)
+    public CoreSocketDoctorCheck(PathOptions paths, UdsCoreClient coreClient)
     {
-        _config = config;
+        _paths = paths;
         _coreClient = coreClient;
     }
 
@@ -15,10 +15,10 @@ public sealed class CoreSocketDoctorCheck : IDoctorCheck
 
     public async Task<DoctorCheckResult> RunAsync(CancellationToken cancellationToken)
     {
-        var endpoint = _config.CoreSocketPath;
+        var endpoint = _paths.CoreSocketPath;
         var usesTcpEndpoint = UdsCoreClient.IsTcpEndpoint(endpoint);
         var lockPath = DoctorSupport.ResolveCoreLockPath();
-        var auditParent = Path.GetDirectoryName(_config.AuditLogPath) ?? "(none)";
+        var auditParent = Path.GetDirectoryName(_paths.AuditLogPath) ?? "(none)";
         var socketExists = usesTcpEndpoint || File.Exists(endpoint);
         var lockExists = usesTcpEndpoint || File.Exists(lockPath);
         var auditParentExists = Directory.Exists(auditParent);

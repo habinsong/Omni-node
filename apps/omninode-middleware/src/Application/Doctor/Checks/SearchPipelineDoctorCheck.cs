@@ -2,21 +2,24 @@ namespace OmniNode.Middleware;
 
 public sealed class SearchPipelineDoctorCheck : IDoctorCheck
 {
-    private readonly AppConfig _config;
+    private readonly ProviderOptions _providers;
+    private readonly ContextOptions _context;
     private readonly RuntimeSettings _runtimeSettings;
     private readonly SearchGateway _searchGateway;
     private readonly ISearchGuard _searchGuard;
     private readonly ISearchAnswerComposer _searchAnswerComposer;
 
     public SearchPipelineDoctorCheck(
-        AppConfig config,
+        ProviderOptions providers,
+        ContextOptions context,
         RuntimeSettings runtimeSettings,
         SearchGateway searchGateway,
         ISearchGuard searchGuard,
         ISearchAnswerComposer searchAnswerComposer
     )
     {
-        _config = config;
+        _providers = providers;
+        _context = context;
         _runtimeSettings = runtimeSettings;
         _searchGateway = searchGateway;
         _searchGuard = searchGuard;
@@ -30,7 +33,7 @@ public sealed class SearchPipelineDoctorCheck : IDoctorCheck
         cancellationToken.ThrowIfCancellationRequested();
 
         var hasGeminiKey = !string.IsNullOrWhiteSpace(_runtimeSettings.GetGeminiApiKey());
-        var hasSearchModel = !string.IsNullOrWhiteSpace(_config.GeminiSearchModel);
+        var hasSearchModel = !string.IsNullOrWhiteSpace(_providers.GeminiSearchModel);
         var pipelineReady = _searchGateway != null && _searchGuard != null && _searchAnswerComposer != null;
         var status = !pipelineReady || !hasSearchModel
             ? DoctorStatus.Fail
@@ -60,7 +63,7 @@ public sealed class SearchPipelineDoctorCheck : IDoctorCheck
             Id,
             status,
             summary,
-            $"geminiSearchModel={_config.GeminiSearchModel}; geminiKey={(hasGeminiKey ? "set" : "missing")}; fastWebPipeline={_config.EnableFastWebPipeline}; guard={(pipelineReady ? "ready" : "missing")}",
+            $"geminiSearchModel={_providers.GeminiSearchModel}; geminiKey={(hasGeminiKey ? "set" : "missing")}; fastWebPipeline={_context.EnableFastWebPipeline}; guard={(pipelineReady ? "ready" : "missing")}",
             actions
         ));
     }

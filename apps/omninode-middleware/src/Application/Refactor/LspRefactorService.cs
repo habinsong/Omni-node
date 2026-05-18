@@ -5,19 +5,22 @@ namespace OmniNode.Middleware;
 
 public sealed class LspRefactorService
 {
-    private readonly AppConfig _config;
+    private readonly PathOptions _paths;
+    private readonly RefactorOptions _options;
     private readonly RefactorToolAvailability _toolAvailability;
     private readonly AnchorReadService _anchorReadService;
     private readonly DiffPreviewService _diffPreviewService;
 
     public LspRefactorService(
-        AppConfig config,
+        PathOptions paths,
+        RefactorOptions options,
         RefactorToolAvailability toolAvailability,
         AnchorReadService anchorReadService,
         DiffPreviewService diffPreviewService
     )
     {
-        _config = config;
+        _paths = paths;
+        _options = options;
         _toolAvailability = toolAvailability;
         _anchorReadService = anchorReadService;
         _diffPreviewService = diffPreviewService;
@@ -32,7 +35,7 @@ public sealed class LspRefactorService
     {
         cancellationToken.ThrowIfCancellationRequested();
         var normalizedPath = _anchorReadService.ResolveWorkspacePath(path);
-        var probe = _toolAvailability.ProbeLsp(normalizedPath, _config.RefactorEnableLsp);
+        var probe = _toolAvailability.ProbeLsp(normalizedPath, _options.RefactorEnableLsp);
         if (!probe.Enabled || !probe.Available)
         {
             return BuildResult(probe, probe.Message);
@@ -60,7 +63,7 @@ public sealed class LspRefactorService
             var documentText = await File.ReadAllTextAsync(normalizedPath, cancellationToken);
             var languageId = ResolveLanguageId(probe.Language, normalizedPath);
 
-            await client.InitializeAsync(_config.WorkspaceRootDir, cancellationToken);
+            await client.InitializeAsync(_paths.WorkspaceRootDir, cancellationToken);
             await client.OpenDocumentAsync(normalizedPath, languageId, documentText, cancellationToken);
 
             using var symbols = await client.RequestDocumentSymbolsAsync(normalizedPath, cancellationToken);

@@ -30,9 +30,9 @@ public sealed class SkillCreateDirective
     private readonly string _projectRootDir;
     private readonly string _globalSkillsRootDir;
 
-    public SkillCreateDirective(AppConfig config)
+    public SkillCreateDirective(string workspaceRootDir)
     {
-        var workspaceRoot = Path.GetFullPath(config.WorkspaceRootDir);
+        var workspaceRoot = Path.GetFullPath(workspaceRootDir);
         _projectRootDir = ResolveProjectRoot(workspaceRoot);
 
         var stateRoot = Environment.GetEnvironmentVariable("OMNINODE_STATE_DIR");

@@ -72,38 +72,38 @@ public sealed partial class CommandService
 
     private void ApplyTelegramTalkDefaults(string requestedThinking)
     {
-        var fastModel = string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel;
+        var fastModel = string.IsNullOrWhiteSpace(_providers.GroqModel) ? DefaultGroqPrimaryModel : _providers.GroqModel;
         _telegramLlmPreferences.Profile = "talk";
         _telegramLlmPreferences.Mode = "orchestration";
         _telegramLlmPreferences.SingleProvider = "groq";
         _telegramLlmPreferences.SingleModel = fastModel;
         _telegramLlmPreferences.AutoGroqComplexUpgrade = true;
         _telegramLlmPreferences.OrchestrationProvider = "gemini";
-        _telegramLlmPreferences.OrchestrationModel = _config.GeminiModel;
+        _telegramLlmPreferences.OrchestrationModel = _providers.GeminiModel;
         _telegramLlmPreferences.MultiGroqModel = fastModel;
-        _telegramLlmPreferences.MultiGeminiModel = _config.GeminiModel;
+        _telegramLlmPreferences.MultiGeminiModel = _providers.GeminiModel;
         _telegramLlmPreferences.MultiCopilotModel = DefaultCopilotModel;
-        _telegramLlmPreferences.MultiCerebrasModel = _config.CerebrasModel;
-        _telegramLlmPreferences.MultiCodexModel = _config.CodexModel;
+        _telegramLlmPreferences.MultiCerebrasModel = _providers.CerebrasModel;
+        _telegramLlmPreferences.MultiCodexModel = _providers.CodexModel;
         _telegramLlmPreferences.MultiSummaryProvider = "gemini";
         _telegramLlmPreferences.TalkThinkingLevel = NormalizeThinkingLevel(requestedThinking, "low");
     }
 
     private void ApplyTelegramCodeDefaults(string requestedThinking)
     {
-        var fastModel = string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel;
+        var fastModel = string.IsNullOrWhiteSpace(_providers.GroqModel) ? DefaultGroqPrimaryModel : _providers.GroqModel;
         _telegramLlmPreferences.Profile = "code";
         _telegramLlmPreferences.Mode = "orchestration";
         _telegramLlmPreferences.SingleProvider = "copilot";
         _telegramLlmPreferences.SingleModel = DefaultCopilotModel;
         _telegramLlmPreferences.AutoGroqComplexUpgrade = false;
         _telegramLlmPreferences.OrchestrationProvider = "gemini";
-        _telegramLlmPreferences.OrchestrationModel = _config.GeminiModel;
+        _telegramLlmPreferences.OrchestrationModel = _providers.GeminiModel;
         _telegramLlmPreferences.MultiGroqModel = fastModel;
-        _telegramLlmPreferences.MultiGeminiModel = _config.GeminiModel;
+        _telegramLlmPreferences.MultiGeminiModel = _providers.GeminiModel;
         _telegramLlmPreferences.MultiCopilotModel = DefaultCopilotModel;
-        _telegramLlmPreferences.MultiCerebrasModel = _config.CerebrasModel;
-        _telegramLlmPreferences.MultiCodexModel = _config.CodexModel;
+        _telegramLlmPreferences.MultiCerebrasModel = _providers.CerebrasModel;
+        _telegramLlmPreferences.MultiCodexModel = _providers.CodexModel;
         _telegramLlmPreferences.MultiSummaryProvider = "gemini";
         _telegramLlmPreferences.CodeThinkingLevel = NormalizeThinkingLevel(requestedThinking, "high");
     }
@@ -379,7 +379,7 @@ public sealed partial class CommandService
             if (key == "groq")
             {
                 _telegramLlmPreferences.SingleProvider = "groq";
-                _telegramLlmPreferences.SingleModel = string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel;
+                _telegramLlmPreferences.SingleModel = string.IsNullOrWhiteSpace(_providers.GroqModel) ? DefaultGroqPrimaryModel : _providers.GroqModel;
                 _telegramLlmPreferences.AutoGroqComplexUpgrade = true;
                 return Task.FromResult<string?>($"단일 제공자를 Groq로 바꿨습니다. 현재 모델: {_telegramLlmPreferences.SingleModel}");
             }
@@ -387,7 +387,7 @@ public sealed partial class CommandService
             if (key == "gemini")
             {
                 _telegramLlmPreferences.SingleProvider = "gemini";
-                _telegramLlmPreferences.SingleModel = _config.GeminiModel;
+                _telegramLlmPreferences.SingleModel = _providers.GeminiModel;
                 _telegramLlmPreferences.AutoGroqComplexUpgrade = false;
                 return Task.FromResult<string?>($"단일 제공자를 Gemini로 바꿨습니다. 현재 모델: {_telegramLlmPreferences.SingleModel}");
             }
@@ -403,7 +403,7 @@ public sealed partial class CommandService
             if (key == "cerebras")
             {
                 _telegramLlmPreferences.SingleProvider = "cerebras";
-                _telegramLlmPreferences.SingleModel = _config.CerebrasModel;
+                _telegramLlmPreferences.SingleModel = _providers.CerebrasModel;
                 _telegramLlmPreferences.AutoGroqComplexUpgrade = false;
                 return Task.FromResult<string?>($"단일 제공자를 Cerebras로 바꿨습니다. 현재 모델: {_telegramLlmPreferences.SingleModel}");
             }
@@ -411,7 +411,7 @@ public sealed partial class CommandService
             if (key == "nvidia" || key == "nvidia-nim" || key == "nvidia_nim" || key == "nim")
             {
                 _telegramLlmPreferences.SingleProvider = "nvidia";
-                _telegramLlmPreferences.SingleModel = _config.NvidiaModel;
+                _telegramLlmPreferences.SingleModel = _providers.NvidiaModel;
                 _telegramLlmPreferences.AutoGroqComplexUpgrade = false;
                 return Task.FromResult<string?>($"단일 제공자를 NVIDIA NIM으로 바꿨습니다. 현재 모델: {_telegramLlmPreferences.SingleModel}");
             }
@@ -419,7 +419,7 @@ public sealed partial class CommandService
             if (key == "codex")
             {
                 _telegramLlmPreferences.SingleProvider = "codex";
-                _telegramLlmPreferences.SingleModel = _config.CodexModel;
+                _telegramLlmPreferences.SingleModel = _providers.CodexModel;
                 _telegramLlmPreferences.AutoGroqComplexUpgrade = false;
                 return Task.FromResult<string?>($"단일 제공자를 Codex로 바꿨습니다. 현재 모델: {_telegramLlmPreferences.SingleModel}");
             }
@@ -1472,9 +1472,9 @@ public sealed partial class CommandService
         {
             hasSection = true;
             builder.AppendLine("[Gemini 모델]");
-            builder.AppendLine($"- 기본: {_config.GeminiModel}");
-            builder.AppendLine($"- 현재 단일 선택: {(snapshot.SingleProvider == "gemini" ? snapshot.SingleModel : _config.GeminiModel)}");
-            builder.AppendLine($"- 현재 다중 선택: {(string.IsNullOrWhiteSpace(snapshot.MultiGeminiModel) ? _config.GeminiModel : snapshot.MultiGeminiModel)}");
+            builder.AppendLine($"- 기본: {_providers.GeminiModel}");
+            builder.AppendLine($"- 현재 단일 선택: {(snapshot.SingleProvider == "gemini" ? snapshot.SingleModel : _providers.GeminiModel)}");
+            builder.AppendLine($"- 현재 다중 선택: {(string.IsNullOrWhiteSpace(snapshot.MultiGeminiModel) ? _providers.GeminiModel : snapshot.MultiGeminiModel)}");
             builder.AppendLine("- 대표 지원: gemini-3-flash-preview");
             builder.AppendLine("- 대표 지원: gemini-3.1-flash-lite-preview");
             builder.AppendLine();
@@ -1503,8 +1503,8 @@ public sealed partial class CommandService
         {
             hasSection = true;
             builder.AppendLine("[Cerebras 모델]");
-            builder.AppendLine($"- 기본: {_config.CerebrasModel}");
-            builder.AppendLine($"- 현재 단일 선택: {(snapshot.SingleProvider == "cerebras" ? snapshot.SingleModel : _config.CerebrasModel)}");
+            builder.AppendLine($"- 기본: {_providers.CerebrasModel}");
+            builder.AppendLine($"- 현재 단일 선택: {(snapshot.SingleProvider == "cerebras" ? snapshot.SingleModel : _providers.CerebrasModel)}");
             builder.AppendLine($"- 현재 다중 선택: {snapshot.MultiCerebrasModel}");
             builder.AppendLine();
         }
@@ -1513,13 +1513,13 @@ public sealed partial class CommandService
         {
             hasSection = true;
             builder.AppendLine("[NVIDIA NIM 모델]");
-            builder.AppendLine($"- 기본: {_config.NvidiaModel}");
+            builder.AppendLine($"- 기본: {_providers.NvidiaModel}");
             builder.AppendLine("- 대표 지원: meta/llama-3.3-70b-instruct");
             builder.AppendLine("- 대표 지원: nvidia/llama-3.3-nemotron-super-49b-v1.5");
             builder.AppendLine("- 대표 지원: nvidia/nemotron-3-super-120b-a12b");
             builder.AppendLine("- 대표 지원: openai/gpt-oss-120b");
             builder.AppendLine("- 대표 지원: qwen/qwen3-coder-480b-a35b-instruct");
-            builder.AppendLine($"- 현재 단일 선택: {(snapshot.SingleProvider == "nvidia" ? snapshot.SingleModel : _config.NvidiaModel)}");
+            builder.AppendLine($"- 현재 단일 선택: {(snapshot.SingleProvider == "nvidia" ? snapshot.SingleModel : _providers.NvidiaModel)}");
             builder.AppendLine($"- 현재 다중 선택: {snapshot.MultiNvidiaModel}");
             builder.AppendLine();
         }
@@ -1528,8 +1528,8 @@ public sealed partial class CommandService
         {
             hasSection = true;
             builder.AppendLine("[Codex 모델]");
-            builder.AppendLine($"- 기본: {_config.CodexModel}");
-            builder.AppendLine($"- 현재 단일 선택: {(snapshot.SingleProvider == "codex" ? snapshot.SingleModel : _config.CodexModel)}");
+            builder.AppendLine($"- 기본: {_providers.CodexModel}");
+            builder.AppendLine($"- 현재 단일 선택: {(snapshot.SingleProvider == "codex" ? snapshot.SingleModel : _providers.CodexModel)}");
             builder.AppendLine($"- 현재 다중 선택: {snapshot.MultiCodexModel}");
             builder.AppendLine();
         }
@@ -1560,7 +1560,7 @@ public sealed partial class CommandService
         builder.AppendLine("[Gemini 사용량/추정 과금]");
         builder.AppendLine($"- requests={gemini.Requests}");
         builder.AppendLine($"- prompt_tokens={gemini.PromptTokens}, completion_tokens={gemini.CompletionTokens}, total_tokens={gemini.TotalTokens}");
-        builder.AppendLine($"- input_price=${_config.GeminiInputPricePerMillionUsd:F4}/1M, output_price=${_config.GeminiOutputPricePerMillionUsd:F4}/1M");
+        builder.AppendLine($"- input_price=${_providers.GeminiInputPricePerMillionUsd:F4}/1M, output_price=${_providers.GeminiOutputPricePerMillionUsd:F4}/1M");
         builder.AppendLine($"- estimated_cost_usd=${gemini.EstimatedCostUsd:F6}");
         builder.AppendLine();
 
@@ -1748,7 +1748,7 @@ public sealed partial class CommandService
 
     public TelegramExecutionMetadata GetCurrentTelegramExecutionMetadata()
     {
-        return _telegramExecutionMetadata.Value ?? new TelegramExecutionMetadata();
+        return _executionContext.GetTelegramExecutionMetadata();
     }
 
     private void SetCurrentTelegramExecutionMetadata(
@@ -1758,11 +1758,11 @@ public sealed partial class CommandService
         string? retryStopReason = "-"
     )
     {
-        _telegramExecutionMetadata.Value = new TelegramExecutionMetadata(
+        _executionContext.SetTelegramExecutionMetadata(
             guardFailure,
-            Math.Max(0, retryAttempt),
-            Math.Max(0, retryMaxAttempts),
-            string.IsNullOrWhiteSpace(retryStopReason) ? "-" : retryStopReason.Trim()
+            retryAttempt,
+            retryMaxAttempts,
+            retryStopReason
         );
     }
 
@@ -2219,7 +2219,7 @@ public sealed partial class CommandService
         if (snapshot.SingleProvider == "groq")
         {
             var preferredModel = NormalizeModelSelection(snapshot.SingleModel)
-                                 ?? NormalizeModelSelection(_config.GroqModel)
+                                 ?? NormalizeModelSelection(_providers.GroqModel)
                                  ?? DefaultGroqPrimaryModel;
             var providerPrepared = await PrepareInputForProviderAsync(
                 contextualProfiledInput,
@@ -2259,7 +2259,7 @@ public sealed partial class CommandService
                 streamCallback,
                 cancellationToken
             );
-            if (!shouldSkipDriftRecovery && !_config.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(requestText, singleGroq.Text))
+            if (!shouldSkipDriftRecovery && !_context.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(requestText, singleGroq.Text))
             {
                 var historyBypassInput = BuildHistoryBypassInput(providerPrepared.Text);
                 var recovered = await ExecuteTelegramGroqSingleAsync(
@@ -2360,7 +2360,7 @@ public sealed partial class CommandService
             ResolveSingleChatMaxOutputTokens(requestText),
             streamCallback
         );
-        if (!shouldSkipDriftRecovery && !_config.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(requestText, single.Text))
+        if (!shouldSkipDriftRecovery && !_context.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(requestText, single.Text))
         {
             var historyBypassInput = BuildHistoryBypassInput(providerInput.Text);
             var recovered = await ChatSingleAsync(
@@ -2604,7 +2604,7 @@ public sealed partial class CommandService
 
     private string ResolveTelegramStateKey(ConversationThreadView? thread = null)
     {
-        var contextualKey = (_telegramTurnContext.Value?.SessionKey ?? string.Empty).Trim();
+        var contextualKey = (_executionContext.CurrentTelegramTurn?.SessionKey ?? string.Empty).Trim();
         if (!string.IsNullOrWhiteSpace(contextualKey))
         {
             return contextualKey;
@@ -2857,7 +2857,7 @@ public sealed partial class CommandService
         _ = snapshot;
 
         var selectedModel = NormalizeModelSelection(snapshot.SingleModel)
-            ?? (string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel);
+            ?? (string.IsNullOrWhiteSpace(_providers.GroqModel) ? DefaultGroqPrimaryModel : _providers.GroqModel);
         var maxTokens = thinkingLevel == "high"
             ? TelegramComplexModeMaxOutputTokens
             : TelegramFastModeMaxOutputTokens;
@@ -2894,7 +2894,7 @@ public sealed partial class CommandService
         {
             var groq = await GenerateByProviderSafeAsync(
                 "groq",
-                string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel,
+                string.IsNullOrWhiteSpace(_providers.GroqModel) ? DefaultGroqPrimaryModel : _providers.GroqModel,
                 compressionPrompt,
                 cancellationToken,
                 700
@@ -2903,7 +2903,7 @@ public sealed partial class CommandService
         }
         else if (_llmRouter.HasGeminiApiKey())
         {
-            var gemini = await GenerateByProviderSafeAsync("gemini", _config.GeminiModel, compressionPrompt, cancellationToken, 700);
+            var gemini = await GenerateByProviderSafeAsync("gemini", _providers.GeminiModel, compressionPrompt, cancellationToken, 700);
             compressed = SanitizeChatOutput(gemini.Text);
         }
         else
@@ -4766,7 +4766,7 @@ public sealed partial class CommandService
 
     private string BuildTelegramUpgradeQuotaStatePath()
     {
-        var baseDir = Path.GetDirectoryName(_config.LlmUsageStatePath);
+        var baseDir = Path.GetDirectoryName(_paths.LlmUsageStatePath);
         if (string.IsNullOrWhiteSpace(baseDir))
         {
             var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);

@@ -44,16 +44,16 @@ public sealed partial class CommandService
         var reasoningLikeModel = normalizedModel.Contains("gpt-oss", StringComparison.OrdinalIgnoreCase);
         var codexLikeModel = normalizedModel.Contains("codex", StringComparison.OrdinalIgnoreCase)
             || normalizedModel.Contains("gpt-5", StringComparison.OrdinalIgnoreCase);
-        var baseIterations = Math.Max(2, _config.CodingAgentMaxIterations);
-        var baseActions = Math.Max(1, _config.CodingAgentMaxActionsPerIteration);
-        var copilotActions = Math.Max(1, _config.CodingCopilotMaxActionsPerIteration);
-        var defaultSnapshotEntries = Math.Max(20, _config.CodingWorkspaceSnapshotMaxEntries);
+        var baseIterations = Math.Max(2, _context.CodingAgentMaxIterations);
+        var baseActions = Math.Max(1, _context.CodingAgentMaxActionsPerIteration);
+        var copilotActions = Math.Max(1, _context.CodingCopilotMaxActionsPerIteration);
+        var defaultSnapshotEntries = Math.Max(20, _context.CodingWorkspaceSnapshotMaxEntries);
         var defaultRecentLoopHistory = 4;
         var copilotMini = IsPinnedCopilotModel(normalizedProvider, normalizedModel);
         var defaultPlanTokens = normalizedProvider switch
         {
-            "groq" or "gemini" or "cerebras" or "nvidia" => Math.Clamp(_config.CodingMaxOutputTokens, 1200, 3200),
-            _ => Math.Clamp(_config.CodingMaxOutputTokens, 1200, 2400)
+            "groq" or "gemini" or "cerebras" or "nvidia" => Math.Clamp(_context.CodingMaxOutputTokens, 1200, 3200),
+            _ => Math.Clamp(_context.CodingMaxOutputTokens, 1200, 2400)
         };
 
         var baseProfile = normalizedProvider switch
@@ -73,10 +73,10 @@ public sealed partial class CommandService
                 LoopMaxActions: groqCompoundLike ? Math.Min(baseActions, 2) : Math.Min(baseActions, 3),
                 OneShotMaxActions: groqCompoundLike ? 2 : Math.Max(3, Math.Min(baseActions, 4)),
                 PlanMaxOutputTokens: groqCompoundLike
-                    ? Math.Clamp(_config.CodingMaxOutputTokens, 900, 1400)
+                    ? Math.Clamp(_context.CodingMaxOutputTokens, 900, 1400)
                     : reasoningLikeModel
-                        ? Math.Clamp(_config.CodingMaxOutputTokens, 1000, 1800)
-                        : Math.Clamp(_config.CodingMaxOutputTokens, 1200, 2200),
+                        ? Math.Clamp(_context.CodingMaxOutputTokens, 1000, 1800)
+                        : Math.Clamp(_context.CodingMaxOutputTokens, 1200, 2200),
                 WorkspaceSnapshotMaxEntries: groqCompoundLike ? 18 : Math.Min(defaultSnapshotEntries, 28),
                 RecentLoopHistory: groqCompoundLike ? 2 : 3
             ),
@@ -94,7 +94,7 @@ public sealed partial class CommandService
                 MaxIterations: Math.Clamp(frontendLike || gameLike ? 2 : 3, 1, baseIterations),
                 LoopMaxActions: Math.Min(baseActions, 4),
                 OneShotMaxActions: Math.Min(Math.Max(4, baseActions), 5),
-                PlanMaxOutputTokens: Math.Clamp(_config.CodingMaxOutputTokens, 1200, 1800),
+                PlanMaxOutputTokens: Math.Clamp(_context.CodingMaxOutputTokens, 1200, 1800),
                 WorkspaceSnapshotMaxEntries: 24,
                 RecentLoopHistory: 2
             ),
@@ -117,14 +117,14 @@ public sealed partial class CommandService
                     ? 2
                     : Math.Min(Math.Max(4, baseActions), Math.Max(4, copilotActions)),
                 PlanMaxOutputTokens: copilotMini
-                    ? Math.Clamp(_config.CodingMaxOutputTokens, 1000, 1500)
-                    : Math.Clamp(_config.CodingMaxOutputTokens, 1200, 2200),
+                    ? Math.Clamp(_context.CodingMaxOutputTokens, 1000, 1500)
+                    : Math.Clamp(_context.CodingMaxOutputTokens, 1200, 2200),
                 WorkspaceSnapshotMaxEntries: copilotMini
                     ? Math.Min(defaultSnapshotEntries, 24)
                     : Math.Min(defaultSnapshotEntries, 48),
                 RecentLoopHistory: copilotMini
                     ? 1
-                    : Math.Max(1, _config.CodingRecentLoopHistoryForCopilot)
+                    : Math.Max(1, _context.CodingRecentLoopHistoryForCopilot)
             ),
             "gemini" => new CodingExecutionProfile(
                 normalizedProvider,
@@ -141,8 +141,8 @@ public sealed partial class CommandService
                 LoopMaxActions: baseActions,
                 OneShotMaxActions: Math.Max(4, baseActions),
                 PlanMaxOutputTokens: flashLike
-                    ? Math.Clamp(_config.CodingMaxOutputTokens, 1200, 2200)
-                    : Math.Clamp(_config.CodingMaxOutputTokens, 1200, 3200),
+                    ? Math.Clamp(_context.CodingMaxOutputTokens, 1200, 2200)
+                    : Math.Clamp(_context.CodingMaxOutputTokens, 1200, 3200),
                 WorkspaceSnapshotMaxEntries: flashLike ? Math.Min(defaultSnapshotEntries, 36) : defaultSnapshotEntries,
                 RecentLoopHistory: flashLike ? 3 : defaultRecentLoopHistory
             ),
@@ -160,7 +160,7 @@ public sealed partial class CommandService
                 MaxIterations: Math.Min(baseIterations, 3),
                 LoopMaxActions: Math.Min(baseActions, 3),
                 OneShotMaxActions: Math.Max(3, Math.Min(baseActions, 4)),
-                PlanMaxOutputTokens: Math.Clamp(_config.CodingMaxOutputTokens, 1000, 1800),
+                PlanMaxOutputTokens: Math.Clamp(_context.CodingMaxOutputTokens, 1000, 1800),
                 WorkspaceSnapshotMaxEntries: Math.Min(defaultSnapshotEntries, 24),
                 RecentLoopHistory: 2
             ),
@@ -174,11 +174,11 @@ public sealed partial class CommandService
                 PreferBundleFallback: multiFileLike,
                 PreferDirectRecovery: false,
                 EnableGameScaffoldFallback: false,
-                RequestTimeoutSeconds: Math.Max(360, _config.NvidiaTimeoutSec * 2),
+                RequestTimeoutSeconds: Math.Max(360, _providers.NvidiaTimeoutSec * 2),
                 MaxIterations: Math.Min(baseIterations, 3),
                 LoopMaxActions: Math.Min(baseActions, 3),
                 OneShotMaxActions: Math.Max(3, Math.Min(baseActions, 4)),
-                PlanMaxOutputTokens: Math.Clamp(_config.CodingMaxOutputTokens, 1200, 2400),
+                PlanMaxOutputTokens: Math.Clamp(_context.CodingMaxOutputTokens, 1200, 2400),
                 WorkspaceSnapshotMaxEntries: Math.Min(defaultSnapshotEntries, 28),
                 RecentLoopHistory: 3
             ),
@@ -382,7 +382,7 @@ public sealed partial class CommandService
 
     private bool ShouldUseOneShotMode(CodingExecutionProfile profile, string objective, string languageHint)
     {
-        if (!_config.CodingEnableOneShotUiClone || !profile.AllowUiOneShot)
+        if (!_context.CodingEnableOneShotUiClone || !profile.AllowUiOneShot)
         {
             return false;
         }
@@ -415,7 +415,7 @@ public sealed partial class CommandService
 
     private int ResolveDirectGenerationMaxOutputTokens(CodingExecutionProfile profile, bool bundleMode)
     {
-        var configured = Math.Max(900, _config.CodingMaxOutputTokens);
+        var configured = Math.Max(900, _context.CodingMaxOutputTokens);
         return profile.Provider switch
         {
             "groq" when IsGroqCompoundLikeCodingModel(profile.Model) => Math.Min(configured, bundleMode ? 1400 : 1200),
@@ -434,7 +434,7 @@ public sealed partial class CommandService
 
     private int ResolveDraftGenerationMaxOutputTokens(CodingExecutionProfile profile)
     {
-        var configured = Math.Max(1000, _config.CodingMaxOutputTokens);
+        var configured = Math.Max(1000, _context.CodingMaxOutputTokens);
         return profile.Provider switch
         {
             "groq" when IsGroqCompoundLikeCodingModel(profile.Model) => Math.Min(configured, 1400),

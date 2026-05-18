@@ -13,13 +13,21 @@ public sealed partial class CommandService
         string? standardInput = null
     )
     {
+        if (!IsDynamicCodeExecutionEnabled())
+        {
+            return new ShellRunResult(126, string.Empty, BuildDynamicCodeDisabledMessage(), false);
+        }
+
         var installLogs = new List<string>();
         var installErrors = new List<string>();
 
-        await EnsureWorkspaceDependenciesAsync(command, workDir, installLogs, installErrors, cancellationToken);
+        if (_execution.EnableAutoInstall)
+        {
+            await EnsureWorkspaceDependenciesAsync(command, workDir, installLogs, installErrors, cancellationToken);
+        }
         var shell = await RunWorkspaceCommandAsync(command, workDir, cancellationToken, standardInput);
 
-        if (!shell.TimedOut && shell.ExitCode != 0)
+        if (_execution.EnableAutoInstall && !shell.TimedOut && shell.ExitCode != 0)
         {
             var retried = await TryInstallMissingDependencyFromErrorAsync(command, workDir, shell.StdErr, installLogs, installErrors, cancellationToken);
             if (retried)
@@ -1364,7 +1372,7 @@ public sealed partial class CommandService
         }
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(20, _config.CodeExecutionTimeoutSec)));
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(20, _execution.CodeExecutionTimeoutSec)));
         var stdoutTask = process.StandardOutput.ReadToEndAsync(timeoutCts.Token);
         var stderrTask = process.StandardError.ReadToEndAsync(timeoutCts.Token);
 

@@ -36,6 +36,7 @@
 #define IO_BUFFER_SIZE 4096
 
 static volatile sig_atomic_t g_should_stop = 0;
+static char g_auth_token[129] = {0};
 #ifdef _WIN32
 static HANDLE g_lock_handle = NULL;
 #else
@@ -48,6 +49,59 @@ static void on_signal(int signo) {
     (void)signo;
     g_should_stop = 1;
 }
+
+static bool is_tcp_endpoint(const char *value) {
+    const char *tcp_prefix = "tcp://";
+    return value != NULL && strncmp(value, tcp_prefix, strlen(tcp_prefix)) == 0;
+}
+
+#ifdef _WIN32
+static bool write_all(SOCKET fd, const char *buffer, size_t length) {
+    size_t written = 0;
+    while (written < length) {
+        int result = send(fd, buffer + written, (int)(length - written), 0);
+        if (result < 0) {
+            int error_code = WSAGetLastError();
+            if (error_code == WSAEINTR || error_code == WSAEWOULDBLOCK) {
+                continue;
+            }
+            return false;
+        }
+
+        if (result == 0) {
+            return false;
+        }
+
+        written += (size_t)result;
+    }
+
+    return true;
+}
+#else
+static bool write_all(int fd, const char *buffer, size_t length) {
+    size_t written = 0;
+    while (written < length) {
+        ssize_t result = send(fd, buffer + written, length - written, 0);
+        if (result < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                continue;
+            }
+            return false;
+        }
+
+        if (result == 0) {
+            return false;
+        }
+
+        written += (size_t)result;
+    }
+
+    return true;
+}
+#endif
 
 #ifndef _WIN32
 static int set_nonblocking(int fd) {
@@ -196,6 +250,70 @@ static bool validate_peer_uid(int client_fd) {
 }
 #endif
 
+static bool init_auth_token(void) {
+    const char *env = getenv("OMNINODE_CORE_AUTH_TOKEN");
+    if (env == NULL || *env == '\0') {
+        return false;
+    }
+
+    size_t len = strlen(env);
+    if (len >= sizeof(g_auth_token)) {
+        return false;
+    }
+
+    memcpy(g_auth_token, env, len);
+    g_auth_token[len] = '\0';
+    return true;
+}
+
+static char *next_token(char **cursor) {
+    char *start = NULL;
+    if (cursor == NULL || *cursor == NULL) {
+        return NULL;
+    }
+
+    while (**cursor != '\0' && isspace((unsigned char)**cursor)) {
+        (*cursor)++;
+    }
+
+    if (**cursor == '\0') {
+        return NULL;
+    }
+
+    start = *cursor;
+    while (**cursor != '\0' && !isspace((unsigned char)**cursor)) {
+        (*cursor)++;
+    }
+
+    if (**cursor != '\0') {
+        **cursor = '\0';
+        (*cursor)++;
+    }
+
+    return start;
+}
+
+static bool resolve_posix_socket_path(char *out, size_t out_len) {
+    const char *env = getenv("OMNINODE_CORE_SOCKET_PATH");
+    if (env != NULL && *env != '\0' && !is_tcp_endpoint(env)) {
+        size_t len = strlen(env);
+        if (len >= out_len) {
+            return false;
+        }
+
+        memcpy(out, env, len);
+        out[len] = '\0';
+        return true;
+    }
+
+    size_t len = snprintf(out, out_len, SOCKET_PATH_TEMPLATE, (unsigned int)getuid());
+    if (len == 0 || len >= out_len) {
+        return false;
+    }
+
+    return true;
+}
+
 #ifdef _WIN32
 static int set_nonblocking(SOCKET fd) {
     u_long mode = 1;
@@ -289,77 +407,6 @@ static SOCKET setup_server_socket(unsigned short port) {
 }
 #endif
 
-static bool extract_json_string(const char *json, const char *key, char *out, size_t out_len) {
-    char pattern[128];
-    const char *p = NULL;
-    size_t i = 0;
-
-    if (out_len == 0) {
-        return false;
-    }
-
-    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
-    p = strstr(json, pattern);
-    if (p == NULL) {
-        return false;
-    }
-
-    p = strchr(p, ':');
-    if (p == NULL) {
-        return false;
-    }
-    p++;
-
-    while (*p != '\0' && isspace((unsigned char)*p)) {
-        p++;
-    }
-
-    if (*p != '"') {
-        return false;
-    }
-    p++;
-
-    while (*p != '\0' && *p != '"' && i + 1 < out_len) {
-        if (*p == '\\' && p[1] != '\0') {
-            p++;
-        }
-        out[i++] = *p++;
-    }
-
-    out[i] = '\0';
-    return *p == '"';
-}
-
-static bool extract_json_int64(const char *json, const char *key, long long *value) {
-    char pattern[128];
-    const char *p = NULL;
-    char *endptr = NULL;
-
-    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
-    p = strstr(json, pattern);
-    if (p == NULL) {
-        return false;
-    }
-
-    p = strchr(p, ':');
-    if (p == NULL) {
-        return false;
-    }
-    p++;
-
-    while (*p != '\0' && isspace((unsigned char)*p)) {
-        p++;
-    }
-
-    errno = 0;
-    *value = strtoll(p, &endptr, 10);
-    if (errno != 0 || endptr == p) {
-        return false;
-    }
-
-    return true;
-}
-
 static long get_mem_free_mb(void) {
 #ifdef _WIN32
     MEMORYSTATUSEX status;
@@ -401,7 +448,7 @@ static double get_cpu_load_1m(void) {
 }
 
 static void build_error_response(char *out, size_t out_len, const char *message) {
-    snprintf(out, out_len, "{\"status\":\"error\",\"message\":\"%s\"}", message);
+    snprintf(out, out_len, "status=error message=%s", message);
 }
 
 static bool terminate_process_by_pid(long long pid, char *error_msg, size_t error_msg_len) {
@@ -430,11 +477,89 @@ static bool terminate_process_by_pid(long long pid, char *error_msg, size_t erro
 #endif
 }
 
+static bool parse_command_request(const char *request, char *action, size_t action_len, long long *pid) {
+    char line[IO_BUFFER_SIZE];
+    size_t line_len = 0;
+    char *endptr = NULL;
+    char *cursor = NULL;
+    char *command = NULL;
+    char *auth = NULL;
+    char *pid_text = NULL;
+
+    if (action_len == 0) {
+        return false;
+    }
+
+    if (request == NULL) {
+        return false;
+    }
+
+    line_len = strcspn(request, "\r\n");
+    if (line_len == 0 || line_len >= sizeof(line)) {
+        return false;
+    }
+
+    memcpy(line, request, line_len);
+    line[line_len] = '\0';
+
+    cursor = line;
+    while (*cursor != '\0' && isspace((unsigned char)*cursor)) {
+        cursor++;
+    }
+
+    char *tail = cursor + strlen(cursor);
+    while (tail > cursor && isspace((unsigned char)tail[-1])) {
+        tail--;
+    }
+    *tail = '\0';
+
+    command = next_token(&cursor);
+    if (command == NULL) {
+        return false;
+    }
+
+    if (strcmp(command, "get_metrics") == 0 || strcmp(command, "metrics") == 0) {
+        auth = next_token(&cursor);
+        if (auth == NULL || strcmp(auth, g_auth_token) != 0 || next_token(&cursor) != NULL) {
+            return false;
+        }
+        snprintf(action, action_len, "get_metrics");
+        if (pid != NULL) {
+            *pid = 0;
+        }
+        return true;
+    }
+
+    if (strcmp(command, "kill") == 0) {
+        auth = next_token(&cursor);
+        pid_text = next_token(&cursor);
+        if (auth == NULL || pid_text == NULL || strcmp(auth, g_auth_token) != 0 || next_token(&cursor) != NULL) {
+            return false;
+        }
+
+        errno = 0;
+        long long parsed_pid = strtoll(pid_text, &endptr, 10);
+
+        if (errno != 0 || endptr == pid_text || (endptr != NULL && *endptr != '\0') || parsed_pid <= 1) {
+            return false;
+        }
+
+        snprintf(action, action_len, "kill");
+        if (pid != NULL) {
+            *pid = parsed_pid;
+        }
+        return true;
+    }
+
+    return false;
+}
+
 static void handle_request(const char *request, char *response, size_t response_len) {
     char action[64] = {0};
+    long long pid = 0;
 
-    if (!extract_json_string(request, "action", action, sizeof(action))) {
-        build_error_response(response, response_len, "missing action");
+    if (!parse_command_request(request, action, sizeof(action), &pid)) {
+        build_error_response(response, response_len, "invalid command");
         return;
     }
 
@@ -444,7 +569,7 @@ static void handle_request(const char *request, char *response, size_t response_
         snprintf(
             response,
             response_len,
-            "{\"status\":\"ok\",\"cpu_usage\":%.2f,\"mem_free_mb\":%ld}",
+            "status=ok cpu_usage=%.2f mem_free_mb=%ld",
             cpu_load,
             mem_free_mb
         );
@@ -452,26 +577,17 @@ static void handle_request(const char *request, char *response, size_t response_
     }
 
     if (strcmp(action, "kill") == 0) {
-        long long pid = 0;
-        if (!extract_json_int64(request, "pid", &pid)) {
-            build_error_response(response, response_len, "missing pid");
-            return;
-        }
-        if (pid <= 1) {
-            build_error_response(response, response_len, "invalid pid");
-            return;
-        }
         char error_msg[128];
         if (!terminate_process_by_pid(pid, error_msg, sizeof(error_msg))) {
             build_error_response(response, response_len, error_msg);
             return;
         }
 
-        snprintf(response, response_len, "{\"status\":\"ok\",\"killed_pid\":%lld}", pid);
+        snprintf(response, response_len, "status=ok killed_pid=%lld", pid);
         return;
     }
 
-    build_error_response(response, response_len, "unknown action");
+    build_error_response(response, response_len, "unknown command");
 }
 
 #ifndef _WIN32
@@ -506,10 +622,24 @@ int main(void) {
         return 1;
     }
 
+    if (!init_auth_token()) {
+        fprintf(stderr, "missing or invalid OMNINODE_CORE_AUTH_TOKEN\n");
+        if (g_lock_fd >= 0) {
+            close(g_lock_fd);
+        }
+        return 1;
+    }
+
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
 
-    snprintf(g_socket_path, sizeof(g_socket_path), SOCKET_PATH_TEMPLATE, (unsigned int)uid);
+    if (!resolve_posix_socket_path(g_socket_path, sizeof(g_socket_path))) {
+        fprintf(stderr, "invalid OMNINODE_CORE_SOCKET_PATH\n");
+        if (g_lock_fd >= 0) {
+            close(g_lock_fd);
+        }
+        return 1;
+    }
     server_fd = setup_server_socket(g_socket_path);
     if (server_fd < 0) {
         if (g_lock_fd >= 0) {
@@ -568,7 +698,7 @@ int main(void) {
 
                 if (!register_client(poll_fds, client_fd)) {
                     const char *busy_msg = "{\"status\":\"error\",\"message\":\"server busy\"}\n";
-                    send(client_fd, busy_msg, strlen(busy_msg), 0);
+                    write_all(client_fd, busy_msg, strlen(busy_msg));
                     close(client_fd);
                 }
             }
@@ -601,8 +731,8 @@ int main(void) {
             input[n] = '\0';
             memset(output, 0, sizeof(output));
             handle_request(input, output, sizeof(output));
-            send(entry->fd, output, strlen(output), 0);
-            send(entry->fd, "\n", 1, 0);
+            write_all(entry->fd, output, strlen(output));
+            write_all(entry->fd, "\n", 1);
             close_client(entry);
         }
     }
@@ -652,6 +782,12 @@ int main(void) {
     }
 
     if (acquire_single_instance_lock() != 0) {
+        WSACleanup();
+        return 1;
+    }
+
+    if (!init_auth_token()) {
+        fprintf(stderr, "missing or invalid OMNINODE_CORE_AUTH_TOKEN\n");
         WSACleanup();
         return 1;
     }

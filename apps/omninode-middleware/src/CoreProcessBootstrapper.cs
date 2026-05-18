@@ -5,13 +5,15 @@ namespace OmniNode.Middleware;
 
 public sealed class CoreProcessBootstrapper
 {
-    private readonly AppConfig _config;
+    private readonly PathOptions _paths;
     private readonly UdsCoreClient _coreClient;
+    private readonly string _coreAuthToken;
 
-    public CoreProcessBootstrapper(AppConfig config, UdsCoreClient coreClient)
+    public CoreProcessBootstrapper(PathOptions paths, UdsCoreClient coreClient, string coreAuthToken)
     {
-        _config = config;
+        _paths = paths;
         _coreClient = coreClient;
+        _coreAuthToken = coreAuthToken;
     }
 
     public async Task EnsureRunningAsync(CancellationToken cancellationToken)
@@ -36,8 +38,9 @@ public sealed class CoreProcessBootstrapper
             CreateNoWindow = true,
             WorkingDirectory = workingDirectory
         };
-        startInfo.Environment["OMNINODE_CORE_SOCKET_PATH"] = _config.CoreSocketPath;
-        if (UdsCoreClient.TryGetTcpPort(_config.CoreSocketPath, out var port))
+        startInfo.Environment["OMNINODE_CORE_SOCKET_PATH"] = _paths.CoreSocketPath;
+        startInfo.Environment["OMNINODE_CORE_AUTH_TOKEN"] = _coreAuthToken;
+        if (UdsCoreClient.TryGetTcpPort(_paths.CoreSocketPath, out var port))
         {
             startInfo.Environment["OMNINODE_CORE_TCP_PORT"] = port.ToString(CultureInfo.InvariantCulture);
         }
@@ -55,13 +58,13 @@ public sealed class CoreProcessBootstrapper
             await Task.Delay(250, cancellationToken);
             if (await IsCoreResponsiveAsync(cancellationToken))
             {
-                Console.WriteLine($"[core-bootstrap] core ready endpoint={_config.CoreSocketPath}");
+                Console.WriteLine($"[core-bootstrap] core ready endpoint={_paths.CoreSocketPath}");
                 return;
             }
         }
 
         Console.Error.WriteLine(
-            $"[core-bootstrap] core start attempted but endpoint is still unavailable (endpoint={_config.CoreSocketPath}, binary={binaryPath})"
+            $"[core-bootstrap] core start attempted but endpoint is still unavailable (endpoint={_paths.CoreSocketPath}, binary={binaryPath})"
         );
     }
 

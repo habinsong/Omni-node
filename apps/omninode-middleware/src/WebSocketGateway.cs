@@ -45,7 +45,10 @@ public sealed partial class WebSocketGateway
     {
         Timeout = Timeout.InfiniteTimeSpan
     };
-    private readonly AppConfig _config;
+    private readonly ProviderOptions _providers;
+    private readonly GatewayOptions _gatewayOptions;
+    private readonly PathOptions _paths;
+    private readonly SecurityOptions _securityOptions;
     private readonly int _port;
     private readonly IAuthSessionStore _sessionManager;
     private readonly TelegramClient _telegramClient;
@@ -117,7 +120,10 @@ public sealed partial class WebSocketGateway
     );
 
     public WebSocketGateway(
-        AppConfig config,
+        ProviderOptions providers,
+        GatewayOptions gatewayOptions,
+        PathOptions paths,
+        SecurityOptions securityOptions,
         int port,
         IAuthSessionStore sessionManager,
         TelegramClient telegramClient,
@@ -143,7 +149,10 @@ public sealed partial class WebSocketGateway
         AuditLogger auditLogger
     )
     {
-        _config = config;
+        _providers = providers;
+        _gatewayOptions = gatewayOptions;
+        _paths = paths;
+        _securityOptions = securityOptions;
         _port = port;
         _sessionManager = sessionManager;
         _telegramClient = telegramClient;
@@ -165,9 +174,9 @@ public sealed partial class WebSocketGateway
         _cerebrasModelCatalog = cerebrasModelCatalog;
         _guardRetryTimelineStore = guardRetryTimelineStore;
         _auditLogger = auditLogger;
-        _staticFileEndpoint = new HttpStaticFileEndpoint(config.DashboardIndexPath);
-        _apiEndpoint = new GatewayApiEndpoint(guardRetryTimelineStore, conversationService, config);
-        _authSessionGateway = new AuthSessionGateway(sessionManager, telegramClient, config.EnableLocalOtpFallback);
+        _staticFileEndpoint = new HttpStaticFileEndpoint(paths.DashboardIndexPath);
+        _apiEndpoint = new GatewayApiEndpoint(guardRetryTimelineStore, conversationService, paths);
+        _authSessionGateway = new AuthSessionGateway(sessionManager, telegramClient, securityOptions.EnableLocalOtpFallback);
         _setupCommandDispatcher = new WsSetupCommandDispatcher(
             settingsService,
             groqModelCatalog,
@@ -256,7 +265,7 @@ public sealed partial class WebSocketGateway
         _contextCommandDispatcher = new WsContextCommandDispatcher(
             contextService,
             conversationService,
-            new SkillFileService(_config),
+            new SkillFileService(_paths),
             SendProjectContextAsync,
             SendSkillsListAsync,
             SendCommandsListAsync
@@ -714,7 +723,7 @@ public sealed partial class WebSocketGateway
     private async Task SendCerebrasModelsAsync(WebSocket socket, SemaphoreSlim sendLock, CancellationToken cancellationToken)
     {
         var models = await _cerebrasModelCatalog.GetModelsAsync(cancellationToken);
-        var selectedModel = _config.CerebrasModel ?? string.Empty;
+        var selectedModel = _providers.CerebrasModel ?? string.Empty;
         var builder = new StringBuilder();
         builder.Append("{\"type\":\"cerebras_models\",");
         builder.Append($"\"selected\":\"{EscapeJson(selectedModel)}\",");
@@ -864,8 +873,8 @@ public sealed partial class WebSocketGateway
         builder.Append($"\"prompt_tokens\":{gemini.PromptTokens},");
         builder.Append($"\"completion_tokens\":{gemini.CompletionTokens},");
         builder.Append($"\"total_tokens\":{gemini.TotalTokens},");
-        builder.Append($"\"input_price_per_million_usd\":\"{_config.GeminiInputPricePerMillionUsd.ToString("F4", CultureInfo.InvariantCulture)}\",");
-        builder.Append($"\"output_price_per_million_usd\":\"{_config.GeminiOutputPricePerMillionUsd.ToString("F4", CultureInfo.InvariantCulture)}\",");
+        builder.Append($"\"input_price_per_million_usd\":\"{_providers.GeminiInputPricePerMillionUsd.ToString("F4", CultureInfo.InvariantCulture)}\",");
+        builder.Append($"\"output_price_per_million_usd\":\"{_providers.GeminiOutputPricePerMillionUsd.ToString("F4", CultureInfo.InvariantCulture)}\",");
         builder.Append($"\"estimated_cost_usd\":\"{gemini.EstimatedCostUsd.ToString("F6", CultureInfo.InvariantCulture)}\"");
         builder.Append("},");
         builder.Append("\"copilotPremium\":{");
@@ -3180,8 +3189,8 @@ public sealed partial class WebSocketGateway
 
         var targetConfigs = new (string Name, string Url)[]
         {
-            ("webhook", _config.GuardAlertWebhookUrl),
-            ("log_collector", _config.GuardAlertLogCollectorUrl)
+            ("webhook", _securityOptions.GuardAlertWebhookUrl),
+            ("log_collector", _securityOptions.GuardAlertLogCollectorUrl)
         };
         var targetResults = new List<GuardAlertDispatchTargetResult>(targetConfigs.Length);
 
@@ -3278,8 +3287,8 @@ public sealed partial class WebSocketGateway
         CancellationToken cancellationToken
     )
     {
-        var maxAttempts = Math.Max(1, _config.GuardAlertDispatchMaxAttempts);
-        var timeoutMs = Math.Clamp(_config.GuardAlertDispatchTimeoutMs, 500, 120000);
+        var maxAttempts = Math.Max(1, _securityOptions.GuardAlertDispatchMaxAttempts);
+        var timeoutMs = Math.Clamp(_securityOptions.GuardAlertDispatchTimeoutMs, 500, 120000);
         var lastError = "dispatch_failed";
         int? lastStatusCode = null;
 

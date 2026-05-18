@@ -61,7 +61,7 @@ public sealed partial class CommandService
 
         var prompt = BuildWebNeedDecisionPrompt(normalizedInput);
         using var decisionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        decisionCts.CancelAfter(TimeSpan.FromMilliseconds(_config.WebDecisionTimeoutMs));
+        decisionCts.CancelAfter(TimeSpan.FromMilliseconds(_context.WebDecisionTimeoutMs));
         LlmSingleChatResult decision;
         try
         {
@@ -230,7 +230,7 @@ public sealed partial class CommandService
                 prompt,
                 model,
                 maxOutputTokens,
-                _config.GeminiWebTimeoutMs,
+                _context.GeminiWebTimeoutMs,
                 includeGoogleSearch,
                 deltaCallback,
                 cancellationToken
@@ -337,7 +337,7 @@ public sealed partial class CommandService
             prompt,
             model,
             maxOutputTokens,
-            _config.GeminiWebTimeoutMs,
+            _context.GeminiWebTimeoutMs,
             deltaCallback,
             cancellationToken
         );
@@ -348,7 +348,7 @@ public sealed partial class CommandService
                 prompt,
                 model,
                 maxOutputTokens,
-                _config.GeminiWebTimeoutMs,
+                _context.GeminiWebTimeoutMs,
                 deltaCallback,
                 cancellationToken
             );
@@ -3026,10 +3026,10 @@ public sealed partial class CommandService
         var normalized = (input ?? string.Empty).Trim().ToLowerInvariant();
         if (ContainsAny(normalized, "뉴스", "news", "헤드라인", "속보"))
         {
-            return Math.Clamp(_config.WebDefaultNewsCount, 1, 20);
+            return Math.Clamp(_context.WebDefaultNewsCount, 1, 20);
         }
 
-        return Math.Clamp(_config.WebDefaultListCount, 1, 20);
+        return Math.Clamp(_context.WebDefaultListCount, 1, 20);
     }
 
     private int ResolveGeminiWebAnswerMaxOutputTokens(string input)
@@ -3231,7 +3231,7 @@ public sealed partial class CommandService
             return new SearchRequirementDecision(false, "heuristic:false:non_web", string.Empty, string.Empty);
         }
 
-        if (_config.EnableFastWebPipeline)
+        if (_context.EnableFastWebPipeline)
         {
             var heuristicNeedWeb = LooksLikeExplicitWebLookupQuestion(normalized) || LooksLikeRealtimeQuestion(normalized);
             return new SearchRequirementDecision(
@@ -3337,18 +3337,18 @@ public sealed partial class CommandService
 
     private string ResolveSearchLlmModel()
     {
-        var configured = NormalizeModelSelection(_config.GeminiSearchModel);
+        var configured = NormalizeModelSelection(_providers.GeminiSearchModel);
         if (!string.IsNullOrWhiteSpace(configured))
         {
             return configured!;
         }
 
-        return _config.GeminiModel;
+        return _providers.GeminiModel;
     }
 
     private string ResolveUrlContextLlmModel()
     {
-        var configured = NormalizeModelSelection(_config.GeminiModel);
+        var configured = NormalizeModelSelection(_providers.GeminiModel);
         if (!string.IsNullOrWhiteSpace(configured))
         {
             return configured!;

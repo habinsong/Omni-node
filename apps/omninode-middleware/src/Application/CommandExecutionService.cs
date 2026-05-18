@@ -3,10 +3,12 @@ namespace OmniNode.Middleware;
 public sealed class CommandExecutionService : ICommandExecutionService
 {
     private readonly CommandService _inner;
+    private readonly ExecutionContext _executionContext;
 
-    public CommandExecutionService(CommandService inner)
+    public CommandExecutionService(CommandService inner, ExecutionContext executionContext)
     {
         _inner = inner;
+        _executionContext = executionContext;
     }
 
     public Task<string> ExecuteAsync(
@@ -25,6 +27,6 @@ public sealed class CommandExecutionService : ICommandExecutionService
 
     public TelegramExecutionMetadata GetCurrentTelegramExecutionMetadata()
     {
-        return _inner.GetCurrentTelegramExecutionMetadata();
+        return _executionContext.GetTelegramExecutionMetadata();
     }
 }

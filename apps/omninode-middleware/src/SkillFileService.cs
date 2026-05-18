@@ -38,9 +38,9 @@ public sealed class SkillFileService
     private readonly string _projectRootDir;
     private readonly string _globalSkillsRootDir;
 
-    public SkillFileService(AppConfig config)
+    public SkillFileService(PathOptions paths)
     {
-        var workspaceRoot = Path.GetFullPath(config.WorkspaceRootDir);
+        var workspaceRoot = Path.GetFullPath(paths.WorkspaceRootDir);
         _projectRootDir = ResolveProjectRoot(workspaceRoot);
 
         var stateRoot = Environment.GetEnvironmentVariable("OMNINODE_STATE_DIR");

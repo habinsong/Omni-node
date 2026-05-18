@@ -385,7 +385,12 @@ public sealed class SessionManager : IAuthSessionStore
                 return;
             }
 
-            var json = File.ReadAllText(_statePath, Encoding.UTF8);
+            var json = AtomicFileStore.ReadAllTextWithBackup(
+                _statePath,
+                IsValidAuthSessionStateJson,
+                Encoding.UTF8,
+                "session"
+            );
             if (string.IsNullOrWhiteSpace(json))
             {
                 return;
@@ -454,6 +459,23 @@ public sealed class SessionManager : IAuthSessionStore
             {
                 Console.Error.WriteLine($"[session] save failed: {ex.Message}");
             }
+        }
+    }
+
+    private static bool IsValidAuthSessionStateJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return false;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize(json, OmniJsonContext.Default.AuthSessionState) != null;
+        }
+        catch
+        {
+            return false;
         }
     }
 

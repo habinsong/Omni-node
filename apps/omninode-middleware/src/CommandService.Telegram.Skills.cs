@@ -20,7 +20,7 @@ public sealed partial class CommandService
             {
                 return _skillAliasesStatePath!;
             }
-            var stateBaseDir = Path.GetDirectoryName(_config.ConversationStatePath);
+            var stateBaseDir = Path.GetDirectoryName(_paths.ConversationStatePath);
             if (string.IsNullOrWhiteSpace(stateBaseDir))
             {
                 var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -701,7 +701,7 @@ public sealed partial class CommandService
             return "-";
         }
 
-        var projectRoot = Path.GetFullPath(_config.WorkspaceRootDir);
+        var projectRoot = Path.GetFullPath(_paths.WorkspaceRootDir);
         try
         {
             if (normalized.StartsWith(projectRoot, StringComparison.Ordinal))

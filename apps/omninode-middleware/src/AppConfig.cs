@@ -67,6 +67,7 @@ public sealed class AppConfig
     public string WorkspaceRootDir { get; init; } = ResolveDefaultWorkspaceRootDir();
     public string RoutineStatePath { get; init; } = ResolveDefaultStateFilePath("routines.json");
     public string RoutinePromptDir { get; init; } = Path.Combine(ResolveDefaultWorkspaceRootDir(), "_routine_prompts");
+    public bool EnableAutoInstall { get; init; }
     public int CodingAgentMaxIterations { get; init; } = 6;
     public int CodingAgentMaxActionsPerIteration { get; init; } = 8;
     public int CodingCopilotMaxActionsPerIteration { get; init; } = 2;
@@ -87,10 +88,10 @@ public sealed class AppConfig
     public int GeminiWebTimeoutMs { get; init; } = 30000;
     public int WebDefaultNewsCount { get; init; } = 10;
     public int WebDefaultListCount { get; init; } = 5;
-    public int WebSocketMaxMessageBytes { get; init; } = 157286400;
     public int WebSocketCommandsPerMinute { get; init; } = 30;
     public int MetricsPushIntervalSec { get; init; } = 2;
     public int CommandMaxLength { get; init; } = 800;
+    public int WebSocketMaxMessageBytes { get; init; } = DefaultWebSocketMaxMessageBytes;
     public string AuditLogPath { get; init; } = ResolveDefaultStateFilePath("audit.log");
     public string GuardAlertWebhookUrl { get; init; } = string.Empty;
     public string GuardAlertLogCollectorUrl { get; init; } = string.Empty;
@@ -117,6 +118,131 @@ public sealed class AppConfig
     public int RefactorPreviewTtlMinutes { get; init; } = 120;
     public string ProjectContextFallbackFilenamesCsv { get; init; } = "TEAM_GUIDE.md,.agents.md";
     public int ProjectContextMaxBytes { get; init; } = 65536;
+
+    private const int DefaultWebSocketMaxMessageBytes = 16 * 1024 * 1024;
+
+    public ProviderOptions Providers => new(
+        CopilotCliBinary,
+        CopilotDirectBinary,
+        CopilotModel,
+        CodexBinary,
+        CodexModel,
+        PythonBinary,
+        GroqApiKey,
+        GroqBaseUrl,
+        GroqModel,
+        GeminiApiKey,
+        GeminiBaseUrl,
+        GeminiModel,
+        GeminiSearchModel,
+        CerebrasBaseUrl,
+        CerebrasModel,
+        CerebrasTimeoutSec,
+        CerebrasKeychainService,
+        CerebrasKeychainAccount,
+        CerebrasApiKey,
+        NvidiaBaseUrl,
+        NvidiaModel,
+        NvidiaTimeoutSec,
+        NvidiaKeychainService,
+        NvidiaKeychainAccount,
+        NvidiaApiKey,
+        CodexApiKey,
+        SttProvider,
+        SttBaseUrl,
+        SttModel,
+        SttApiKey,
+        GeminiInputPricePerMillionUsd,
+        GeminiOutputPricePerMillionUsd
+    );
+
+    public PathOptions Paths => new(
+        CoreSocketPath,
+        DashboardIndexPath,
+        LlmUsageStatePath,
+        CopilotUsageStatePath,
+        ConversationStatePath,
+        AuthSessionStatePath,
+        MemoryNotesRootDir,
+        CodeRunsRootDir,
+        RoutineRunsRootDir,
+        WorkspaceRootDir,
+        RoutineStatePath,
+        RoutinePromptDir,
+        AuditLogPath,
+        GuardRetryTimelineStatePath,
+        GatewayHealthStatePath,
+        GatewayStartupProbeStatePath,
+        DashboardAccessStatePath,
+        SandboxExecutorPath
+    );
+
+    public GatewayOptions Gateway => new(
+        WebSocketPort,
+        WebSocketCommandsPerMinute,
+        WebSocketMaxMessageBytes,
+        EnableHealthEndpoint,
+        EnableGatewayStartupProbe,
+        GatewayStartupProbeDelayMs,
+        GatewayStartupProbeTimeoutSec,
+        GatewayStartupProbePollIntervalMs,
+        GatewayStartupProbeMode,
+        CommandMaxLength,
+        MetricsPushIntervalSec
+    );
+
+    public SecurityOptions Security => new(
+        TelegramAllowedUserId,
+        EnableDynamicCode,
+        ExternalDashboardEnabled,
+        EnableLocalOtpFallback,
+        KillAllowlistCsv,
+        GuardAlertWebhookUrl,
+        GuardAlertLogCollectorUrl,
+        GuardAlertDispatchTimeoutMs,
+        GuardAlertDispatchMaxAttempts
+    );
+
+    public DoctorOptions Doctor => new(
+        DoctorTimeoutSeconds,
+        DoctorEnableSandboxSmoke,
+        DoctorWriteHistory
+    );
+
+    public RefactorOptions Refactor => new(
+        RefactorEnableLsp,
+        RefactorEnableAstGrep,
+        RefactorPreviewTtlMinutes,
+        ProjectContextFallbackFilenamesCsv,
+        ProjectContextMaxBytes
+    );
+
+    public ContextOptions Context => new(
+        ConversationCompressChars,
+        ConversationKeepRecentMessages,
+        ConversationHistoryMessages,
+        CodingAgentMaxIterations,
+        CodingAgentMaxActionsPerIteration,
+        CodingCopilotMaxActionsPerIteration,
+        CodingWorkspaceSnapshotMaxEntries,
+        CodingRecentLoopHistoryForCopilot,
+        CodingEnableOneShotUiClone,
+        ChatMaxOutputTokens,
+        CodingMaxOutputTokens,
+        LlmTimeoutSec,
+        SingleChatDefaultTimeoutSec,
+        CerebrasMinSingleChatTimeoutSec,
+        NvidiaMinSingleChatTimeoutSec,
+        EnableFastWebPipeline,
+        WebDecisionTimeoutMs,
+        GeminiWebTimeoutMs,
+        WebDefaultNewsCount,
+        WebDefaultListCount,
+        CommandMaxLength,
+        MetricsPushIntervalSec
+    );
+
+    public ExecutionOptions Execution => new(CodeExecutionTimeoutSec, EnableAutoInstall);
 
     public static AppConfig LoadFromEnvironment()
     {
@@ -241,6 +367,7 @@ public sealed class AppConfig
             WorkspaceRootDir = GetStringEnv("OMNINODE_WORKSPACE_ROOT", pathResolver.WorkspaceRootDir),
             RoutineStatePath = GetStringEnv("OMNINODE_ROUTINE_STATE_PATH", pathResolver.ResolveStateFilePath("routines.json")),
             RoutinePromptDir = GetStringEnv("OMNINODE_ROUTINE_PROMPT_DIR", pathResolver.RoutinePromptDir),
+            EnableAutoInstall = GetBoolEnv("OMNINODE_ENABLE_AUTO_INSTALL", false),
             CodingAgentMaxIterations = GetIntEnv("OMNINODE_CODING_AGENT_MAX_ITERATIONS", 6),
             CodingAgentMaxActionsPerIteration = GetIntEnv("OMNINODE_CODING_AGENT_MAX_ACTIONS", 8),
             CodingCopilotMaxActionsPerIteration = GetIntEnv("OMNINODE_CODING_COPILOT_MAX_ACTIONS", 2),
@@ -258,10 +385,10 @@ public sealed class AppConfig
             GeminiWebTimeoutMs = Math.Clamp(GetIntEnv("OMNINODE_GEMINI_WEB_TIMEOUT_MS", 30000), 5000, 60000),
             WebDefaultNewsCount = Math.Clamp(GetIntEnv("OMNINODE_WEB_DEFAULT_NEWS_COUNT", 10), 1, 20),
             WebDefaultListCount = Math.Clamp(GetIntEnv("OMNINODE_WEB_DEFAULT_LIST_COUNT", 5), 1, 20),
-            WebSocketMaxMessageBytes = GetIntEnv("OMNINODE_WS_MAX_MESSAGE_BYTES", 157286400),
-            WebSocketCommandsPerMinute = GetIntEnv("OMNINODE_WS_COMMANDS_PER_MINUTE", 30),
-            MetricsPushIntervalSec = GetIntEnv("OMNINODE_METRICS_PUSH_INTERVAL_SEC", 2),
-            CommandMaxLength = GetIntEnv("OMNINODE_COMMAND_MAX_LENGTH", 800),
+            WebSocketMaxMessageBytes = Math.Clamp(GetIntEnv("OMNINODE_WS_MAX_MESSAGE_BYTES", DefaultWebSocketMaxMessageBytes), 64 * 1024, 256 * 1024 * 1024),
+            WebSocketCommandsPerMinute = Math.Clamp(GetIntEnv("OMNINODE_WS_COMMANDS_PER_MINUTE", 30), 1, 1000),
+            MetricsPushIntervalSec = Math.Clamp(GetIntEnv("OMNINODE_METRICS_PUSH_INTERVAL_SEC", 2), 1, 60),
+            CommandMaxLength = Math.Clamp(GetIntEnv("OMNINODE_COMMAND_MAX_LENGTH", 800), 1, 8192),
             AuditLogPath = GetStringEnv("OMNINODE_AUDIT_LOG_PATH", pathResolver.ResolveStateFilePath("audit.log")),
             GuardAlertWebhookUrl = GetStringEnv("OMNINODE_GUARD_ALERT_WEBHOOK_URL", string.Empty),
             GuardAlertLogCollectorUrl = GetStringEnv("OMNINODE_GUARD_ALERT_LOG_COLLECTOR_URL", string.Empty),
@@ -376,3 +503,129 @@ public sealed class AppConfig
         return DefaultStatePathResolver.CreateDefault().WorkspaceRootDir;
     }
 }
+
+public sealed record ProviderOptions(
+    string CopilotCliBinary,
+    string CopilotDirectBinary,
+    string CopilotModel,
+    string CodexBinary,
+    string CodexModel,
+    string PythonBinary,
+    string? GroqApiKey,
+    string GroqBaseUrl,
+    string GroqModel,
+    string? GeminiApiKey,
+    string GeminiBaseUrl,
+    string GeminiModel,
+    string GeminiSearchModel,
+    string CerebrasBaseUrl,
+    string CerebrasModel,
+    int CerebrasTimeoutSec,
+    string CerebrasKeychainService,
+    string CerebrasKeychainAccount,
+    string? CerebrasApiKey,
+    string NvidiaBaseUrl,
+    string NvidiaModel,
+    int NvidiaTimeoutSec,
+    string NvidiaKeychainService,
+    string NvidiaKeychainAccount,
+    string? NvidiaApiKey,
+    string? CodexApiKey,
+    string SttProvider,
+    string SttBaseUrl,
+    string SttModel,
+    string? SttApiKey,
+    decimal GeminiInputPricePerMillionUsd,
+    decimal GeminiOutputPricePerMillionUsd
+);
+
+public sealed record PathOptions(
+    string CoreSocketPath,
+    string DashboardIndexPath,
+    string LlmUsageStatePath,
+    string CopilotUsageStatePath,
+    string ConversationStatePath,
+    string AuthSessionStatePath,
+    string MemoryNotesRootDir,
+    string CodeRunsRootDir,
+    string RoutineRunsRootDir,
+    string WorkspaceRootDir,
+    string RoutineStatePath,
+    string RoutinePromptDir,
+    string AuditLogPath,
+    string GuardRetryTimelineStatePath,
+    string GatewayHealthStatePath,
+    string GatewayStartupProbeStatePath,
+    string DashboardAccessStatePath,
+    string SandboxExecutorPath
+);
+
+public sealed record GatewayOptions(
+    int WebSocketPort,
+    int WebSocketCommandsPerMinute,
+    int WebSocketMaxMessageBytes,
+    bool EnableHealthEndpoint,
+    bool EnableGatewayStartupProbe,
+    int GatewayStartupProbeDelayMs,
+    int GatewayStartupProbeTimeoutSec,
+    int GatewayStartupProbePollIntervalMs,
+    string GatewayStartupProbeMode,
+    int CommandMaxLength,
+    int MetricsPushIntervalSec
+);
+
+public sealed record SecurityOptions(
+    string? TelegramAllowedUserId,
+    bool EnableDynamicCode,
+    bool ExternalDashboardEnabled,
+    bool EnableLocalOtpFallback,
+    string KillAllowlistCsv,
+    string GuardAlertWebhookUrl,
+    string GuardAlertLogCollectorUrl,
+    int GuardAlertDispatchTimeoutMs,
+    int GuardAlertDispatchMaxAttempts
+);
+
+public sealed record DoctorOptions(
+    int DoctorTimeoutSeconds,
+    bool DoctorEnableSandboxSmoke,
+    bool DoctorWriteHistory
+);
+
+public sealed record RefactorOptions(
+    bool RefactorEnableLsp,
+    bool RefactorEnableAstGrep,
+    int RefactorPreviewTtlMinutes,
+    string ProjectContextFallbackFilenamesCsv,
+    int ProjectContextMaxBytes
+);
+
+public sealed record ContextOptions(
+    int ConversationCompressChars,
+    int ConversationKeepRecentMessages,
+    int ConversationHistoryMessages,
+    int CodingAgentMaxIterations,
+    int CodingAgentMaxActionsPerIteration,
+    int CodingCopilotMaxActionsPerIteration,
+    int CodingWorkspaceSnapshotMaxEntries,
+    int CodingRecentLoopHistoryForCopilot,
+    bool CodingEnableOneShotUiClone,
+    int ChatMaxOutputTokens,
+    int CodingMaxOutputTokens,
+    int LlmTimeoutSec,
+    int SingleChatDefaultTimeoutSec,
+    int CerebrasMinSingleChatTimeoutSec,
+    int NvidiaMinSingleChatTimeoutSec,
+    bool EnableFastWebPipeline,
+    int WebDecisionTimeoutMs,
+    int GeminiWebTimeoutMs,
+    int WebDefaultNewsCount,
+    int WebDefaultListCount,
+    int CommandMaxLength,
+    int MetricsPushIntervalSec
+);
+
+public sealed record ExecutionOptions(
+    int CodeExecutionTimeoutSec,
+    bool EnableAutoInstall
+);

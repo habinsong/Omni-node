@@ -135,7 +135,7 @@ public sealed partial class WebSocketGateway
             return;
         }
 
-        if (_config.EnableHealthEndpoint && TryResolveProbeStatus(path, out var probeStatus))
+        if (_gatewayOptions.EnableHealthEndpoint && TryResolveProbeStatus(path, out var probeStatus))
         {
             var method = context.Request.HttpMethod?.ToUpperInvariant() ?? "GET";
             if (method != "GET" && method != "HEAD")

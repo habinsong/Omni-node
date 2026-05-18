@@ -27,10 +27,10 @@ public sealed partial class CommandService
         TelegramTurnContext? telegramContext = null
     )
     {
-        var previousTelegramContext = _telegramTurnContext.Value;
+        var previousTelegramContext = _executionContext.CurrentTelegramTurn;
         if (source.Equals("telegram", StringComparison.OrdinalIgnoreCase) && telegramContext != null)
         {
-            _telegramTurnContext.Value = telegramContext;
+            _executionContext.CurrentTelegramTurn = telegramContext;
         }
 
         var normalizedAttachments = NormalizeAttachments(attachments);
@@ -79,9 +79,9 @@ public sealed partial class CommandService
                 }
             }
 
-            if (text.Length > _config.CommandMaxLength)
+            if (text.Length > _context.CommandMaxLength)
             {
-                return $"command too long (max={_config.CommandMaxLength})";
+                return $"command too long (max={_context.CommandMaxLength})";
             }
 
             if (source.Equals("telegram", StringComparison.OrdinalIgnoreCase))
@@ -345,9 +345,9 @@ public sealed partial class CommandService
 
             if (intent == RouterIntent.DynamicCode)
             {
-                if (!_config.EnableDynamicCode)
+                if (!IsDynamicCodeExecutionEnabled())
                 {
-                    return "dynamic code is disabled. set OMNINODE_ENABLE_DYNAMIC_CODE=true";
+                    return BuildDynamicCodeDisabledMessage();
                 }
 
                 var copilotStatus = await _copilotWrapper.GetStatusAsync(cancellationToken);
@@ -409,7 +409,7 @@ public sealed partial class CommandService
         }
         finally
         {
-            _telegramTurnContext.Value = previousTelegramContext;
+            _executionContext.CurrentTelegramTurn = previousTelegramContext;
         }
     }
 

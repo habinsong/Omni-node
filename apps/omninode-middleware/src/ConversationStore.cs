@@ -818,7 +818,11 @@ public sealed class ConversationStore : IConversationStore
                 return;
             }
 
-            var json = File.ReadAllText(_statePath);
+            var json = AtomicFileStore.ReadAllTextWithBackup(
+                _statePath,
+                IsValidConversationStateJson,
+                logScope: "conversation"
+            );
             if (string.IsNullOrWhiteSpace(json))
             {
                 return;
@@ -853,6 +857,23 @@ public sealed class ConversationStore : IConversationStore
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[conversation] save failed: {ex.Message}");
+        }
+    }
+
+    private static bool IsValidConversationStateJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return false;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize(json, OmniJsonContext.Default.ConversationState) != null;
+        }
+        catch
+        {
+            return false;
         }
     }
 }

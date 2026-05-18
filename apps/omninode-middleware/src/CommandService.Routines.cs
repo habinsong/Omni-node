@@ -32,26 +32,23 @@ public sealed partial class CommandService
 
     public IReadOnlyList<RoutineSummary> ListRoutines()
     {
-        lock (_routineLock)
-        {
-            return _routinesById.Values
-                .Where(routine => !IsLogicGraphRoutine(routine))
-                .OrderBy(x => x.NextRunUtc)
-                .Select(ToRoutineSummary)
-                .ToArray();
-        }
+        return _routineRegistry.ReadAll(routines => routines
+            .Where(routine => !IsLogicGraphRoutine(routine))
+            .OrderBy(x => x.NextRunUtc)
+            .Select(ToRoutineSummary)
+            .ToArray());
     }
 
     public RoutineSchedulerStatus GetRoutineSchedulerStatus()
     {
-        lock (_routineLock)
+        return _routineRegistry.ReadAll(routines =>
         {
-            var routines = _routinesById.Values
+            var routineItems = routines
                 .Where(routine => !IsLogicGraphRoutine(routine))
                 .ToArray();
             var now = DateTimeOffset.UtcNow;
             long? nextRunAtMs = null;
-            foreach (var routine in routines.Where(static routine => routine.Enabled))
+            foreach (var routine in routineItems.Where(static routine => routine.Enabled))
             {
                 var candidate = routine.NextRunUtc.ToUnixTimeMilliseconds();
                 if (!nextRunAtMs.HasValue || candidate < nextRunAtMs.Value)
@@ -64,14 +61,14 @@ public sealed partial class CommandService
                 || (!_routineSchedulerTask.IsFaulted && !_routineSchedulerTask.IsCanceled);
             return new RoutineSchedulerStatus(
                 schedulerEnabled,
-                routines.Length,
-                routines.Count(static routine => routine.Enabled),
-                routines.Count(static routine => routine.Running),
-                routines.Count(routine => routine.Enabled && !routine.Running && routine.NextRunUtc <= now),
+                routineItems.Length,
+                routineItems.Count(static routine => routine.Enabled),
+                routineItems.Count(static routine => routine.Running),
+                routineItems.Count(routine => routine.Enabled && !routine.Running && routine.NextRunUtc <= now),
                 nextRunAtMs,
                 _routineSchedulerLastError
             );
-        }
+        });
     }
 
     public RoutineExecutionPreviewResult PreviewRoutine(
@@ -299,20 +296,15 @@ public sealed partial class CommandService
             return new RoutineActionResult(false, scheduleError, null);
         }
 
-        RoutineDefinition? existing;
-        lock (_routineLock)
+        var existing = _routineRegistry.Read(key, found => found);
+        if (existing == null)
         {
-            if (!_routinesById.TryGetValue(key, out var found))
-            {
-                return new RoutineActionResult(false, "루틴을 찾을 수 없습니다.", null);
-            }
+            return new RoutineActionResult(false, "루틴을 찾을 수 없습니다.", null);
+        }
 
-            if (found.Running)
-            {
-                return new RoutineActionResult(false, "실행 중인 루틴은 수정할 수 없습니다.", ToRoutineSummary(found));
-            }
-
-            existing = found;
+        if (existing.Running)
+        {
+            return new RoutineActionResult(false, "실행 중인 루틴은 수정할 수 없습니다.", ToRoutineSummary(existing));
         }
 
         var resolvedTitle = string.IsNullOrWhiteSpace(title)
@@ -433,16 +425,16 @@ public sealed partial class CommandService
             }
         }
 
-        lock (_routineLock)
+        return _routineRegistry.MutateIfChanged(routines =>
         {
-            if (!_routinesById.TryGetValue(key, out var update))
+            if (!routines.TryGetValue(key, out var update))
             {
-                return new RoutineActionResult(false, "루틴을 찾을 수 없습니다.", null);
+                return (new RoutineActionResult(false, "루틴을 찾을 수 없습니다.", null), false);
             }
 
             if (update.Running)
             {
-                return new RoutineActionResult(false, "실행 중인 루틴은 수정할 수 없습니다.", ToRoutineSummary(update));
+                return (new RoutineActionResult(false, "실행 중인 루틴은 수정할 수 없습니다.", ToRoutineSummary(update)), false);
             }
 
             update.Title = resolvedTitle;
@@ -513,8 +505,8 @@ public sealed partial class CommandService
             if (generation != null)
             {
                 var runDir = string.IsNullOrWhiteSpace(update.ScriptPath)
-                    ? Path.Combine(_config.WorkspaceRootDir, "routines", update.Id)
-                    : (Path.GetDirectoryName(update.ScriptPath) ?? Path.Combine(_config.WorkspaceRootDir, "routines", update.Id));
+                    ? Path.Combine(_paths.WorkspaceRootDir, "routines", update.Id)
+                    : (Path.GetDirectoryName(update.ScriptPath) ?? Path.Combine(_paths.WorkspaceRootDir, "routines", update.Id));
                 Directory.CreateDirectory(runDir);
                 update.ScriptPath = WriteRoutineScript(runDir, generation.Language, generation.Code);
                 update.Language = generation.Language;
@@ -564,9 +556,8 @@ public sealed partial class CommandService
                     : "updated";
             }
 
-            SaveRoutineStateLocked();
-            return new RoutineActionResult(true, "루틴 수정 완료", ToRoutineSummary(update));
-        }
+            return (new RoutineActionResult(true, "루틴 수정 완료", ToRoutineSummary(update)), true);
+        });
     }
 
     public async Task<RoutineActionResult> RunRoutineNowAsync(string routineId, string source, CancellationToken cancellationToken)
@@ -577,11 +568,11 @@ public sealed partial class CommandService
             return new RoutineActionResult(false, "routineId가 필요합니다.", null);
         }
 
-        RoutineDefinition? routine;
+        RoutineDefinition? routine = null;
         var runningMarked = false;
-        lock (_routineLock)
+        var startResult = _routineRegistry.Mutate(routines =>
         {
-            if (!_routinesById.TryGetValue(key, out var found))
+            if (!routines.TryGetValue(key, out var found))
             {
                 return new RoutineActionResult(false, "루틴을 찾을 수 없습니다.", null);
             }
@@ -594,7 +585,12 @@ public sealed partial class CommandService
             found.Running = true;
             runningMarked = true;
             routine = found;
-            SaveRoutineStateLocked();
+            return new RoutineActionResult(true, string.Empty, null);
+        });
+
+        if (!startResult.Ok || routine == null)
+        {
+            return startResult;
         }
 
         try
@@ -631,11 +627,7 @@ public sealed partial class CommandService
                 null,
                 cancellationToken
             ).ConfigureAwait(false);
-            RoutineDefinition? updatedRoutine;
-            lock (_routineLock)
-            {
-                _routinesById.TryGetValue(key, out updatedRoutine);
-            }
+            var updatedRoutine = _routineRegistry.Read(key, routine => routine);
 
             var finalMessage = string.IsNullOrWhiteSpace(snapshot.ResultText)
                 ? (string.IsNullOrWhiteSpace(snapshot.Error) ? "흐름 실행이 끝났습니다." : snapshot.Error)
@@ -696,6 +688,15 @@ public sealed partial class CommandService
                 }
                 else
                 {
+                    if (!IsDynamicCodeExecutionEnabled())
+                    {
+                        runStatus = "blocked";
+                        lastStatus = "blocked";
+                        runError = BuildDynamicCodeDisabledMessage();
+                        output = runError;
+                        break;
+                    }
+
                     var normalizedLanguage = NormalizeRoutineScriptLanguage(routine.Language);
                     var normalizedCode = string.IsNullOrWhiteSpace(routine.Code)
                         ? string.Empty
@@ -713,21 +714,22 @@ public sealed partial class CommandService
                         || !string.Equals(normalizedCode, routine.Code, StringComparison.Ordinal)
                         || string.IsNullOrWhiteSpace(routine.ScriptPath))
                     {
-                        lock (_routineLock)
+                        _routineRegistry.MutateIfChanged(routines =>
                         {
-                            if (_routinesById.TryGetValue(key, out var update))
+                            if (routines.TryGetValue(key, out var update))
                             {
                                 var runDir = string.IsNullOrWhiteSpace(update.ScriptPath)
-                                    ? Path.Combine(_config.WorkspaceRootDir, "routines", update.Id)
-                                    : (Path.GetDirectoryName(update.ScriptPath) ?? Path.Combine(_config.WorkspaceRootDir, "routines", update.Id));
+                                    ? Path.Combine(_paths.WorkspaceRootDir, "routines", update.Id)
+                                    : (Path.GetDirectoryName(update.ScriptPath) ?? Path.Combine(_paths.WorkspaceRootDir, "routines", update.Id));
                                 Directory.CreateDirectory(runDir);
                                 update.ScriptPath = WriteRoutineScript(runDir, normalizedLanguage, normalizedCode);
                                 update.Language = normalizedLanguage;
                                 update.Code = normalizedCode;
-                                SaveRoutineStateLocked();
                                 routine = update;
+                                return ((string?)null, true);
                             }
-                        }
+                            return ((string?)null, false);
+                        });
                     }
 
                     if (!ShouldRunCronAgentTurnBridge(routine) && RoutineCodeNeedsRepair(routine.Language, routine.Code))
@@ -756,13 +758,13 @@ public sealed partial class CommandService
                             break;
                         }
 
-                        lock (_routineLock)
+                        _routineRegistry.MutateIfChanged(routines =>
                         {
-                            if (_routinesById.TryGetValue(key, out var update))
+                            if (routines.TryGetValue(key, out var update))
                             {
                                 var runDir = string.IsNullOrWhiteSpace(update.ScriptPath)
-                                    ? Path.Combine(_config.WorkspaceRootDir, "routines", update.Id)
-                                    : (Path.GetDirectoryName(update.ScriptPath) ?? Path.Combine(_config.WorkspaceRootDir, "routines", update.Id));
+                                    ? Path.Combine(_paths.WorkspaceRootDir, "routines", update.Id)
+                                    : (Path.GetDirectoryName(update.ScriptPath) ?? Path.Combine(_paths.WorkspaceRootDir, "routines", update.Id));
                                 Directory.CreateDirectory(runDir);
                                 update.ScriptPath = WriteRoutineScript(runDir, regenerated.Language, regenerated.Code);
                                 update.Language = regenerated.Language;
@@ -773,10 +775,11 @@ public sealed partial class CommandService
                                 update.QualityStatus = regenerated.QualityStatus;
                                 update.QualityWarnings = regenerated.QualityWarnings?.ToList() ?? new List<string>();
                                 update.LastOutput = regenerated.Plan;
-                                SaveRoutineStateLocked();
                                 routine = update;
+                                return ((string?)null, true);
                             }
-                        }
+                            return ((string?)null, false);
+                        });
                     }
 
                     CodeExecutionResult exec;
@@ -893,9 +896,9 @@ public sealed partial class CommandService
             resultOk = false;
         }
 
-        lock (_routineLock)
+        _routineRegistry.MutateIfChanged(routines =>
         {
-            if (_routinesById.TryGetValue(key, out var update))
+            if (routines.TryGetValue(key, out var update))
             {
                 update.Running = false;
                 update.LastRunUtc = completedAtUtc;
@@ -945,10 +948,11 @@ public sealed partial class CommandService
                     DurationMs = durationMs,
                     NextRunAtMs = update.Enabled ? update.NextRunUtc.ToUnixTimeMilliseconds() : null
                 });
-                SaveRoutineStateLocked();
                 routine = update;
+                return ((string?)null, true);
             }
-        }
+            return ((string?)null, false);
+        });
 
         return new RoutineActionResult(
             resultOk && !IsRoutineRetryableStatus(runStatus),
@@ -965,9 +969,9 @@ public sealed partial class CommandService
             return new RoutineRunDetailResult(false, string.Empty, ts, "루틴 실행 상세", "-", "-", 1, null, null, null, null, null, null, null, null, null, null, null, Array.Empty<string>(), "routineId가 필요합니다.", "routineId가 필요합니다.");
         }
 
-        lock (_routineLock)
+        return _routineRegistry.Read(key, routine =>
         {
-            if (!_routinesById.TryGetValue(key, out var routine))
+            if (routine == null)
             {
                 return new RoutineRunDetailResult(false, key, ts, "루틴 실행 상세", "-", "-", 1, null, null, null, null, null, null, null, null, null, null, null, Array.Empty<string>(), "루틴을 찾을 수 없습니다.", "루틴을 찾을 수 없습니다.");
             }
@@ -1011,7 +1015,7 @@ public sealed partial class CommandService
                 string.IsNullOrWhiteSpace(entry.Error) ? null : entry.Error,
                 content
             );
-        }
+        });
     }
 
     private void EnsureRoutineNotRunning(string routineId)
@@ -1022,14 +1026,13 @@ public sealed partial class CommandService
             return;
         }
 
-        lock (_routineLock)
+        _routineRegistry.Mutate(routines =>
         {
-            if (_routinesById.TryGetValue(key, out var routine) && routine.Running)
+            if (routines.TryGetValue(key, out var routine) && routine.Running)
             {
                 routine.Running = false;
-                SaveRoutineStateLocked();
             }
-        }
+        });
     }
 
     public async Task<RoutineActionResult> ResendRoutineRunToTelegramAsync(
@@ -1044,14 +1047,7 @@ public sealed partial class CommandService
             return new RoutineActionResult(false, detail.Error ?? "실행 이력을 찾을 수 없습니다.", null);
         }
 
-        RoutineSummary? summary = null;
-        lock (_routineLock)
-        {
-            if (_routinesById.TryGetValue(routineId, out var routine))
-            {
-                summary = ToRoutineSummary(routine);
-            }
-        }
+        var summary = _routineRegistry.Read(routineId, routine => routine == null ? null : ToRoutineSummary(routine));
 
         if (summary == null)
         {
@@ -1107,9 +1103,9 @@ public sealed partial class CommandService
             return new RoutineActionResult(false, "routineId가 필요합니다.", null);
         }
 
-        lock (_routineLock)
+        return _routineRegistry.Mutate(routines =>
         {
-            if (!_routinesById.TryGetValue(key, out var routine))
+            if (!routines.TryGetValue(key, out var routine))
             {
                 return new RoutineActionResult(false, "루틴을 찾을 수 없습니다.", null);
             }
@@ -1120,9 +1116,8 @@ public sealed partial class CommandService
                 routine.NextRunUtc = ComputeNextCronBridgeRunUtc(routine, DateTimeOffset.UtcNow);
             }
             routine.LastStatus = enabled ? "enabled" : "disabled";
-            SaveRoutineStateLocked();
             return new RoutineActionResult(true, enabled ? "루틴 활성화" : "루틴 비활성화", ToRoutineSummary(routine));
-        }
+        });
     }
 
     public RoutineActionResult DeleteRoutine(string routineId)
@@ -1133,15 +1128,14 @@ public sealed partial class CommandService
             return new RoutineActionResult(false, "routineId가 필요합니다.", null);
         }
 
-        lock (_routineLock)
+        return _routineRegistry.Mutate(routines =>
         {
-            if (!_routinesById.Remove(key))
+            if (!routines.Remove(key))
             {
                 return new RoutineActionResult(false, "루틴을 찾을 수 없습니다.", null);
             }
 
-            SaveRoutineStateLocked();
             return new RoutineActionResult(true, "루틴 삭제 완료", null);
-        }
+        });
     }
 }

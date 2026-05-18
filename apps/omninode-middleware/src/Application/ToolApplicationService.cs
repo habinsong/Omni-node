@@ -12,9 +12,8 @@ public sealed class ToolApplicationService : IToolApplicationService
     private readonly NodesTool _nodesTool;
     private readonly CleanupService _cleanupService;
 
-    // Cron/Search 메서드는 _routinesById 등록부와 SearchPipeline에 깊게
-    // 결합되어 있어 façade로 옮기지 못함. CommandService 생성 후
-    // ConfigureCronAndSearchDelegates로 위임 함수를 주입.
+    // Cron/Search 메서드는 별도 backing service가 없어 CommandService 생성 후
+    // ConfigureCronAndSearchDelegates로 위임 함수를 주입한다.
     private CronSearchDelegates? _cronSearch;
 
     public ToolApplicationService(
@@ -120,8 +119,7 @@ public sealed class ToolApplicationService : IToolApplicationService
 
     public CleanupApplyResult ApplyCleanup(string? previewId) => _cleanupService.ApplyCleanup(previewId);
 
-    // --- 다음 메서드들은 _routinesById/SearchPipeline에 결합되어 있어 setter
-    // delegate를 통해 CommandService 구현으로 위임. ---
+    // --- 다음 메서드들은 setter delegate를 통해 CommandService 구현으로 위임. ---
 
     public CronToolStatusResult GetCronStatus()
         => RequireCronSearch().GetCronStatus();

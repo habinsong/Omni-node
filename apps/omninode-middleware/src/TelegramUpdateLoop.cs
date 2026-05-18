@@ -5,7 +5,8 @@ public sealed class TelegramUpdateLoop
     private const int TelegramOutboxFlushBatchSize = 4;
     private readonly TelegramClient _telegramClient;
     private readonly ICommandExecutionService _commandService;
-    private readonly AppConfig _config;
+    private readonly SecurityOptions _security;
+    private readonly RuntimeSettings _runtimeSettings;
     private readonly TelegramPollingStateStore _stateStore;
     private readonly FileTelegramReplyOutboxStore _replyOutboxStore;
     private readonly Dictionary<string, CommandWindow> _commandWindows = new(StringComparer.OrdinalIgnoreCase);
@@ -15,14 +16,16 @@ public sealed class TelegramUpdateLoop
     public TelegramUpdateLoop(
         TelegramClient telegramClient,
         ICommandExecutionService commandService,
-        AppConfig config,
+        SecurityOptions security,
+        RuntimeSettings runtimeSettings,
         TelegramPollingStateStore stateStore,
         FileTelegramReplyOutboxStore replyOutboxStore
     )
     {
         _telegramClient = telegramClient;
         _commandService = commandService;
-        _config = config;
+        _security = security;
+        _runtimeSettings = runtimeSettings;
         _stateStore = stateStore;
         _replyOutboxStore = replyOutboxStore;
     }
@@ -554,7 +557,7 @@ public sealed class TelegramUpdateLoop
 
     private bool IsAuthorizedUpdate(TelegramUpdate update)
     {
-        var expectedChatId = _config.TelegramChatId?.Trim();
+        var expectedChatId = _runtimeSettings.GetTelegramChatId()?.Trim();
         if (!string.IsNullOrWhiteSpace(expectedChatId))
         {
             var incomingChatId = (update.ChatId ?? string.Empty).Trim();
@@ -566,7 +569,7 @@ public sealed class TelegramUpdateLoop
         }
 
         // CSV 다중 허용: "12345,67890" 같이 콤마로 여러 user_id 등록 가능.
-        var rawAllowed = _config.TelegramAllowedUserId ?? string.Empty;
+        var rawAllowed = _security.TelegramAllowedUserId ?? string.Empty;
         var allowedIds = rawAllowed
             .Split(new[] { ',', ';', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(x => !string.IsNullOrWhiteSpace(x))

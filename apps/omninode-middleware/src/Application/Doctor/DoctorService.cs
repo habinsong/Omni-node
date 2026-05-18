@@ -4,17 +4,17 @@ public sealed class DoctorService
 {
     private readonly IReadOnlyList<IDoctorCheck> _checks;
     private readonly FileDoctorReportStore _store;
-    private readonly AppConfig _config;
+    private readonly DoctorOptions _options;
 
     public DoctorService(
         IEnumerable<IDoctorCheck> checks,
         FileDoctorReportStore store,
-        AppConfig config
+        DoctorOptions options
     )
     {
         _checks = checks.ToArray();
         _store = store;
-        _config = config;
+        _options = options;
     }
 
     public async Task<DoctorReport> RunAsync(CancellationToken cancellationToken)
@@ -23,7 +23,7 @@ public sealed class DoctorService
         foreach (var check in _checks)
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(_config.DoctorTimeoutSeconds));
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(_options.DoctorTimeoutSeconds));
 
             try
             {
@@ -36,7 +36,7 @@ public sealed class DoctorService
                     check.Id,
                     DoctorStatus.Fail,
                     "진단 시간이 초과되었습니다.",
-                    $"timeout={_config.DoctorTimeoutSeconds}s",
+                    $"timeout={_options.DoctorTimeoutSeconds}s",
                     new[] { "OMNINODE_DOCTOR_TIMEOUT_SECONDS 값을 늘리거나 관련 의존성 응답 시간을 점검하세요." }
                 ));
             }
@@ -62,7 +62,7 @@ public sealed class DoctorService
             results.Count(result => result.Status == DoctorStatus.Skip)
         );
 
-        _store.Save(report, _config.DoctorWriteHistory);
+        _store.Save(report, _options.DoctorWriteHistory);
         return report;
     }
 

@@ -17,12 +17,12 @@ public sealed partial class CommandService
     )
     {
         var normalized = NormalizeProvider(provider, allowAuto: false);
-        var requestedMaxOutputTokens = Math.Max(256, maxOutputTokens ?? _config.ChatMaxOutputTokens);
+        var requestedMaxOutputTokens = Math.Max(256, maxOutputTokens ?? _context.ChatMaxOutputTokens);
         _llmRouter.ClearLastResponseTokenUsage();
 
         if (normalized == "gemini")
         {
-            var requested = NormalizeModelSelection(model) ?? _config.GeminiModel;
+            var requested = NormalizeModelSelection(model) ?? _providers.GeminiModel;
             var selected = ResolveGeminiSingleModelForLatency(requested, input);
             var response = streamCallback == null
                 ? await _llmRouter.GenerateGeminiChatAsync(input, selected, requestedMaxOutputTokens, cancellationToken)
@@ -32,7 +32,7 @@ public sealed partial class CommandService
 
         if (normalized == "cerebras")
         {
-            var selected = NormalizeModelSelection(model) ?? _config.CerebrasModel;
+            var selected = NormalizeModelSelection(model) ?? _providers.CerebrasModel;
             var response = streamCallback == null
                 ? await _llmRouter.GenerateCerebrasChatAsync(input, selected, requestedMaxOutputTokens, cancellationToken)
                 : await _llmRouter.GenerateCerebrasChatStreamingAsync(input, selected, requestedMaxOutputTokens, streamCallback, cancellationToken);
@@ -41,7 +41,7 @@ public sealed partial class CommandService
 
         if (normalized == "nvidia")
         {
-            var selected = NormalizeModelSelection(model) ?? _config.NvidiaModel;
+            var selected = NormalizeModelSelection(model) ?? _providers.NvidiaModel;
             var response = streamCallback == null
                 ? await _llmRouter.GenerateNvidiaChatAsync(input, selected, requestedMaxOutputTokens, cancellationToken)
                 : await _llmRouter.GenerateNvidiaChatStreamingAsync(input, selected, requestedMaxOutputTokens, streamCallback, cancellationToken);
@@ -63,7 +63,7 @@ public sealed partial class CommandService
 
         if (normalized == "codex")
         {
-            var selected = NormalizeModelSelection(model) ?? _config.CodexModel;
+            var selected = NormalizeModelSelection(model) ?? _providers.CodexModel;
             var response = await _codexWrapper.GenerateChatAsync(
                 input,
                 selected,
@@ -130,8 +130,8 @@ public sealed partial class CommandService
 
     private string ResolveGeminiSingleModelForLatency(string requestedModel, string input)
     {
-        var requested = NormalizeModelSelection(requestedModel) ?? _config.GeminiModel;
-        if (!_config.EnableFastWebPipeline)
+        var requested = NormalizeModelSelection(requestedModel) ?? _providers.GeminiModel;
+        if (!_context.EnableFastWebPipeline)
         {
             return requested;
         }
@@ -185,13 +185,13 @@ public sealed partial class CommandService
             : ResolveProviderModel(normalized, model);
         var timeoutSeconds = timeoutOverrideSeconds ?? (normalized switch
         {
-            "groq" => Math.Max(90, _config.LlmTimeoutSec * 3),
-            "gemini" => Math.Max(90, _config.LlmTimeoutSec * 3),
-            "copilot" => Math.Max(120, _config.LlmTimeoutSec * 3),
-            "codex" => Math.Max(120, _config.LlmTimeoutSec * 3),
-            "cerebras" => Math.Max(120, _config.CerebrasTimeoutSec * 3),
-            "nvidia" => Math.Max(360, _config.NvidiaTimeoutSec * 2),
-            _ => Math.Max(8, _config.LlmTimeoutSec)
+            "groq" => Math.Max(90, _context.LlmTimeoutSec * 3),
+            "gemini" => Math.Max(90, _context.LlmTimeoutSec * 3),
+            "copilot" => Math.Max(120, _context.LlmTimeoutSec * 3),
+            "codex" => Math.Max(120, _context.LlmTimeoutSec * 3),
+            "cerebras" => Math.Max(120, _providers.CerebrasTimeoutSec * 3),
+            "nvidia" => Math.Max(360, _providers.NvidiaTimeoutSec * 2),
+            _ => Math.Max(8, _context.LlmTimeoutSec)
         });
         var maxAttempts = normalized == "gemini" ? 2 : 1;
         LlmSingleChatResult? lastResult = null;
@@ -303,7 +303,7 @@ public sealed partial class CommandService
     {
         var explicitPreferredModel = NormalizeModelSelection(preferredModel);
         var primaryModel = explicitPreferredModel
-                           ?? NormalizeModelSelection(_config.GroqModel)
+                           ?? NormalizeModelSelection(_providers.GroqModel)
                            ?? DefaultGroqPrimaryModel;
         var models = string.IsNullOrWhiteSpace(explicitPreferredModel)
             ? new[] { primaryModel, DefaultGroqComplexModel, DefaultGroqFastModel }
@@ -426,11 +426,11 @@ public sealed partial class CommandService
         return provider switch
         {
             "groq" => _llmRouter.GetSelectedGroqModel(),
-            "cerebras" => _config.CerebrasModel,
-            "nvidia" => _config.NvidiaModel,
+            "cerebras" => _providers.CerebrasModel,
+            "nvidia" => _providers.NvidiaModel,
             "copilot" => DefaultCopilotModel,
-            "codex" => _config.CodexModel,
-            _ => _config.GeminiModel
+            "codex" => _providers.CodexModel,
+            _ => _providers.GeminiModel
         };
     }
 

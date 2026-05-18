@@ -2902,40 +2902,40 @@ public sealed partial class CommandService
 
     private void ApplyWebTalkDefaults(string requestedThinking)
     {
-        var fastModel = string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel;
+        var fastModel = string.IsNullOrWhiteSpace(_providers.GroqModel) ? DefaultGroqPrimaryModel : _providers.GroqModel;
         _webLlmPreferences.Profile = "talk";
         _webLlmPreferences.Mode = "orchestration";
         _webLlmPreferences.SingleProvider = "groq";
         _webLlmPreferences.SingleModel = fastModel;
         _webLlmPreferences.AutoGroqComplexUpgrade = true;
         _webLlmPreferences.OrchestrationProvider = "gemini";
-        _webLlmPreferences.OrchestrationModel = _config.GeminiModel;
+        _webLlmPreferences.OrchestrationModel = _providers.GeminiModel;
         _webLlmPreferences.MultiGroqModel = fastModel;
-        _webLlmPreferences.MultiGeminiModel = _config.GeminiModel;
+        _webLlmPreferences.MultiGeminiModel = _providers.GeminiModel;
         _webLlmPreferences.MultiCopilotModel = DefaultCopilotModel;
-        _webLlmPreferences.MultiCerebrasModel = _config.CerebrasModel;
-        _webLlmPreferences.MultiNvidiaModel = _config.NvidiaModel;
-        _webLlmPreferences.MultiCodexModel = _config.CodexModel;
+        _webLlmPreferences.MultiCerebrasModel = _providers.CerebrasModel;
+        _webLlmPreferences.MultiNvidiaModel = _providers.NvidiaModel;
+        _webLlmPreferences.MultiCodexModel = _providers.CodexModel;
         _webLlmPreferences.MultiSummaryProvider = "gemini";
         _webLlmPreferences.TalkThinkingLevel = NormalizeThinkingLevel(requestedThinking, "low");
     }
 
     private void ApplyWebCodeDefaults(string requestedThinking)
     {
-        var fastModel = string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel;
+        var fastModel = string.IsNullOrWhiteSpace(_providers.GroqModel) ? DefaultGroqPrimaryModel : _providers.GroqModel;
         _webLlmPreferences.Profile = "code";
         _webLlmPreferences.Mode = "orchestration";
         _webLlmPreferences.SingleProvider = "copilot";
         _webLlmPreferences.SingleModel = DefaultCopilotModel;
         _webLlmPreferences.AutoGroqComplexUpgrade = false;
         _webLlmPreferences.OrchestrationProvider = "gemini";
-        _webLlmPreferences.OrchestrationModel = _config.GeminiModel;
+        _webLlmPreferences.OrchestrationModel = _providers.GeminiModel;
         _webLlmPreferences.MultiGroqModel = fastModel;
-        _webLlmPreferences.MultiGeminiModel = _config.GeminiModel;
+        _webLlmPreferences.MultiGeminiModel = _providers.GeminiModel;
         _webLlmPreferences.MultiCopilotModel = DefaultCopilotModel;
-        _webLlmPreferences.MultiCerebrasModel = _config.CerebrasModel;
-        _webLlmPreferences.MultiNvidiaModel = _config.NvidiaModel;
-        _webLlmPreferences.MultiCodexModel = _config.CodexModel;
+        _webLlmPreferences.MultiCerebrasModel = _providers.CerebrasModel;
+        _webLlmPreferences.MultiNvidiaModel = _providers.NvidiaModel;
+        _webLlmPreferences.MultiCodexModel = _providers.CodexModel;
         _webLlmPreferences.MultiSummaryProvider = "gemini";
         _webLlmPreferences.CodeThinkingLevel = NormalizeThinkingLevel(requestedThinking, "high");
     }
@@ -2947,7 +2947,7 @@ public sealed partial class CommandService
             _telegramLlmPreferences.SingleProvider = provider;
             if (provider == "groq")
             {
-                _telegramLlmPreferences.SingleModel = string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel;
+                _telegramLlmPreferences.SingleModel = string.IsNullOrWhiteSpace(_providers.GroqModel) ? DefaultGroqPrimaryModel : _providers.GroqModel;
                 _telegramLlmPreferences.AutoGroqComplexUpgrade = true;
             }
             else if (provider == "copilot")
@@ -2959,10 +2959,10 @@ public sealed partial class CommandService
             {
                 _telegramLlmPreferences.SingleModel = provider switch
                 {
-                    "cerebras" => _config.CerebrasModel,
-                    "nvidia" => _config.NvidiaModel,
-                    "codex" => _config.CodexModel,
-                    _ => _config.GeminiModel
+                    "cerebras" => _providers.CerebrasModel,
+                    "nvidia" => _providers.NvidiaModel,
+                    "codex" => _providers.CodexModel,
+                    _ => _providers.GeminiModel
                 };
                 _telegramLlmPreferences.AutoGroqComplexUpgrade = false;
             }
@@ -2992,7 +2992,7 @@ public sealed partial class CommandService
             _webLlmPreferences.SingleProvider = provider;
             if (provider == "groq")
             {
-                _webLlmPreferences.SingleModel = string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel;
+                _webLlmPreferences.SingleModel = string.IsNullOrWhiteSpace(_providers.GroqModel) ? DefaultGroqPrimaryModel : _providers.GroqModel;
                 _webLlmPreferences.AutoGroqComplexUpgrade = true;
             }
             else if (provider == "copilot")
@@ -3004,10 +3004,10 @@ public sealed partial class CommandService
             {
                 _webLlmPreferences.SingleModel = provider switch
                 {
-                    "cerebras" => _config.CerebrasModel,
-                    "nvidia" => _config.NvidiaModel,
-                    "codex" => _config.CodexModel,
-                    _ => _config.GeminiModel
+                    "cerebras" => _providers.CerebrasModel,
+                    "nvidia" => _providers.NvidiaModel,
+                    "codex" => _providers.CodexModel,
+                    _ => _providers.GeminiModel
                 };
                 _webLlmPreferences.AutoGroqComplexUpgrade = false;
             }

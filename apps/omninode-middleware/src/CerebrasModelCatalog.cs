@@ -5,17 +5,17 @@ namespace OmniNode.Middleware;
 
 public sealed class CerebrasModelCatalog : IDisposable
 {
-    private readonly AppConfig _config;
+    private readonly ProviderOptions _providers;
     private readonly RuntimeSettings _runtimeSettings;
     private readonly HttpClient _httpClient;
 
-    public CerebrasModelCatalog(AppConfig config, RuntimeSettings runtimeSettings)
+    public CerebrasModelCatalog(ProviderOptions providers, RuntimeSettings runtimeSettings)
     {
-        _config = config;
+        _providers = providers;
         _runtimeSettings = runtimeSettings;
         _httpClient = new HttpClient
         {
-            Timeout = TimeSpan.FromSeconds(Math.Max(5, _config.CerebrasTimeoutSec))
+            Timeout = TimeSpan.FromSeconds(Math.Max(5, _providers.CerebrasTimeoutSec))
         };
     }
 
@@ -29,7 +29,7 @@ public sealed class CerebrasModelCatalog : IDisposable
 
         try
         {
-            var endpoint = $"{_config.CerebrasBaseUrl.TrimEnd('/')}/models";
+            var endpoint = $"{_providers.CerebrasBaseUrl.TrimEnd('/')}/models";
             using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
             using var response = await _httpClient.SendAsync(request, cancellationToken);

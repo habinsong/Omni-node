@@ -17,6 +17,7 @@ function assert(condition, message) {
 const telegram = read("apps/omninode-middleware/src/CommandService.Telegram.cs");
 const updateLoop = read("apps/omninode-middleware/src/TelegramUpdateLoop.cs");
 const execution = read("apps/omninode-middleware/src/CommandService.Execution.cs");
+const executionContext = read("apps/omninode-middleware/src/Application/ExecutionContext.cs");
 const contracts = read("apps/omninode-middleware/src/Application/ApplicationServiceContracts.cs");
 const inputPrep = read("apps/omninode-middleware/src/CommandService.InputPreparation.cs");
 const utils = read("apps/omninode-middleware/src/CommandService.Utils.cs");
@@ -27,11 +28,13 @@ assert(
   "ICommandExecutionService가 TelegramTurnContext를 전달해야 합니다."
 );
 assert(
-  execution.includes("_telegramTurnContext.Value = telegramContext") && execution.includes("_telegramTurnContext.Value = previousTelegramContext"),
+  execution.includes("_executionContext.CurrentTelegramTurn = telegramContext") &&
+    execution.includes("_executionContext.CurrentTelegramTurn = previousTelegramContext") &&
+    executionContext.includes("public TelegramTurnContext? CurrentTelegramTurn"),
   "CommandService 실행 중 TelegramTurnContext를 설정하고 복원해야 합니다."
 );
 assert(
-  telegram.includes("ResolveTelegramStateKey") && telegram.includes("_telegramTurnContext.Value?.SessionKey"),
+  telegram.includes("ResolveTelegramStateKey") && telegram.includes("_executionContext.CurrentTelegramTurn?.SessionKey"),
   "텔레그램 상태 키는 chat/user 컨텍스트를 우선해야 합니다."
 );
 assert(

@@ -48,7 +48,7 @@ public sealed partial class CommandService
     {
         var createdAt = DateTimeOffset.UtcNow;
         var id = $"rt-{createdAt:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..8]}";
-        var runDir = Path.Combine(_config.WorkspaceRootDir, "routines", id);
+        var runDir = Path.Combine(_paths.WorkspaceRootDir, "routines", id);
         Directory.CreateDirectory(runDir);
         ReportRoutineCreateProgress(
             progressCallback,
@@ -265,11 +265,10 @@ public sealed partial class CommandService
         }
         routine.NextRunUtc = ComputeNextCronBridgeRunUtc(routine, createdAt);
 
-        lock (_routineLock)
+        _routineRegistry.Mutate(routines =>
         {
-            _routinesById[routine.Id] = routine;
-            SaveRoutineStateLocked();
-        }
+            routines[routine.Id] = routine;
+        });
 
         if (!runImmediately)
         {
@@ -578,7 +577,7 @@ public sealed partial class CommandService
     {
         var safeRoutineId = (routineId ?? string.Empty).Trim();
         var runToken = startedAtUtc.ToString("yyyyMMdd-HHmmssfff", CultureInfo.InvariantCulture);
-        var assetDir = Path.Combine(_config.WorkspaceRootDir, "routines", safeRoutineId, "assets", runToken);
+        var assetDir = Path.Combine(_paths.WorkspaceRootDir, "routines", safeRoutineId, "assets", runToken);
         Directory.CreateDirectory(assetDir);
         return assetDir;
     }

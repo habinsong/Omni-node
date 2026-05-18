@@ -384,9 +384,9 @@ public sealed partial class CommandService
         TimeSpan? singleRequestTimeout = requestedProvider.ToLowerInvariant() switch
         {
             "copilot" => null,
-            "nvidia" => TimeSpan.FromSeconds(Math.Max(_config.NvidiaMinSingleChatTimeoutSec, _config.NvidiaTimeoutSec)),
-            "cerebras" => TimeSpan.FromSeconds(Math.Max(_config.CerebrasMinSingleChatTimeoutSec, _config.CerebrasTimeoutSec)),
-            _ => TimeSpan.FromSeconds(_config.SingleChatDefaultTimeoutSec),
+            "nvidia" => TimeSpan.FromSeconds(Math.Max(_context.NvidiaMinSingleChatTimeoutSec, _providers.NvidiaTimeoutSec)),
+            "cerebras" => TimeSpan.FromSeconds(Math.Max(_context.CerebrasMinSingleChatTimeoutSec, _providers.CerebrasTimeoutSec)),
+            _ => TimeSpan.FromSeconds(_context.SingleChatDefaultTimeoutSec),
         };
         using var singleRequestCts = singleRequestTimeout == null
             ? null
@@ -1933,19 +1933,19 @@ public sealed partial class CommandService
                 : request.GroqModel.Trim();
         var localGeminiModel = IsDisabledModelSelection(request.GeminiModel)
             ? "none"
-            : NormalizeModelSelection(request.GeminiModel) ?? _config.GeminiModel;
+            : NormalizeModelSelection(request.GeminiModel) ?? _providers.GeminiModel;
         var localCerebrasModel = IsDisabledModelSelection(request.CerebrasModel)
             ? "none"
-            : NormalizeModelSelection(request.CerebrasModel) ?? _config.CerebrasModel;
+            : NormalizeModelSelection(request.CerebrasModel) ?? _providers.CerebrasModel;
         var localNvidiaModel = IsDisabledModelSelection(request.NvidiaModel)
             ? "none"
-            : NormalizeModelSelection(request.NvidiaModel) ?? _config.NvidiaModel;
+            : NormalizeModelSelection(request.NvidiaModel) ?? _providers.NvidiaModel;
         var localCopilotModel = IsDisabledModelSelection(request.CopilotModel)
             ? "none"
             : NormalizeModelSelection(request.CopilotModel) ?? _copilotWrapper.GetSelectedModel();
         var localCodexModel = IsDisabledModelSelection(request.CodexModel)
             ? "none"
-            : NormalizeModelSelection(request.CodexModel) ?? _config.CodexModel;
+            : NormalizeModelSelection(request.CodexModel) ?? _providers.CodexModel;
         var requestedSummaryProvider = NormalizeProvider(request.SummaryProvider, allowAuto: true);
         var localAssistantInfoReply = TryBuildLocalAssistantInfoResponse(rawInput, session.SessionId, request.Source);
         if (!string.IsNullOrWhiteSpace(localAssistantInfoReply))
@@ -2306,7 +2306,7 @@ public sealed partial class CommandService
         var codexStatus = await _codexWrapper.GetStatusAsync(cancellationToken);
         if (codexStatus.Installed && codexStatus.Authenticated && !IsDisabledModelSelection(codexModel))
         {
-            var selectedCodex = NormalizeModelSelection(codexModel) ?? _config.CodexModel;
+            var selectedCodex = NormalizeModelSelection(codexModel) ?? _providers.CodexModel;
             workerSpecs.Add(("codex", selectedCodex));
         }
 
@@ -2426,11 +2426,11 @@ public sealed partial class CommandService
         var text = (input ?? string.Empty).Trim();
         var hasGroqOverride = !string.IsNullOrWhiteSpace(groqModel) && !IsDisabledModelSelection(groqModel);
         var groqSelected = hasGroqOverride ? groqModel!.Trim() : _llmRouter.GetSelectedGroqModel();
-        var geminiSelected = NormalizeModelSelection(geminiModel) ?? _config.GeminiModel;
-        var cerebrasSelected = NormalizeModelSelection(cerebrasModel) ?? _config.CerebrasModel;
-        var nvidiaSelected = NormalizeModelSelection(nvidiaModel) ?? _config.NvidiaModel;
+        var geminiSelected = NormalizeModelSelection(geminiModel) ?? _providers.GeminiModel;
+        var cerebrasSelected = NormalizeModelSelection(cerebrasModel) ?? _providers.CerebrasModel;
+        var nvidiaSelected = NormalizeModelSelection(nvidiaModel) ?? _providers.NvidiaModel;
         var copilotSelected = NormalizeModelSelection(copilotModel) ?? _copilotWrapper.GetSelectedModel();
-        var codexSelected = NormalizeModelSelection(codexModel) ?? _config.CodexModel;
+        var codexSelected = NormalizeModelSelection(codexModel) ?? _providers.CodexModel;
         var groqResolvedModel = IsDisabledModelSelection(groqModel) ? "none" : groqSelected;
         var geminiResolvedModel = IsDisabledModelSelection(geminiModel) ? "none" : geminiSelected;
         var cerebrasResolvedModel = IsDisabledModelSelection(cerebrasModel) ? "none" : cerebrasSelected;

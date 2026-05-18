@@ -4,12 +4,21 @@ namespace OmniNode.Middleware;
 
 public sealed class SandboxDoctorCheck : IDoctorCheck
 {
-    private readonly AppConfig _config;
+    private readonly ProviderOptions _providers;
+    private readonly PathOptions _paths;
+    private readonly DoctorOptions _options;
     private readonly PythonSandboxClient _sandboxClient;
 
-    public SandboxDoctorCheck(AppConfig config, PythonSandboxClient sandboxClient)
+    public SandboxDoctorCheck(
+        ProviderOptions providers,
+        PathOptions paths,
+        DoctorOptions options,
+        PythonSandboxClient sandboxClient
+    )
     {
-        _config = config;
+        _providers = providers;
+        _paths = paths;
+        _options = options;
         _sandboxClient = sandboxClient;
     }
 
@@ -17,7 +26,7 @@ public sealed class SandboxDoctorCheck : IDoctorCheck
 
     public async Task<DoctorCheckResult> RunAsync(CancellationToken cancellationToken)
     {
-        if (!_config.DoctorEnableSandboxSmoke)
+        if (!_options.DoctorEnableSandboxSmoke)
         {
             return new DoctorCheckResult(
                 Id,
@@ -47,7 +56,7 @@ public sealed class SandboxDoctorCheck : IDoctorCheck
                 Id,
                 DoctorStatus.Ok,
                 "샌드박스 스모크 테스트가 정상입니다.",
-                $"python={_config.PythonBinary}; executor={_config.SandboxExecutorPath}; output={normalized}",
+                $"python={_providers.PythonBinary}; executor={_paths.SandboxExecutorPath}; output={normalized}",
                 Array.Empty<string>()
             );
         }

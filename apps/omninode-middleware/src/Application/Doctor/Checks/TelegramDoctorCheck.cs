@@ -2,12 +2,12 @@ namespace OmniNode.Middleware;
 
 public sealed class TelegramDoctorCheck : IDoctorCheck
 {
-    private readonly AppConfig _config;
+    private readonly SecurityOptions _security;
     private readonly RuntimeSettings _runtimeSettings;
 
-    public TelegramDoctorCheck(AppConfig config, RuntimeSettings runtimeSettings)
+    public TelegramDoctorCheck(SecurityOptions security, RuntimeSettings runtimeSettings)
     {
-        _config = config;
+        _security = security;
         _runtimeSettings = runtimeSettings;
     }
 
@@ -19,7 +19,7 @@ public sealed class TelegramDoctorCheck : IDoctorCheck
 
         var hasBotToken = !string.IsNullOrWhiteSpace(_runtimeSettings.GetTelegramBotToken());
         var hasChatId = !string.IsNullOrWhiteSpace(_runtimeSettings.GetTelegramChatId());
-        var hasAllowedUserId = !string.IsNullOrWhiteSpace(_config.TelegramAllowedUserId);
+        var hasAllowedUserId = !string.IsNullOrWhiteSpace(_security.TelegramAllowedUserId);
         var status = hasBotToken && hasChatId ? DoctorStatus.Ok : DoctorStatus.Warn;
 
         return Task.FromResult(new DoctorCheckResult(

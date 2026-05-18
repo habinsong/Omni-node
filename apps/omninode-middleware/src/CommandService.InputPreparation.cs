@@ -472,7 +472,7 @@ public sealed partial class CommandService
                 summaryPrompt,
                 attachmentModel,
                 nonTextAttachments,
-                Math.Min(_config.ChatMaxOutputTokens, 1400),
+                Math.Min(_context.ChatMaxOutputTokens, 1400),
                 cancellationToken
             );
         }
@@ -482,7 +482,7 @@ public sealed partial class CommandService
                 summaryPrompt,
                 attachmentModel,
                 nonTextAttachments,
-                Math.Min(_config.ChatMaxOutputTokens, 1400),
+                Math.Min(_context.ChatMaxOutputTokens, 1400),
                 cancellationToken
             );
         }
@@ -736,7 +736,7 @@ public sealed partial class CommandService
             WebSearchToolResult webSearch;
             try
             {
-                if (_config.EnableFastWebPipeline)
+                if (_context.EnableFastWebPipeline)
                 {
                     webSearch = await SearchWebAsync(
                         effectiveSearchQuery,
@@ -748,7 +748,7 @@ public sealed partial class CommandService
                 }
                 else
                 {
-                    var searchTimeoutSeconds = Math.Clamp(_config.LlmTimeoutSec + 8, 12, 40);
+                    var searchTimeoutSeconds = Math.Clamp(_context.LlmTimeoutSec + 8, 12, 40);
                     using var searchTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                     searchTimeoutCts.CancelAfter(TimeSpan.FromSeconds(searchTimeoutSeconds));
                     webSearch = await SearchWebAsync(
@@ -802,9 +802,9 @@ public sealed partial class CommandService
                 try
                 {
                     using var alignTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    var alignTimeoutSeconds = _config.EnableFastWebPipeline
-                        ? Math.Clamp((_config.LlmTimeoutSec / 2), 3, 6)
-                        : Math.Clamp(_config.LlmTimeoutSec, 8, 24);
+                    var alignTimeoutSeconds = _context.EnableFastWebPipeline
+                        ? Math.Clamp((_context.LlmTimeoutSec / 2), 3, 6)
+                        : Math.Clamp(_context.LlmTimeoutSec, 8, 24);
                     alignTimeoutCts.CancelAfter(TimeSpan.FromSeconds(alignTimeoutSeconds));
                     contextAlignedResults = await BuildContextAlignedWebResultsAsync(
                         query,
@@ -1770,7 +1770,7 @@ public sealed partial class CommandService
                 summaryPrompt,
                 ResolveUrlContextLlmModel(),
                 maxOutputTokens: 768,
-                _config.GeminiWebTimeoutMs,
+                _context.GeminiWebTimeoutMs,
                 includeGoogleSearch: false,
                 cancellationToken
             );

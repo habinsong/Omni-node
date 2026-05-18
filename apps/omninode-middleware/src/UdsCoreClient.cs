@@ -7,10 +7,17 @@ namespace OmniNode.Middleware;
 public sealed class UdsCoreClient
 {
     private readonly string _socketPath;
+    private readonly string _authToken;
 
-    public UdsCoreClient(string socketPath)
+    public UdsCoreClient(string socketPath, string authToken)
     {
+        if (string.IsNullOrWhiteSpace(authToken))
+        {
+            throw new ArgumentException("core auth token is required.", nameof(authToken));
+        }
+
         _socketPath = socketPath;
+        _authToken = authToken.Trim();
     }
 
     public static bool IsTcpEndpoint(string endpoint)
@@ -35,12 +42,12 @@ public sealed class UdsCoreClient
 
     public Task<string> GetMetricsAsync(CancellationToken cancellationToken)
     {
-        return RequestAsync("{\"action\":\"get_metrics\"}", cancellationToken);
+        return RequestAsync($"get_metrics {_authToken}", cancellationToken);
     }
 
     public Task<string> KillAsync(int pid, CancellationToken cancellationToken)
     {
-        return RequestAsync($"{{\"action\":\"kill\",\"pid\":{pid}}}", cancellationToken);
+        return RequestAsync($"kill {_authToken} {pid}", cancellationToken);
     }
 
     public async Task<string> RequestAsync(string jsonRequest, CancellationToken cancellationToken)

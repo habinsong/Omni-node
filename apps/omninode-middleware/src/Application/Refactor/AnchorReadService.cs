@@ -10,9 +10,9 @@ public sealed class AnchorReadService
 
     private readonly string _workspaceRoot;
 
-    public AnchorReadService(AppConfig config)
+    public AnchorReadService(PathOptions paths)
     {
-        _workspaceRoot = ResolveWorkspaceRoot(config.WorkspaceRootDir);
+        _workspaceRoot = ResolveWorkspaceRoot(paths.WorkspaceRootDir);
     }
 
     public async Task<AnchorReadResult> ReadWithAnchorsAsync(

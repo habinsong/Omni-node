@@ -26,7 +26,17 @@ public sealed class FilePlanStore
 
         try
         {
-            var json = File.ReadAllText(indexPath, Encoding.UTF8);
+            var json = AtomicFileStore.ReadAllTextWithBackup(
+                indexPath,
+                value => PlanJson.DeserializeIndexState(value) != null,
+                Encoding.UTF8,
+                "plan-store"
+            );
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return Array.Empty<PlanIndexEntry>();
+            }
+
             var state = PlanJson.DeserializeIndexState(json);
             if (state?.Items == null)
             {
@@ -147,7 +157,17 @@ public sealed class FilePlanStore
 
         try
         {
-            var json = File.ReadAllText(path, Encoding.UTF8);
+            var json = AtomicFileStore.ReadAllTextWithBackup(
+                path,
+                value => parser(value) != null,
+                Encoding.UTF8,
+                "plan-store"
+            );
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return null;
+            }
+
             return parser(json);
         }
         catch

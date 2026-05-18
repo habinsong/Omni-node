@@ -148,16 +148,16 @@ public sealed partial class CommandService
 
     public LogicGraphListResult ListLogicGraphs()
     {
-        lock (_routineLock)
+        return _routineRegistry.ReadAll(routines =>
         {
-            var items = _routinesById.Values
+            var items = routines
                 .Where(IsLogicGraphRoutine)
                 .Select(ToLogicGraphSummaryWithRuntime)
                 .OrderBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(item => item.GraphId, StringComparer.Ordinal)
                 .ToArray();
             return new LogicGraphListResult(items);
-        }
+        });
     }
 
     public LogicGraphActionResult GetLogicGraph(string graphId)
@@ -168,9 +168,9 @@ public sealed partial class CommandService
             return new LogicGraphActionResult(false, "graphId가 필요합니다.", null, null);
         }
 
-        lock (_routineLock)
+        return _routineRegistry.Read(normalizedGraphId, routine =>
         {
-            if (!_routinesById.TryGetValue(normalizedGraphId, out var routine) || !IsLogicGraphRoutine(routine))
+            if (routine == null || !IsLogicGraphRoutine(routine))
             {
                 return new LogicGraphActionResult(false, "작업 흐름을 찾을 수 없습니다.", null, null);
             }
@@ -181,7 +181,7 @@ public sealed partial class CommandService
                 ToLogicGraphSummaryWithRuntime(routine),
                 routine.LogicGraph
             );
-        }
+        });
     }
 
     public async Task<LogicGraphActionResult> SaveLogicGraphAsync(
@@ -237,21 +237,23 @@ public sealed partial class CommandService
         }
 
         var now = DateTimeOffset.UtcNow;
-        RoutineDefinition routine;
-        lock (_routineLock)
+        return _routineRegistry.MutateIfChanged(routines =>
         {
-            _routinesById.TryGetValue(normalizedGraph.GraphId, out var existing);
+            routines.TryGetValue(normalizedGraph.GraphId, out var existing);
             if (existing != null && existing.Running)
             {
-                return new LogicGraphActionResult(
+                return (
+                    new LogicGraphActionResult(
                     false,
                     "지금 실행 중인 작업 흐름은 저장할 수 없습니다.",
                     ToLogicGraphSummaryWithRuntime(existing),
                     existing.LogicGraph
+                    ),
+                    false
                 );
             }
 
-            routine = existing ?? new RoutineDefinition
+            var routine = existing ?? new RoutineDefinition
             {
                 Id = normalizedGraph.GraphId,
                 CreatedUtc = now
@@ -290,16 +292,17 @@ public sealed partial class CommandService
             routine.CronScheduleAnchorMs = null;
             routine.NextRunUtc = ComputeNextCronBridgeRunUtc(routine, now);
 
-            _routinesById[routine.Id] = routine;
-            SaveRoutineStateLocked();
-        }
-
-        return new LogicGraphActionResult(
-            true,
-            "작업 흐름을 저장했습니다.",
-            ToLogicGraphSummaryWithRuntime(routine),
-            normalizedGraph
-        );
+            routines[routine.Id] = routine;
+            return (
+                new LogicGraphActionResult(
+                    true,
+                    "작업 흐름을 저장했습니다.",
+                    ToLogicGraphSummaryWithRuntime(routine),
+                    normalizedGraph
+                ),
+                true
+            );
+        });
     }
 
     public LogicGraphActionResult DeleteLogicGraph(string graphId)
@@ -310,27 +313,35 @@ public sealed partial class CommandService
             return new LogicGraphActionResult(false, "graphId가 필요합니다.", null, null);
         }
 
-        lock (_routineLock)
+        return _routineRegistry.MutateIfChanged(routines =>
         {
-            if (!_routinesById.TryGetValue(normalizedGraphId, out var routine) || !IsLogicGraphRoutine(routine))
+            if (!routines.TryGetValue(normalizedGraphId, out var routine) || !IsLogicGraphRoutine(routine))
             {
-                return new LogicGraphActionResult(false, "작업 흐름을 찾을 수 없습니다.", null, null);
+                return (
+                    new LogicGraphActionResult(false, "작업 흐름을 찾을 수 없습니다.", null, null),
+                    false
+                );
             }
 
             if (routine.Running)
             {
-                return new LogicGraphActionResult(
-                    false,
-                    "지금 실행 중인 작업 흐름은 삭제할 수 없습니다.",
-                    ToLogicGraphSummaryWithRuntime(routine),
-                    routine.LogicGraph
+                return (
+                    new LogicGraphActionResult(
+                        false,
+                        "지금 실행 중인 작업 흐름은 삭제할 수 없습니다.",
+                        ToLogicGraphSummaryWithRuntime(routine),
+                        routine.LogicGraph
+                    ),
+                    false
                 );
             }
 
-            _routinesById.Remove(normalizedGraphId);
-            SaveRoutineStateLocked();
-            return new LogicGraphActionResult(true, "작업 흐름을 삭제했습니다.", null, null);
-        }
+            routines.Remove(normalizedGraphId);
+            return (
+                new LogicGraphActionResult(true, "작업 흐름을 삭제했습니다.", null, null),
+                true
+            );
+        });
     }
 
     public Task<LogicRunActionResult> RunLogicGraphAsync(
@@ -353,11 +364,14 @@ public sealed partial class CommandService
             return Task.FromResult(new LogicRunActionResult(false, "흐름 실행 기능이 아직 준비되지 않았습니다.", null, null));
         }
 
-        lock (_routineLock)
+        var startResult = _routineRegistry.MutateIfChanged(routines =>
         {
-            if (!_routinesById.TryGetValue(normalizedGraphId, out var routine) || !IsLogicGraphRoutine(routine))
+            if (!routines.TryGetValue(normalizedGraphId, out var routine) || !IsLogicGraphRoutine(routine))
             {
-                return Task.FromResult(new LogicRunActionResult(false, "작업 흐름을 찾을 수 없습니다.", null, null));
+                return (
+                    new LogicRunActionResult(false, "작업 흐름을 찾을 수 없습니다.", null, null),
+                    false
+                );
             }
 
             if (routine.Running)
@@ -366,21 +380,28 @@ public sealed partial class CommandService
                 if (active == null || IsTerminalLogicStatus(active.Status))
                 {
                     routine.Running = false;
-                    SaveRoutineStateLocked();
                 }
                 else
                 {
-                return Task.FromResult(new LogicRunActionResult(
-                    false,
-                    "이미 이 작업 흐름이 실행 중입니다.",
-                    active?.RunId,
-                    active
-                ));
+                    return (
+                        new LogicRunActionResult(
+                            false,
+                            "이미 이 작업 흐름이 실행 중입니다.",
+                            active?.RunId,
+                            active
+                        ),
+                        false
+                    );
                 }
             }
 
             routine.Running = true;
-            SaveRoutineStateLocked();
+            return ((LogicRunActionResult?)null, true);
+        });
+
+        if (startResult != null)
+        {
+            return Task.FromResult(startResult);
         }
 
         var result = _logicRuntimeCoordinator.RunGraph(
@@ -392,14 +413,7 @@ public sealed partial class CommandService
 
         if (!result.Ok)
         {
-            lock (_routineLock)
-            {
-                if (_routinesById.TryGetValue(normalizedGraphId, out var routine))
-                {
-                    routine.Running = false;
-                    SaveRoutineStateLocked();
-                }
-            }
+            ClearLogicGraphRunningState(normalizedGraphId);
         }
 
         return Task.FromResult(result);
@@ -445,13 +459,12 @@ public sealed partial class CommandService
         var normalizedSource = string.IsNullOrWhiteSpace(source) ? "web" : source.Trim();
         var startedAtUtc = DateTimeOffset.UtcNow;
 
-        RoutineDefinition? routine;
-        LogicGraphDefinition? graph;
-        lock (_routineLock)
-        {
-            _routinesById.TryGetValue(normalizedGraphId, out routine);
-            graph = routine?.LogicGraph;
-        }
+        var routineAndGraph = _routineRegistry.Read(
+            normalizedGraphId,
+            routine => (Routine: routine, Graph: routine?.LogicGraph)
+        );
+        RoutineDefinition? routine = routineAndGraph.Routine;
+        LogicGraphDefinition? graph = routineAndGraph.Graph;
 
         var runDirectory = EnsureLogicRunDirectory(normalizedGraphId, normalizedRunId);
         var logs = new List<string>();
@@ -887,9 +900,9 @@ public sealed partial class CommandService
             new UTF8Encoding(false)
         );
 
-        lock (_routineLock)
+        _routineRegistry.MutateIfChanged(routines =>
         {
-            if (_routinesById.TryGetValue(graphId, out var routine))
+            if (routines.TryGetValue(graphId, out var routine))
             {
                 routine.Running = false;
                 routine.LastRunUtc = completedAtUtc;
@@ -924,9 +937,11 @@ public sealed partial class CommandService
                     DurationMs = routine.LastDurationMs,
                     NextRunAtMs = routine.Enabled ? routine.NextRunUtc.ToUnixTimeMilliseconds() : null
                 });
-                SaveRoutineStateLocked();
+                return (Result: true, Changed: true);
             }
-        }
+
+            return (Result: false, Changed: false);
+        });
 
         return finalSnapshot;
     }
@@ -2643,14 +2658,16 @@ public sealed partial class CommandService
             return;
         }
 
-        lock (_routineLock)
+        _routineRegistry.MutateIfChanged(routines =>
         {
-            if (_routinesById.TryGetValue(normalizedGraphId, out var routine) && IsLogicGraphRoutine(routine) && routine.Running)
+            if (routines.TryGetValue(normalizedGraphId, out var routine) && IsLogicGraphRoutine(routine) && routine.Running)
             {
                 routine.Running = false;
-                SaveRoutineStateLocked();
+                return (Result: true, Changed: true);
             }
-        }
+
+            return (Result: false, Changed: false);
+        });
     }
 
     private static bool IsTerminalLogicStatus(string? status)

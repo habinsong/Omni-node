@@ -458,15 +458,14 @@ public sealed partial class CommandService
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            List<string> dueIds;
-            lock (_routineLock)
+            var dueIds = _routineRegistry.ReadAll(routines =>
             {
                 var now = DateTimeOffset.UtcNow;
-                dueIds = _routinesById.Values
+                return routines
                     .Where(x => x.Enabled && !x.Running && x.NextRunUtc <= now)
                     .Select(x => x.Id)
                     .ToList();
-            }
+            });
 
             foreach (var id in dueIds)
             {
@@ -564,55 +563,6 @@ public sealed partial class CommandService
         }
     }
 
-    private void LoadRoutineState()
-    {
-        lock (_routineLock)
-        {
-            _routinesById.Clear();
-            var recoveredRunningCount = 0;
-            try
-            {
-                foreach (var item in _routineStore.Load())
-                {
-                    if (string.IsNullOrWhiteSpace(item.Id))
-                    {
-                        continue;
-                    }
-
-                    if (item.Running)
-                    {
-                        item.Running = false;
-                        recoveredRunningCount += 1;
-                    }
-
-                    _routinesById[item.Id] = item;
-                }
-
-                if (recoveredRunningCount > 0)
-                {
-                    SaveRoutineStateLocked();
-                    Console.Error.WriteLine($"[routine] recovered {recoveredRunningCount} stale running flag(s) on load");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[routine] state load failed: {ex.Message}");
-            }
-        }
-    }
-
-    private void SaveRoutineStateLocked()
-    {
-        try
-        {
-            _routineStore.Save(_routinesById.Values.ToArray());
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[routine] state save failed: {ex.Message}");
-        }
-    }
-
     private async Task<RoutineGenerationResult> GenerateRoutineImplementationAsync(
         string request,
         RoutineSchedule schedule,
@@ -653,7 +603,7 @@ public sealed partial class CommandService
             {
                 var model = strategy.Models[i];
                 var prompt = objective + $"\n\n[{partLabels[Math.Min(i, partLabels.Length - 1)]}] 관점으로 설계/코드 초안을 작성하세요.";
-                var generated = await GenerateByProviderSafeAsync("groq", model, prompt, cancellationToken, Math.Min(_config.CodingMaxOutputTokens, 2800));
+                var generated = await GenerateByProviderSafeAsync("groq", model, prompt, cancellationToken, Math.Min(_context.CodingMaxOutputTokens, 2800));
                 chunks.Add($"[{model}]\n{generated.Text}");
             }
 
@@ -693,7 +643,7 @@ public sealed partial class CommandService
             );
         }
 
-        var single = await GenerateByProviderSafeAsync("groq", strategy.Models[0], objective, cancellationToken, Math.Min(_config.CodingMaxOutputTokens, 4200));
+        var single = await GenerateByProviderSafeAsync("groq", strategy.Models[0], objective, cancellationToken, Math.Min(_context.CodingMaxOutputTokens, 4200));
         var singleParsed = ParseCodeCandidate(single.Text, "bash");
         var singleLanguage = singleParsed.Language is "bash" or "python" ? singleParsed.Language : "bash";
         var singleCode = string.IsNullOrWhiteSpace(singleParsed.Code)
@@ -2083,7 +2033,7 @@ public sealed partial class CommandService
             model,
             repairPrompt,
             cancellationToken,
-            Math.Min(_config.CodingMaxOutputTokens, 4200)
+            Math.Min(_context.CodingMaxOutputTokens, 4200)
         );
         var reparsed = ParseCodeCandidate(regenerated.Text, "bash");
         var repairedLanguage = reparsed.Language is "bash" or "python" ? reparsed.Language : "bash";

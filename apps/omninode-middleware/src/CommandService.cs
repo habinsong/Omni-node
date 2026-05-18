@@ -86,7 +86,11 @@ public sealed partial class CommandService :
         RegexOptions.Compiled | RegexOptions.IgnoreCase
     );
     private static readonly HttpClient WebFetchClient = CreateWebFetchClient();
-    private readonly AppConfig _config;
+    private readonly ProviderOptions _providers;
+    private readonly PathOptions _paths;
+    private readonly SecurityOptions _security;
+    private readonly ContextOptions _context;
+    private readonly ExecutionOptions _execution;
     private readonly LlmRouter _llmRouter;
     private readonly GroqModelCatalog _groqModelCatalog;
     private readonly UdsCoreClient _coreClient;
@@ -110,17 +114,16 @@ public sealed partial class CommandService :
     private readonly NodesTool _nodesTool;
     private SkillCreateDirective? _skillCreateDirective;
     private SkillCreateDirective SkillCreateDirective =>
-        _skillCreateDirective ??= new SkillCreateDirective(_config);
+        _skillCreateDirective ??= new SkillCreateDirective(_paths.WorkspaceRootDir);
     private SkillFileService? _skillFileService;
     private SkillFileService SkillFiles =>
-        _skillFileService ??= new SkillFileService(_config);
+        _skillFileService ??= new SkillFileService(_paths);
     private readonly ConcurrentDictionary<string, string> _activeSkillByThread = new(StringComparer.Ordinal);
     private readonly CopilotCliWrapper _copilotWrapper;
     private readonly CodexCliWrapper _codexWrapper;
     private readonly PythonSandboxClient _sandboxClient;
     private readonly IMemoryNoteStore _memoryNoteStore;
     private readonly IConversationStore _conversationStore;
-    private readonly IRoutineStore _routineStore;
     private readonly IRunArtifactStore _runArtifactStore;
     private readonly UniversalCodeRunner _codeRunner;
     private readonly AuditLogger _auditLogger;
@@ -138,12 +141,7 @@ public sealed partial class CommandService :
     private readonly AstGrepRefactorService _astGrepRefactorService;
     private readonly Queue<string> _recentEvents = new();
     private readonly object _eventLock = new();
-    private readonly object _telegramLlmLock = new();
-    private readonly object _webLlmLock = new();
-    private readonly object _telegramCodingLock = new();
-    private readonly object _telegramRefactorLock = new();
     private readonly object _telegramUpgradeQuotaLock = new();
-    private readonly object _routineLock = new();
     private readonly IDoctorApplicationService _doctorAppService;
     private readonly INotebookApplicationService _notebookAppService;
     private readonly ISettingsApplicationService _settingsAppService;
@@ -155,23 +153,29 @@ public sealed partial class CommandService :
     private readonly IPlanningApplicationService _planAppService;
     private readonly IConversationApplicationService _conversationAppService;
     private readonly IToolApplicationService _toolAppService;
-    private readonly AsyncLocal<TelegramExecutionMetadata?> _telegramExecutionMetadata = new();
-    private readonly AsyncLocal<TelegramTurnContext?> _telegramTurnContext = new();
+    private readonly LlmPreferenceContext _llmPreferenceContext;
+    private readonly ExecutionContext _executionContext;
+    private readonly RoutineRegistry _routineRegistry;
     private readonly string _telegramUpgradeQuotaStatePath;
     private readonly string _routineStatePath;
     private readonly string _routinePromptDir;
     private readonly string[] _killAllowlist;
-    private readonly Dictionary<string, RoutineDefinition> _routinesById = new(StringComparer.OrdinalIgnoreCase);
     private readonly CancellationTokenSource _routineSchedulerCts = new();
     private readonly SemaphoreSlim _routineSchedulerDispatchGate = new(2, 2);
     private Task? _routineSchedulerTask;
     private string? _routineSchedulerLastError;
     private string _telegramUpgradeQuotaDay = string.Empty;
     private int _telegramUpgradeQuotaCount;
-    private TelegramLlmPreferences _telegramLlmPreferences;
-    private TelegramCodingPreferences _telegramCodingPreferences;
-    private TelegramRefactorSession _telegramRefactorSession;
-    private WebLlmPreferences _webLlmPreferences;
+
+    private bool IsDynamicCodeExecutionEnabled()
+    {
+        return _security.EnableDynamicCode;
+    }
+
+    private static string BuildDynamicCodeDisabledMessage()
+    {
+        return "dynamic code is disabled. set OMNINODE_ENABLE_DYNAMIC_CODE=true";
+    }
 
     internal CommandService(
         AppConfig config,
@@ -201,7 +205,6 @@ public sealed partial class CommandService :
         PythonSandboxClient sandboxClient,
         IMemoryNoteStore memoryNoteStore,
         IConversationStore conversationStore,
-        IRoutineStore routineStore,
         IRunArtifactStore runArtifactStore,
         UniversalCodeRunner codeRunner,
         AuditLogger auditLogger,
@@ -227,10 +230,17 @@ public sealed partial class CommandService :
         IMemoryApplicationService memoryAppService,
         IPlanningApplicationService planAppService,
         IConversationApplicationService conversationAppService,
-        IToolApplicationService toolAppService
+        IToolApplicationService toolAppService,
+        LlmPreferenceContext llmPreferenceContext,
+        ExecutionContext executionContext,
+        RoutineRegistry routineRegistry
     )
     {
-        _config = config;
+        _providers = config.Providers;
+        _paths = config.Paths;
+        _security = config.Security;
+        _context = config.Context;
+        _execution = config.Execution;
         _llmRouter = llmRouter;
         _groqModelCatalog = groqModelCatalog;
         _coreClient = coreClient;
@@ -257,7 +267,6 @@ public sealed partial class CommandService :
         _sandboxClient = sandboxClient;
         _memoryNoteStore = memoryNoteStore;
         _conversationStore = conversationStore;
-        _routineStore = routineStore;
         _runArtifactStore = runArtifactStore;
         _codeRunner = codeRunner;
         _auditLogger = auditLogger;
@@ -284,90 +293,38 @@ public sealed partial class CommandService :
         _planAppService = planAppService;
         _conversationAppService = conversationAppService;
         _toolAppService = toolAppService;
-        _killAllowlist = (_config.KillAllowlistCsv ?? string.Empty)
+        _llmPreferenceContext = llmPreferenceContext;
+        _executionContext = executionContext;
+        _routineRegistry = routineRegistry;
+        _killAllowlist = (_security.KillAllowlistCsv ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .ToArray();
         _telegramUpgradeQuotaStatePath = BuildTelegramUpgradeQuotaStatePath();
-        var stateBaseDir = Path.GetDirectoryName(_config.ConversationStatePath);
+        var stateBaseDir = Path.GetDirectoryName(_paths.ConversationStatePath);
         if (string.IsNullOrWhiteSpace(stateBaseDir))
         {
             var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             stateBaseDir = string.IsNullOrWhiteSpace(home) ? Path.GetTempPath() : Path.Combine(home, ".omninode");
         }
 
-        _routineStatePath = _routineStore.StorePath;
-        _routinePromptDir = _config.RoutinePromptDir;
+        _routineStatePath = _routineRegistry.StorePath;
+        _routinePromptDir = _paths.RoutinePromptDir;
         LoadTelegramUpgradeQuotaState();
-        _telegramLlmPreferences = new TelegramLlmPreferences
-        {
-            Profile = "default",
-            Mode = "single",
-            SingleProvider = "groq",
-            SingleModel = string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel,
-            AutoGroqComplexUpgrade = true,
-            OrchestrationProvider = "auto",
-            OrchestrationModel = string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel,
-            MultiGroqModel = string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel,
-            MultiGeminiModel = _config.GeminiModel,
-            MultiCopilotModel = string.IsNullOrWhiteSpace(_copilotWrapper.GetSelectedModel()) ? DefaultCopilotModel : _copilotWrapper.GetSelectedModel(),
-            MultiCerebrasModel = _config.CerebrasModel,
-            MultiNvidiaModel = _config.NvidiaModel,
-            MultiCodexModel = _config.CodexModel,
-            MultiSummaryProvider = "auto",
-            TalkThinkingLevel = "low",
-            CodeThinkingLevel = "high"
-        };
-        _telegramCodingPreferences = new TelegramCodingPreferences
-        {
-            Mode = "orchestration",
-            SingleProvider = "copilot",
-            SingleModel = string.IsNullOrWhiteSpace(_copilotWrapper.GetSelectedModel()) ? DefaultCopilotModel : _copilotWrapper.GetSelectedModel(),
-            SingleLanguage = "auto",
-            OrchestrationProvider = "auto",
-            OrchestrationModel = string.Empty,
-            OrchestrationLanguage = "auto",
-            OrchestrationGroqModel = string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel,
-            OrchestrationGeminiModel = _config.GeminiModel,
-            OrchestrationCerebrasModel = _config.CerebrasModel,
-            OrchestrationNvidiaModel = _config.NvidiaModel,
-            OrchestrationCopilotModel = "none",
-            OrchestrationCodexModel = "none",
-            MultiProvider = "gemini",
-            MultiModel = _config.GeminiModel,
-            MultiLanguage = "auto",
-            MultiGroqModel = string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel,
-            MultiGeminiModel = _config.GeminiModel,
-            MultiCerebrasModel = _config.CerebrasModel,
-            MultiNvidiaModel = _config.NvidiaModel,
-            MultiCopilotModel = "none",
-            MultiCodexModel = "none"
-        };
-        _telegramRefactorSession = new TelegramRefactorSession();
-        _webLlmPreferences = new WebLlmPreferences
-        {
-            Profile = "default",
-            Mode = "single",
-            SingleProvider = "groq",
-            SingleModel = string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel,
-            AutoGroqComplexUpgrade = true,
-            OrchestrationProvider = "auto",
-            OrchestrationModel = string.IsNullOrWhiteSpace(_config.GeminiModel) ? _config.GroqModel : _config.GeminiModel,
-            MultiGroqModel = string.IsNullOrWhiteSpace(_config.GroqModel) ? DefaultGroqPrimaryModel : _config.GroqModel,
-            MultiGeminiModel = _config.GeminiModel,
-            MultiCopilotModel = string.IsNullOrWhiteSpace(_copilotWrapper.GetSelectedModel()) ? DefaultCopilotModel : _copilotWrapper.GetSelectedModel(),
-            MultiCerebrasModel = _config.CerebrasModel,
-            MultiNvidiaModel = _config.NvidiaModel,
-            MultiCodexModel = _config.CodexModel,
-            MultiSummaryProvider = "auto",
-            TalkThinkingLevel = "low",
-            CodeThinkingLevel = "high"
-        };
         EnsureRoutinePromptFiles();
-        LoadRoutineState();
+        _routineRegistry.Load();
         RestoreActiveSkillBindingsFromStore();
         _routineSchedulerTask = Task.Run(() => RoutineSchedulerLoopAsync(_routineSchedulerCts.Token));
     }
+
+    private object _telegramLlmLock => _llmPreferenceContext.TelegramLlmLock;
+    private object _webLlmLock => _llmPreferenceContext.WebLlmLock;
+    private object _telegramCodingLock => _llmPreferenceContext.TelegramCodingLock;
+    private object _telegramRefactorLock => _llmPreferenceContext.TelegramRefactorLock;
+    private TelegramLlmPreferences _telegramLlmPreferences => _llmPreferenceContext.TelegramLlmPreferences;
+    private TelegramCodingPreferences _telegramCodingPreferences => _llmPreferenceContext.TelegramCodingPreferences;
+    private TelegramRefactorSession _telegramRefactorSession => _llmPreferenceContext.TelegramRefactorSession;
+    private WebLlmPreferences _webLlmPreferences => _llmPreferenceContext.WebLlmPreferences;
 
     // 시작 시 ConversationStore에 영구 저장된 활성 스킬을 메모리 dictionary로 복원.
     private void RestoreActiveSkillBindingsFromStore()

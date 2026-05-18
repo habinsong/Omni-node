@@ -17,12 +17,12 @@ internal sealed class GatewayApiEndpoint
     public GatewayApiEndpoint(
         GuardRetryTimelineStore guardRetryTimelineStore,
         IConversationApplicationService conversationService,
-        AppConfig config
+        PathOptions paths
     )
     {
         _guardRetryTimelineStore = guardRetryTimelineStore;
         _conversationService = conversationService;
-        var workspaceRoot = Path.GetFullPath(config.WorkspaceRootDir);
+        var workspaceRoot = Path.GetFullPath(paths.WorkspaceRootDir);
         _localImageRoots = new[]
         {
             Path.GetFullPath(Path.Combine(workspaceRoot, "routines"))

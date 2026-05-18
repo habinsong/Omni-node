@@ -66,7 +66,7 @@ Omni-node는 이 문제를 기능 목록이 아니라 작업 흐름으로 풀려
 - **작업 계획**: 계획 생성, 리뷰, 승인, task graph 실행
 - **Safe Refactor**: 줄 범위 교체, LSP rename, ast-grep replace를 preview 중심으로 적용
 - **스킬**: `.omni/skills/**/SKILL.md`를 대화탭과 텔레그램에서 공통 사용, sticky 활성화/중지·재시작 후 자동 복원·다중 스킬 거부·단어 경계 매칭·Think+ 동시 사용 시 톤 양보·`/skill quick` 별명·`/skill status`
-- **외부접속**: 설정 탭에서 LAN 접속을 켜고, 외부 클라이언트는 OTP 없이 제한 모드로 사용. 대화/코딩/루틴/로직 그래프/모델 선택은 허용하고 인증/시크릿/외부접속 설정은 차단
+- **외부접속**: 설정 탭에서 LAN 접속을 켜고, 외부 클라이언트는 OTP 없이 제한 모드로 사용. 읽기 중심 조회와 모델/라우팅 설정만 허용하고 대화/코딩/루틴/로직 그래프 실행, 인증/시크릿/외부접속 설정은 차단
 - **제공자**: Gemini, Groq, Cerebras, NVIDIA NIM, Copilot CLI, Codex CLI/API
 - **텔레그램 봇**: 슬래시 명령(`/skill /think /web /history /coding download /off`), inline keyboard 빠른 작업, 음성 메시지 자동 STT + 들은 내용 echo, 다중 user allowlist (CSV), 본문 하단 footer (provider·model · 활성 스킬 · ⏱ 소요시간), 긴 응답 자동 .txt 첨부
 

@@ -134,6 +134,11 @@ function main() {
     "dotnet",
     ["build", "apps/omninode-middleware/OmniNode.Middleware.csproj"]
   );
+  runStep(
+    "middleware unit tests",
+    "dotnet",
+    ["test", "apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj"]
+  );
 
   const pythonCommand = resolvePythonCommand();
   runStep(

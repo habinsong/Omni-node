@@ -46,9 +46,9 @@ public sealed class MemorySearchTool
     };
     private readonly string _dbPath;
 
-    public MemorySearchTool(AppConfig config)
+    public MemorySearchTool(PathOptions paths)
     {
-        var stateRoot = ResolveStateRoot(config.ConversationStatePath);
+        var stateRoot = ResolveStateRoot(paths.ConversationStatePath);
         _dbPath = Path.Combine(stateRoot, "memory-index", DefaultIndexFileName);
     }
 

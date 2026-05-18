@@ -19,7 +19,12 @@ internal sealed class FileRoutineStore : IRoutineStore
             return Array.Empty<RoutineDefinition>();
         }
 
-        var json = File.ReadAllText(StorePath, Encoding.UTF8);
+        var json = AtomicFileStore.ReadAllTextWithBackup(
+            StorePath,
+            IsValidRoutineStateJson,
+            Encoding.UTF8,
+            "routine-store"
+        );
         if (string.IsNullOrWhiteSpace(json))
         {
             return Array.Empty<RoutineDefinition>();
@@ -53,5 +58,22 @@ internal sealed class FileRoutineStore : IRoutineStore
         };
         var json = JsonSerializer.Serialize(state, OmniJsonContext.Default.RoutineState);
         AtomicFileStore.WriteAllText(StorePath, json, ownerOnly: true);
+    }
+
+    private static bool IsValidRoutineStateJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return false;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize(json, OmniJsonContext.Default.RoutineState) != null;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

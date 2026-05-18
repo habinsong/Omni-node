@@ -12,7 +12,11 @@ public sealed record MemoryIndexSyncSnapshot(
     int IndexedDocuments,
     int SkippedDocuments,
     int RemovedDocuments,
-    bool FtsAvailable
+    bool FtsAvailable,
+    long ElapsedMs = 0,
+    int MemoryDocuments = 0,
+    int SessionDocuments = 0,
+    int ProjectDocuments = 0
 );
 
 public sealed class MemoryIndexDocumentSync
@@ -38,24 +42,28 @@ public sealed class MemoryIndexDocumentSync
     private readonly string _projectRootDir;
 
     public MemoryIndexDocumentSync(
-        AppConfig config,
+        PathOptions paths,
         MemoryIndexSchemaSnapshot schemaSnapshot
     )
     {
         _dbPath = schemaSnapshot.DbPath;
         _ftsAvailable = schemaSnapshot.FtsAvailable;
-        _memoryNotesRootDir = Path.GetFullPath(config.MemoryNotesRootDir);
-        _conversationStatePath = Path.GetFullPath(config.ConversationStatePath);
-        _projectRootDir = ResolveProjectRoot(config);
+        _memoryNotesRootDir = Path.GetFullPath(paths.MemoryNotesRootDir);
+        _conversationStatePath = Path.GetFullPath(paths.ConversationStatePath);
+        _projectRootDir = ResolveProjectRoot(paths);
     }
 
     public MemoryIndexSyncSnapshot SyncOnce()
     {
+        var stopwatch = Stopwatch.StartNew();
         var documents = LoadMemoryDocuments();
         var scanned = documents.Count;
         var indexed = 0;
         var skipped = 0;
         var removed = 0;
+        var memoryDocuments = documents.Count(document => document.Source.Equals("memory", StringComparison.Ordinal));
+        var sessionDocuments = documents.Count(document => document.Source.Equals("sessions", StringComparison.Ordinal));
+        var projectDocuments = documents.Count(document => document.Source.Equals("project", StringComparison.Ordinal));
 
         var activeBySource = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase)
         {
@@ -110,13 +118,18 @@ public sealed class MemoryIndexDocumentSync
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value;"
         );
 
+        stopwatch.Stop();
         return new MemoryIndexSyncSnapshot(
             _dbPath,
             scanned,
             indexed,
             skipped,
             removed,
-            _ftsAvailable
+            _ftsAvailable,
+            stopwatch.ElapsedMilliseconds,
+            memoryDocuments,
+            sessionDocuments,
+            projectDocuments
         );
     }
 
@@ -734,12 +747,12 @@ public sealed class MemoryIndexDocumentSync
         return string.IsNullOrWhiteSpace(safe) ? fallback : safe;
     }
 
-    private static string ResolveProjectRoot(AppConfig config)
+    private static string ResolveProjectRoot(PathOptions paths)
     {
         var candidates = new List<string>();
-        if (!string.IsNullOrWhiteSpace(config.DashboardIndexPath))
+        if (!string.IsNullOrWhiteSpace(paths.DashboardIndexPath))
         {
-            var current = new FileInfo(Path.GetFullPath(config.DashboardIndexPath)).Directory;
+            var current = new FileInfo(Path.GetFullPath(paths.DashboardIndexPath)).Directory;
             while (current != null)
             {
                 candidates.Add(current.FullName);
@@ -747,9 +760,9 @@ public sealed class MemoryIndexDocumentSync
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(config.WorkspaceRootDir))
+        if (!string.IsNullOrWhiteSpace(paths.WorkspaceRootDir))
         {
-            var current = new DirectoryInfo(Path.GetFullPath(config.WorkspaceRootDir));
+            var current = new DirectoryInfo(Path.GetFullPath(paths.WorkspaceRootDir));
             while (current != null)
             {
                 candidates.Add(current.FullName);

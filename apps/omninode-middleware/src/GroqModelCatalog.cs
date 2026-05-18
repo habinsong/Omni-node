@@ -24,17 +24,19 @@ public sealed class GroqModelCatalog : IDisposable
         ["qwen/qwen3-32b"] = new("Preview", "400", "300K TPM / 1K RPM", "1K", "14.4K", "300K", "1M", "-", "-", "131072", "40960", "-", "$0.29", "$0.59")
     };
 
-    private readonly AppConfig _config;
+    private readonly ProviderOptions _providers;
+    private readonly ContextOptions _context;
     private readonly RuntimeSettings _runtimeSettings;
     private readonly HttpClient _httpClient;
 
-    public GroqModelCatalog(AppConfig config, RuntimeSettings runtimeSettings)
+    public GroqModelCatalog(ProviderOptions providers, ContextOptions context, RuntimeSettings runtimeSettings)
     {
-        _config = config;
+        _providers = providers;
+        _context = context;
         _runtimeSettings = runtimeSettings;
         _httpClient = new HttpClient
         {
-            Timeout = TimeSpan.FromSeconds(Math.Max(5, _config.LlmTimeoutSec))
+            Timeout = TimeSpan.FromSeconds(Math.Max(5, _context.LlmTimeoutSec))
         };
     }
 
@@ -98,7 +100,7 @@ public sealed class GroqModelCatalog : IDisposable
 
         try
         {
-            var endpoint = $"{_config.GroqBaseUrl.TrimEnd('/')}/models";
+            var endpoint = $"{_providers.GroqBaseUrl.TrimEnd('/')}/models";
             using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", groqApiKey);
             using var response = await _httpClient.SendAsync(request, cancellationToken);

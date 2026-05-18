@@ -18,9 +18,9 @@ public sealed class MemoryIndexSchemaBootstrap
     private readonly string _dbPath;
     private readonly string _cacheDirPath;
 
-    public MemoryIndexSchemaBootstrap(AppConfig config)
+    public MemoryIndexSchemaBootstrap(PathOptions paths)
     {
-        var stateRoot = ResolveStateRoot(config.ConversationStatePath);
+        var stateRoot = ResolveStateRoot(paths.ConversationStatePath);
         var indexRoot = Path.Combine(stateRoot, "memory-index");
         _dbPath = Path.Combine(indexRoot, DefaultIndexFileName);
         _cacheDirPath = Path.Combine(indexRoot, "cache");

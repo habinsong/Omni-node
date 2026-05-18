@@ -10,7 +10,7 @@ public sealed class RefactorApplicationService : IRefactorApplicationService
     private readonly LspRefactorService _lspRefactorService;
     private readonly AstGrepRefactorService _astGrepRefactorService;
     private readonly AuditLogger _auditLogger;
-    private readonly AppConfig _config;
+    private readonly PathOptions _paths;
 
     public RefactorApplicationService(
         AnchorReadService anchorReadService,
@@ -19,7 +19,7 @@ public sealed class RefactorApplicationService : IRefactorApplicationService
         LspRefactorService lspRefactorService,
         AstGrepRefactorService astGrepRefactorService,
         AuditLogger auditLogger,
-        AppConfig config
+        PathOptions paths
     )
     {
         _anchorReadService = anchorReadService;
@@ -28,7 +28,7 @@ public sealed class RefactorApplicationService : IRefactorApplicationService
         _lspRefactorService = lspRefactorService;
         _astGrepRefactorService = astGrepRefactorService;
         _auditLogger = auditLogger;
-        _config = config;
+        _paths = paths;
     }
 
     public async Task<RefactorActionResult> ReadWithAnchorsAsync(
@@ -279,7 +279,7 @@ public sealed class RefactorApplicationService : IRefactorApplicationService
 
         foreach (var previewFile in previewFiles)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(previewFile.Path) ?? _config.WorkspaceRootDir);
+            Directory.CreateDirectory(Path.GetDirectoryName(previewFile.Path) ?? _paths.WorkspaceRootDir);
             await File.WriteAllTextAsync(
                 previewFile.Path,
                 previewFile.UpdatedText,

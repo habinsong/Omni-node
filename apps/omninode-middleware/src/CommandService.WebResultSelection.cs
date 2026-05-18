@@ -25,7 +25,7 @@ public sealed partial class CommandService
 
         var targetCount = Math.Clamp(requestedCount, 1, 10);
         var normalizedFocus = (sourceFocus ?? string.Empty).Trim();
-        if (_config.EnableFastWebPipeline)
+        if (_context.EnableFastWebPipeline)
         {
             return await BuildFastContextAlignedWebResultsAsync(
                 query,
@@ -157,7 +157,7 @@ public sealed partial class CommandService
             try
             {
                 using var feedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                feedCts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp((_config.LlmTimeoutSec / 2) + 1, 3, 6)));
+                feedCts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp((_context.LlmTimeoutSec / 2) + 1, 3, 6)));
                 var feedItems = await TryCollectDomainFeedItemsAsync(
                     normalizedDomain,
                     poolLimit,
@@ -246,9 +246,9 @@ public sealed partial class CommandService
         try
         {
             using var backfillCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var backfillTimeout = _config.EnableFastWebPipeline
-                ? Math.Clamp((_config.LlmTimeoutSec / 3) + 1, 2, 4)
-                : Math.Clamp((_config.LlmTimeoutSec / 2) + 3, 5, 12);
+            var backfillTimeout = _context.EnableFastWebPipeline
+                ? Math.Clamp((_context.LlmTimeoutSec / 3) + 1, 2, 4)
+                : Math.Clamp((_context.LlmTimeoutSec / 2) + 3, 5, 12);
             backfillCts.CancelAfter(TimeSpan.FromSeconds(backfillTimeout));
             var backfill = await SearchWebAsync(
                 backfillQuery,
@@ -299,9 +299,9 @@ public sealed partial class CommandService
         try
         {
             using var feedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var feedTimeout = _config.EnableFastWebPipeline
-                ? Math.Clamp((_config.LlmTimeoutSec / 3) + 1, 2, 4)
-                : Math.Clamp((_config.LlmTimeoutSec / 2) + 2, 4, 10);
+            var feedTimeout = _context.EnableFastWebPipeline
+                ? Math.Clamp((_context.LlmTimeoutSec / 3) + 1, 2, 4)
+                : Math.Clamp((_context.LlmTimeoutSec / 2) + 2, 4, 10);
             feedCts.CancelAfter(TimeSpan.FromSeconds(feedTimeout));
             var feedItems = await TryCollectDomainFeedItemsAsync(
                 normalizedDomain,

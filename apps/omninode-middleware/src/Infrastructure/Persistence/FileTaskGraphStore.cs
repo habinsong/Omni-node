@@ -23,7 +23,17 @@ public sealed class FileTaskGraphStore
 
         try
         {
-            var json = File.ReadAllText(indexPath, Encoding.UTF8);
+            var json = AtomicFileStore.ReadAllTextWithBackup(
+                indexPath,
+                value => TaskGraphJson.DeserializeIndexState(value) != null,
+                Encoding.UTF8,
+                "task-graph-store"
+            );
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return Array.Empty<TaskGraphIndexEntry>();
+            }
+
             var state = TaskGraphJson.DeserializeIndexState(json);
             if (state?.Items == null)
             {
@@ -51,7 +61,17 @@ public sealed class FileTaskGraphStore
 
         try
         {
-            var json = File.ReadAllText(path, Encoding.UTF8);
+            var json = AtomicFileStore.ReadAllTextWithBackup(
+                path,
+                value => TaskGraphJson.DeserializeSnapshot(value) != null,
+                Encoding.UTF8,
+                "task-graph-store"
+            );
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return null;
+            }
+
             return TaskGraphJson.DeserializeSnapshot(json);
         }
         catch

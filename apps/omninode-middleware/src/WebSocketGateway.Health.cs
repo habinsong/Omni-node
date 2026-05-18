@@ -167,8 +167,8 @@ public sealed partial class WebSocketGateway
                 + $"\"degradedMode\":{(degradedMode ? "true" : "false")},"
                 + $"\"port\":{_port},"
                 + $"\"prefix\":\"{EscapeJson(listenerPrefix)}\","
-                + $"\"healthEndpointPath\":{(_config.EnableHealthEndpoint ? "\"/healthz\"" : "null")},"
-                + $"\"readyEndpointPath\":{(_config.EnableHealthEndpoint ? "\"/readyz\"" : "null")},"
+                + $"\"healthEndpointPath\":{(_gatewayOptions.EnableHealthEndpoint ? "\"/healthz\"" : "null")},"
+                + $"\"readyEndpointPath\":{(_gatewayOptions.EnableHealthEndpoint ? "\"/readyz\"" : "null")},"
                 + $"\"webSocketPath\":\"{EscapeJson(WebSocketPath)}\","
                 + $"\"webSocketAcceptedCount\":{acceptedCount},"
                 + $"\"webSocketRoundTripCount\":{roundTripCount},"
@@ -180,12 +180,12 @@ public sealed partial class WebSocketGateway
                 + $"\"listenerErrorMessage\":{(listenerErrorMessage == null ? "null" : $"\"{EscapeJson(listenerErrorMessage)}\"")},"
                 + $"\"updatedAtUtc\":\"{EscapeJson(DateTimeOffset.UtcNow.ToString("O"))}\""
                 + "}";
-            AtomicFileStore.WriteAllText(_config.GatewayHealthStatePath, payload, ownerOnly: true);
+            AtomicFileStore.WriteAllText(_paths.GatewayHealthStatePath, payload, ownerOnly: true);
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine(
-                $"[web] health snapshot write failed (path={_config.GatewayHealthStatePath}): {ex.Message}"
+                $"[web] health snapshot write failed (path={_paths.GatewayHealthStatePath}): {ex.Message}"
             );
         }
     }

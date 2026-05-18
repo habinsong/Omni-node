@@ -14,7 +14,7 @@ public sealed class PlanService
     private readonly FilePlanStore _store;
     private readonly LlmRouter _llmRouter;
     private readonly RoutingPolicyResolver _routingPolicyResolver;
-    private readonly AppConfig _config;
+    private readonly PathOptions _paths;
     private readonly IConversationStore _conversationStore;
     private readonly IMemoryNoteStore _memoryNoteStore;
     private readonly ProjectContextLoader _projectContextLoader;
@@ -23,7 +23,7 @@ public sealed class PlanService
         FilePlanStore store,
         LlmRouter llmRouter,
         RoutingPolicyResolver routingPolicyResolver,
-        AppConfig config,
+        PathOptions paths,
         IConversationStore conversationStore,
         IMemoryNoteStore memoryNoteStore,
         ProjectContextLoader projectContextLoader
@@ -32,7 +32,7 @@ public sealed class PlanService
         _store = store;
         _llmRouter = llmRouter;
         _routingPolicyResolver = routingPolicyResolver;
-        _config = config;
+        _paths = paths;
         _conversationStore = conversationStore;
         _memoryNoteStore = memoryNoteStore;
         _projectContextLoader = projectContextLoader;
@@ -342,7 +342,7 @@ public sealed class PlanService
         ));
         builder.AppendLine();
         builder.AppendLine("workspace_root:");
-        builder.AppendLine(_config.WorkspaceRootDir);
+        builder.AppendLine(_paths.WorkspaceRootDir);
 
         if (!string.IsNullOrWhiteSpace(sourceConversationId))
         {

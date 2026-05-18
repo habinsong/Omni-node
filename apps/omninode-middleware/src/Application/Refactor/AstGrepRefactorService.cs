@@ -5,19 +5,19 @@ namespace OmniNode.Middleware;
 
 public sealed class AstGrepRefactorService
 {
-    private readonly AppConfig _config;
+    private readonly RefactorOptions _options;
     private readonly RefactorToolAvailability _toolAvailability;
     private readonly AnchorReadService _anchorReadService;
     private readonly DiffPreviewService _diffPreviewService;
 
     public AstGrepRefactorService(
-        AppConfig config,
+        RefactorOptions options,
         RefactorToolAvailability toolAvailability,
         AnchorReadService anchorReadService,
         DiffPreviewService diffPreviewService
     )
     {
-        _config = config;
+        _options = options;
         _toolAvailability = toolAvailability;
         _anchorReadService = anchorReadService;
         _diffPreviewService = diffPreviewService;
@@ -32,7 +32,7 @@ public sealed class AstGrepRefactorService
     {
         cancellationToken.ThrowIfCancellationRequested();
         var normalizedPath = _anchorReadService.ResolveWorkspacePath(path);
-        var probe = _toolAvailability.ProbeAstGrep(normalizedPath, _config.RefactorEnableAstGrep);
+        var probe = _toolAvailability.ProbeAstGrep(normalizedPath, _options.RefactorEnableAstGrep);
         if (!probe.Enabled || !probe.Available)
         {
             return BuildResult(probe, probe.Message);

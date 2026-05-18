@@ -13,23 +13,25 @@ internal sealed class GatewayStartupProbe
     private const string ProbeModeLive = "live";
     private const string ProbeModeMock = "mock";
     private const int WebSocketPingPongMaxAttemptsCap = 20;
-    private readonly AppConfig _config;
+    private readonly GatewayOptions _gatewayOptions;
+    private readonly PathOptions _paths;
     private readonly int _port;
 
-    public GatewayStartupProbe(AppConfig config, int port)
+    public GatewayStartupProbe(GatewayOptions gatewayOptions, PathOptions paths, int port)
     {
-        _config = config;
+        _gatewayOptions = gatewayOptions;
+        _paths = paths;
         _port = port;
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        if (!_config.EnableGatewayStartupProbe)
+        if (!_gatewayOptions.EnableGatewayStartupProbe)
         {
             return;
         }
 
-        if (!_config.EnableHealthEndpoint)
+        if (!_gatewayOptions.EnableHealthEndpoint)
         {
             const string reason = "health endpoint disabled";
             Console.WriteLine($"[web] startup probe skipped: {reason}");
@@ -45,14 +47,14 @@ internal sealed class GatewayStartupProbe
         }
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(_config.GatewayStartupProbeTimeoutSec));
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(_gatewayOptions.GatewayStartupProbeTimeoutSec));
         var effectiveToken = timeoutCts.Token;
 
         try
         {
-            if (_config.GatewayStartupProbeDelayMs > 0)
+            if (_gatewayOptions.GatewayStartupProbeDelayMs > 0)
             {
-                await Task.Delay(_config.GatewayStartupProbeDelayMs, effectiveToken);
+                await Task.Delay(_gatewayOptions.GatewayStartupProbeDelayMs, effectiveToken);
             }
 
             var healthUri = new Uri($"http://127.0.0.1:{_port}/healthz");
@@ -98,7 +100,7 @@ internal sealed class GatewayStartupProbe
                 {
                     Console.WriteLine(
                         $"[web] startup probe endpoints ready after {initialProbeResult.Attempts} attempts "
-                        + $"(pollIntervalMs={Math.Max(50, _config.GatewayStartupProbePollIntervalMs)})"
+                        + $"(pollIntervalMs={Math.Max(50, _gatewayOptions.GatewayStartupProbePollIntervalMs)})"
                     );
                 }
 
@@ -145,7 +147,7 @@ internal sealed class GatewayStartupProbe
                 {
                     Console.WriteLine(
                         $"[web] startup probe readyz transitioned after {readyAfterResult.Attempts} attempts "
-                        + $"(pollIntervalMs={Math.Max(50, _config.GatewayStartupProbePollIntervalMs)})"
+                        + $"(pollIntervalMs={Math.Max(50, _gatewayOptions.GatewayStartupProbePollIntervalMs)})"
                     );
                 }
 
@@ -191,7 +193,7 @@ internal sealed class GatewayStartupProbe
                 {
                     Console.WriteLine(
                         $"[web] startup probe gateway roundtrip metric observed after {gatewayRoundTripMetricResult.Attempts} attempts "
-                        + $"(pollIntervalMs={Math.Max(50, _config.GatewayStartupProbePollIntervalMs)}, count={gatewayRoundTripCount.Value.ToString(CultureInfo.InvariantCulture)})"
+                        + $"(pollIntervalMs={Math.Max(50, _gatewayOptions.GatewayStartupProbePollIntervalMs)}, count={gatewayRoundTripCount.Value.ToString(CultureInfo.InvariantCulture)})"
                     );
                 }
 
@@ -247,11 +249,11 @@ internal sealed class GatewayStartupProbe
             if (!cancellationToken.IsCancellationRequested)
             {
                 Console.Error.WriteLine(
-                    $"[web] startup probe timeout ({_config.GatewayStartupProbeTimeoutSec}s)"
+                    $"[web] startup probe timeout ({_gatewayOptions.GatewayStartupProbeTimeoutSec}s)"
                 );
                 WriteProbeSnapshot(
                     result: "timeout",
-                    reason: $"timeout ({_config.GatewayStartupProbeTimeoutSec}s)"
+                    reason: $"timeout ({_gatewayOptions.GatewayStartupProbeTimeoutSec}s)"
                 );
             }
         }
@@ -273,14 +275,14 @@ internal sealed class GatewayStartupProbe
     private async Task RunMockProbeAsync(CancellationToken cancellationToken)
     {
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(_config.GatewayStartupProbeTimeoutSec));
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(_gatewayOptions.GatewayStartupProbeTimeoutSec));
         var effectiveToken = timeoutCts.Token;
 
         try
         {
-            if (_config.GatewayStartupProbeDelayMs > 0)
+            if (_gatewayOptions.GatewayStartupProbeDelayMs > 0)
             {
-                await Task.Delay(_config.GatewayStartupProbeDelayMs, effectiveToken);
+                await Task.Delay(_gatewayOptions.GatewayStartupProbeDelayMs, effectiveToken);
             }
 
             var evaluation = EvaluateProbeResult(
@@ -313,11 +315,11 @@ internal sealed class GatewayStartupProbe
             if (!cancellationToken.IsCancellationRequested)
             {
                 Console.Error.WriteLine(
-                    $"[web] startup probe timeout ({_config.GatewayStartupProbeTimeoutSec}s)"
+                    $"[web] startup probe timeout ({_gatewayOptions.GatewayStartupProbeTimeoutSec}s)"
                 );
                 WriteProbeSnapshot(
                     result: "timeout",
-                    reason: $"timeout ({_config.GatewayStartupProbeTimeoutSec}s)"
+                    reason: $"timeout ({_gatewayOptions.GatewayStartupProbeTimeoutSec}s)"
                 );
             }
         }
@@ -325,7 +327,7 @@ internal sealed class GatewayStartupProbe
 
     private string ResolveProbeMode()
     {
-        return NormalizeProbeMode(_config.GatewayStartupProbeMode);
+        return NormalizeProbeMode(_gatewayOptions.GatewayStartupProbeMode);
     }
 
     private static string NormalizeProbeMode(string? mode)
@@ -375,7 +377,7 @@ internal sealed class GatewayStartupProbe
     )
     {
         var attempts = 0;
-        var pollIntervalMs = Math.Max(50, _config.GatewayStartupProbePollIntervalMs);
+        var pollIntervalMs = Math.Max(50, _gatewayOptions.GatewayStartupProbePollIntervalMs);
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -445,7 +447,7 @@ internal sealed class GatewayStartupProbe
     )
     {
         var attempts = 0;
-        var pollIntervalMs = Math.Max(50, _config.GatewayStartupProbePollIntervalMs);
+        var pollIntervalMs = Math.Max(50, _gatewayOptions.GatewayStartupProbePollIntervalMs);
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -535,14 +537,14 @@ internal sealed class GatewayStartupProbe
         try
         {
             if (
-                string.IsNullOrWhiteSpace(_config.GatewayHealthStatePath)
-                || !File.Exists(_config.GatewayHealthStatePath)
+                string.IsNullOrWhiteSpace(_paths.GatewayHealthStatePath)
+                || !File.Exists(_paths.GatewayHealthStatePath)
             )
             {
                 return null;
             }
 
-            using var document = JsonDocument.Parse(File.ReadAllText(_config.GatewayHealthStatePath));
+            using var document = JsonDocument.Parse(File.ReadAllText(_paths.GatewayHealthStatePath));
             var root = document.RootElement;
             if (
                 root.TryGetProperty("listenerBound", out var listenerBoundElement)
@@ -607,10 +609,10 @@ internal sealed class GatewayStartupProbe
         }
 
         var attempts = 0;
-        var pollIntervalMs = Math.Max(50, _config.GatewayStartupProbePollIntervalMs);
+        var pollIntervalMs = Math.Max(50, _gatewayOptions.GatewayStartupProbePollIntervalMs);
         var maxAttempts = Math.Max(
             1,
-            (_config.GatewayStartupProbeTimeoutSec * 1000) / pollIntervalMs
+            (_gatewayOptions.GatewayStartupProbeTimeoutSec * 1000) / pollIntervalMs
         );
         while (attempts < maxAttempts)
         {
@@ -681,14 +683,14 @@ internal sealed class GatewayStartupProbe
         try
         {
             if (
-                string.IsNullOrWhiteSpace(_config.GatewayHealthStatePath)
-                || !File.Exists(_config.GatewayHealthStatePath)
+                string.IsNullOrWhiteSpace(_paths.GatewayHealthStatePath)
+                || !File.Exists(_paths.GatewayHealthStatePath)
             )
             {
                 return false;
             }
 
-            using var document = JsonDocument.Parse(File.ReadAllText(_config.GatewayHealthStatePath));
+            using var document = JsonDocument.Parse(File.ReadAllText(_paths.GatewayHealthStatePath));
             var root = document.RootElement;
             if (
                 root.TryGetProperty("webSocketRoundTripCount", out var roundTripElement)
@@ -721,12 +723,12 @@ internal sealed class GatewayStartupProbe
 
     private async Task<bool> TryRunWebSocketPingPongAsync(CancellationToken cancellationToken)
     {
-        var pollIntervalMs = Math.Max(50, _config.GatewayStartupProbePollIntervalMs);
+        var pollIntervalMs = Math.Max(50, _gatewayOptions.GatewayStartupProbePollIntervalMs);
         var maxAttempts = Math.Max(
             1,
             Math.Min(
                 WebSocketPingPongMaxAttemptsCap,
-                (_config.GatewayStartupProbeTimeoutSec * 1000) / pollIntervalMs
+                (_gatewayOptions.GatewayStartupProbeTimeoutSec * 1000) / pollIntervalMs
             )
         );
 
@@ -940,7 +942,7 @@ internal sealed class GatewayStartupProbe
 
             httpClient = new HttpClient(handler, disposeHandler: true)
             {
-                Timeout = TimeSpan.FromSeconds(Math.Max(3, _config.GatewayStartupProbeTimeoutSec))
+                Timeout = TimeSpan.FromSeconds(Math.Max(3, _gatewayOptions.GatewayStartupProbeTimeoutSec))
             };
             error = string.Empty;
             return true;
@@ -1053,12 +1055,12 @@ internal sealed class GatewayStartupProbe
                 + $"\"failedChecks\":{FormatNullableString(failedChecks)},"
                 + $"\"updatedAtUtc\":\"{EscapeJson(DateTimeOffset.UtcNow.ToString("O"))}\""
                 + "}";
-            AtomicFileStore.WriteAllText(_config.GatewayStartupProbeStatePath, payload, ownerOnly: true);
+            AtomicFileStore.WriteAllText(_paths.GatewayStartupProbeStatePath, payload, ownerOnly: true);
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine(
-                $"[web] startup probe snapshot write failed (path={_config.GatewayStartupProbeStatePath}): {ex.Message}"
+                $"[web] startup probe snapshot write failed (path={_paths.GatewayStartupProbeStatePath}): {ex.Message}"
             );
         }
     }

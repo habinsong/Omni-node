@@ -559,6 +559,10 @@ internal sealed class WsConversationMemoryDispatcher
                   + $"\"indexedDocuments\":{snapshot.IndexedDocuments},"
                   + $"\"skippedDocuments\":{snapshot.SkippedDocuments},"
                   + $"\"removedDocuments\":{snapshot.RemovedDocuments},"
+                  + $"\"memoryDocuments\":{snapshot.MemoryDocuments},"
+                  + $"\"sessionDocuments\":{snapshot.SessionDocuments},"
+                  + $"\"projectDocuments\":{snapshot.ProjectDocuments},"
+                  + $"\"elapsedMs\":{snapshot.ElapsedMs},"
                   + $"\"ftsAvailable\":{(snapshot.FtsAvailable ? "true" : "false")}"
                   + "}")
             + "}";

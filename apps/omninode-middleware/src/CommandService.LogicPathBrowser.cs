@@ -101,7 +101,7 @@ public sealed partial class CommandService
 
     private LogicPathBrowseResult BrowseLogicMemoryNotesRoot()
     {
-        var rootDirectory = Path.GetFullPath(_config.MemoryNotesRootDir);
+        var rootDirectory = Path.GetFullPath(_paths.MemoryNotesRootDir);
         try
         {
             Directory.CreateDirectory(rootDirectory);
@@ -327,7 +327,7 @@ public sealed partial class CommandService
 
     private IReadOnlyList<LogicPathBrowseEntry> LoadLogicConversationEntries()
     {
-        var statePath = Path.GetFullPath(_config.ConversationStatePath);
+        var statePath = Path.GetFullPath(_paths.ConversationStatePath);
         if (!File.Exists(statePath))
         {
             return Array.Empty<LogicPathBrowseEntry>();

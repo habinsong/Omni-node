@@ -285,7 +285,7 @@ public sealed partial class CommandService
         var history = string.Empty;
         if (includePriorContext)
         {
-            var historyRaw = _conversationStore.BuildHistoryText(conversationId, _config.ConversationHistoryMessages);
+            var historyRaw = _conversationStore.BuildHistoryText(conversationId, _context.ConversationHistoryMessages);
             history = BuildBudgetedContextHistory(historyRaw, 5200);
         }
 
@@ -842,12 +842,12 @@ public sealed partial class CommandService
     )
     {
         var currentChars = _conversationStore.GetTotalCharacters(conversationId);
-        if (currentChars < Math.Max(2000, _config.ConversationCompressChars))
+        if (currentChars < Math.Max(2000, _context.ConversationCompressChars))
         {
             return null;
         }
 
-        var sourceText = _conversationStore.BuildCompressionSourceText(conversationId, _config.ConversationKeepRecentMessages);
+        var sourceText = _conversationStore.BuildCompressionSourceText(conversationId, _context.ConversationKeepRecentMessages);
         if (string.IsNullOrWhiteSpace(sourceText))
         {
             return null;
@@ -901,7 +901,7 @@ public sealed partial class CommandService
         _conversationStore.AddLinkedMemoryNote(conversationId, saved.Name);
         _conversationStore.CompactWithSummary(
             conversationId,
-            _config.ConversationKeepRecentMessages,
+            _context.ConversationKeepRecentMessages,
             $"자동 압축 완료. 메모리 노트 `{saved.Name}` 를 컨텍스트로 사용합니다."
         );
         return saved;
@@ -973,11 +973,11 @@ public sealed partial class CommandService
 
         return provider switch
         {
-            "gemini" => _config.GeminiModel,
-            "cerebras" => _config.CerebrasModel,
-            "nvidia" => _config.NvidiaModel,
+            "gemini" => _providers.GeminiModel,
+            "cerebras" => _providers.CerebrasModel,
+            "nvidia" => _providers.NvidiaModel,
             "copilot" => DefaultCopilotModel,
-            "codex" => _config.CodexModel,
+            "codex" => _providers.CodexModel,
             _ => _llmRouter.GetSelectedGroqModel()
         };
     }
@@ -1208,7 +1208,7 @@ public sealed partial class CommandService
         if (_llmRouter.HasGeminiApiKey())
         {
             var gemini = await _llmRouter.GenerateGeminiChatAsync(input, cancellationToken);
-            return new LlmSingleChatResult("gemini", _config.GeminiModel, gemini);
+            return new LlmSingleChatResult("gemini", _providers.GeminiModel, gemini);
         }
 
         var copilotStatus = await _copilotWrapper.GetStatusAsync(cancellationToken);
@@ -6120,10 +6120,10 @@ public sealed partial class CommandService
             || string.Equals(provider, "cerebras", StringComparison.OrdinalIgnoreCase)
             || string.Equals(provider, "nvidia", StringComparison.OrdinalIgnoreCase))
         {
-            return Math.Clamp(_config.CodingMaxOutputTokens, 1200, 3200);
+            return Math.Clamp(_context.CodingMaxOutputTokens, 1200, 3200);
         }
 
-        return Math.Clamp(_config.CodingMaxOutputTokens, 1200, 2400);
+        return Math.Clamp(_context.CodingMaxOutputTokens, 1200, 2400);
     }
 
     private int ResolveMaxIterations(string provider, bool oneShotMode)
@@ -6133,23 +6133,23 @@ public sealed partial class CommandService
             return 1;
         }
 
-        return Math.Max(2, _config.CodingAgentMaxIterations);
+        return Math.Max(2, _context.CodingAgentMaxIterations);
     }
 
     private int ResolveMaxActions(string provider, bool oneShotMode)
     {
         if (oneShotMode)
         {
-            return Math.Max(4, _config.CodingAgentMaxActionsPerIteration);
+            return Math.Max(4, _context.CodingAgentMaxActionsPerIteration);
         }
 
         if (string.Equals(provider, "copilot", StringComparison.OrdinalIgnoreCase))
         {
-            var copilotActions = Math.Max(1, _config.CodingCopilotMaxActionsPerIteration);
-            return Math.Min(Math.Max(1, _config.CodingAgentMaxActionsPerIteration), copilotActions);
+            var copilotActions = Math.Max(1, _context.CodingCopilotMaxActionsPerIteration);
+            return Math.Min(Math.Max(1, _context.CodingAgentMaxActionsPerIteration), copilotActions);
         }
 
-        return Math.Max(1, _config.CodingAgentMaxActionsPerIteration);
+        return Math.Max(1, _context.CodingAgentMaxActionsPerIteration);
     }
 
     private const int VisibleCodingStageTotal = 6;
@@ -6291,7 +6291,7 @@ public sealed partial class CommandService
 
     private bool ShouldUseOneShotMode(string provider, string objective, string languageHint)
     {
-        if (!_config.CodingEnableOneShotUiClone)
+        if (!_context.CodingEnableOneShotUiClone)
         {
             return false;
         }
@@ -6362,7 +6362,7 @@ public sealed partial class CommandService
         }
 
         var keepCount = string.Equals(provider, "copilot", StringComparison.OrdinalIgnoreCase)
-            ? Math.Max(1, _config.CodingRecentLoopHistoryForCopilot)
+            ? Math.Max(1, _context.CodingRecentLoopHistoryForCopilot)
             : 4;
         var selected = iterations.TakeLast(keepCount).ToArray();
         for (var i = 0; i < selected.Length; i++)

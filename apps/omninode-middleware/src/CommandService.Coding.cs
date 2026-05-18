@@ -1249,7 +1249,7 @@ public sealed partial class CommandService
                 aggregateModel,
                 BuildMultiCodingSummaryPrompt(contextualInput, workerResults),
                 cancellationToken,
-                Math.Min(Math.Max(1400, _config.CodingMaxOutputTokens), 2600),
+                Math.Min(Math.Max(1400, _context.CodingMaxOutputTokens), 2600),
                 useRawCodexPrompt: true,
                 codexWorkingDirectoryOverride: codingRunRoot,
                 optimizeCodexForCoding: string.Equals(aggregateProvider, "codex", StringComparison.OrdinalIgnoreCase)

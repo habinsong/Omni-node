@@ -15,7 +15,7 @@ public sealed class ConversationApplicationService : IConversationApplicationSer
     private readonly IConversationStore _conversationStore;
     private readonly IMemoryNoteStore _memoryNoteStore;
     private readonly AuditLogger _auditLogger;
-    private readonly AppConfig _config;
+    private readonly PathOptions _paths;
     private readonly MemorySearchTool _memorySearchTool;
 
     private readonly object _indexSyncLock = new();
@@ -33,14 +33,14 @@ public sealed class ConversationApplicationService : IConversationApplicationSer
         IConversationStore conversationStore,
         IMemoryNoteStore memoryNoteStore,
         AuditLogger auditLogger,
-        AppConfig config,
+        PathOptions paths,
         MemorySearchTool memorySearchTool
     )
     {
         _conversationStore = conversationStore;
         _memoryNoteStore = memoryNoteStore;
         _auditLogger = auditLogger;
-        _config = config;
+        _paths = paths;
         _memorySearchTool = memorySearchTool;
     }
 
@@ -215,17 +215,17 @@ public sealed class ConversationApplicationService : IConversationApplicationSer
             using var memory = new MemoryStream();
             using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
             {
-                AddFileToBackup(archive, _config.ConversationStatePath, "conversations.json", included);
-                AddFileToBackup(archive, _config.RoutineStatePath, "routines.json", included);
+                AddFileToBackup(archive, _paths.ConversationStatePath, "conversations.json", included);
+                AddFileToBackup(archive, _paths.RoutineStatePath, "routines.json", included);
                 AddFileToBackup(archive, ResolveStateFilePath("routing-policy.json"), "routing-policy.json", included);
-                AddDirectoryToBackup(archive, _config.MemoryNotesRootDir, "memory-notes", included);
+                AddDirectoryToBackup(archive, _paths.MemoryNotesRootDir, "memory-notes", included);
                 AddDirectoryToBackup(archive, ResolveStateDirectoryPath("plans"), "plans", included);
                 AddDirectoryToBackup(archive, ResolveStateDirectoryPath("tasks"), "tasks", included);
                 AddDirectoryToBackup(archive, ResolveStateDirectoryPath("notebooks"), "notebooks", included);
                 AddDirectoryToBackup(archive, ResolveStateDirectoryPath("skills"), "skills/global", included);
                 AddDirectoryToBackup(archive, ResolveStateDirectoryPath("commands"), "commands/global", included);
-                AddDirectoryToBackup(archive, Path.Combine(_config.WorkspaceRootDir, ".omni", "skills"), "skills/project", included);
-                AddDirectoryToBackup(archive, Path.Combine(_config.WorkspaceRootDir, ".omni", "commands"), "commands/project", included);
+                AddDirectoryToBackup(archive, Path.Combine(_paths.WorkspaceRootDir, ".omni", "skills"), "skills/project", included);
+                AddDirectoryToBackup(archive, Path.Combine(_paths.WorkspaceRootDir, ".omni", "commands"), "commands/project", included);
             }
 
             var bytes = memory.ToArray();
@@ -709,8 +709,8 @@ public sealed class ConversationApplicationService : IConversationApplicationSer
 
         try
         {
-            var schema = new MemoryIndexSchemaBootstrap(_config).EnsureInitialized();
-            _ = new MemoryIndexDocumentSync(_config, schema).SyncOnce();
+            var schema = new MemoryIndexSchemaBootstrap(_paths).EnsureInitialized();
+            _ = new MemoryIndexDocumentSync(_paths, schema).SyncOnce();
         }
         catch (Exception ex)
         {
@@ -850,7 +850,7 @@ public sealed class ConversationApplicationService : IConversationApplicationSer
         var stateRoot = ResolveStateRootDir();
         return normalized switch
         {
-            "routines.json" => _config.RoutineStatePath,
+            "routines.json" => _paths.RoutineStatePath,
             "routing-policy.json" => ResolveStateFilePath("routing-policy.json"),
             _ when normalized.StartsWith("memory-notes/", StringComparison.OrdinalIgnoreCase) =>
                 Path.Combine(stateRoot, normalized),
@@ -865,9 +865,9 @@ public sealed class ConversationApplicationService : IConversationApplicationSer
             _ when normalized.StartsWith("commands/global/", StringComparison.OrdinalIgnoreCase) =>
                 Path.Combine(stateRoot, "commands", normalized["commands/global/".Length..]),
             _ when normalized.StartsWith("skills/project/", StringComparison.OrdinalIgnoreCase) =>
-                Path.Combine(_config.WorkspaceRootDir, ".omni", "skills", normalized["skills/project/".Length..]),
+                Path.Combine(_paths.WorkspaceRootDir, ".omni", "skills", normalized["skills/project/".Length..]),
             _ when normalized.StartsWith("commands/project/", StringComparison.OrdinalIgnoreCase) =>
-                Path.Combine(_config.WorkspaceRootDir, ".omni", "commands", normalized["commands/project/".Length..]),
+                Path.Combine(_paths.WorkspaceRootDir, ".omni", "commands", normalized["commands/project/".Length..]),
             _ => null
         };
     }
@@ -925,7 +925,7 @@ public sealed class ConversationApplicationService : IConversationApplicationSer
 
     private string ResolveStateRootDir()
     {
-        return Path.GetDirectoryName(Path.GetFullPath(_config.ConversationStatePath))
+        return Path.GetDirectoryName(Path.GetFullPath(_paths.ConversationStatePath))
                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".omninode");
     }
 
@@ -947,9 +947,9 @@ public sealed class ConversationApplicationService : IConversationApplicationSer
 
     private string ResolveWorkspaceRoot()
     {
-        var configured = string.IsNullOrWhiteSpace(_config.WorkspaceRootDir)
+        var configured = string.IsNullOrWhiteSpace(_paths.WorkspaceRootDir)
             ? Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), ".."))
-            : _config.WorkspaceRootDir;
+            : _paths.WorkspaceRootDir;
         var fullPath = Path.GetFullPath(configured);
         try
         {

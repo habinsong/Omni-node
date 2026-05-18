@@ -45,17 +45,24 @@ public sealed class GeminiGroundedRetriever : ISearchRetriever
     };
     private static readonly HttpClient SharedHttpClient = CreateSharedHttpClient();
 
-    private readonly AppConfig _config;
+    private readonly ProviderOptions _providers;
+    private readonly ContextOptions _context;
     private readonly RuntimeSettings _runtimeSettings;
     private readonly HttpClient _httpClient;
     private readonly int _timeoutSeconds;
 
-    public GeminiGroundedRetriever(AppConfig config, RuntimeSettings runtimeSettings, HttpClient? httpClient = null)
+    public GeminiGroundedRetriever(
+        ProviderOptions providers,
+        ContextOptions context,
+        RuntimeSettings runtimeSettings,
+        HttpClient? httpClient = null
+    )
     {
-        _config = config;
+        _providers = providers;
+        _context = context;
         _runtimeSettings = runtimeSettings;
         _httpClient = httpClient ?? SharedHttpClient;
-        _timeoutSeconds = ResolveTimeout(config.GeminiWebTimeoutMs);
+        _timeoutSeconds = ResolveTimeout(_context.GeminiWebTimeoutMs);
     }
 
     public async Task<GeminiGroundedRetrieverResult> RetrieveAsync(
@@ -77,8 +84,8 @@ public sealed class GeminiGroundedRetriever : ISearchRetriever
         }
 
         var normalizedMaxResults = NormalizeMaxResults(maxResults);
-        var selectedModel = ResolveRetrieverModel(_config.GeminiSearchModel);
-        var endpoint = $"{_config.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:generateContent";
+        var selectedModel = ResolveRetrieverModel(_providers.GeminiSearchModel);
+        var endpoint = $"{_providers.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:generateContent";
         var prompt = BuildRetrieverPrompt(request, normalizedMaxResults);
         var requestJson = BuildRequestJson(prompt);
 

@@ -8,9 +8,9 @@ public sealed class DiffPreviewService
     private readonly string _workspaceRoot;
     private readonly FileRefactorPreviewStore _previewStore;
 
-    public DiffPreviewService(AppConfig config, FileRefactorPreviewStore previewStore)
+    public DiffPreviewService(PathOptions paths, FileRefactorPreviewStore previewStore)
     {
-        _workspaceRoot = Path.GetFullPath(config.WorkspaceRootDir);
+        _workspaceRoot = Path.GetFullPath(paths.WorkspaceRootDir);
         _previewStore = previewStore;
     }
 

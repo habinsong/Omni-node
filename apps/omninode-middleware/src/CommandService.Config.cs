@@ -64,11 +64,11 @@ public sealed partial class CommandService
 
     public CronToolStatusResult GetCronStatus()
     {
-        lock (_routineLock)
+        return _routineRegistry.ReadAll(routines =>
         {
-            var routines = _routinesById.Values.ToArray();
+            var routineItems = routines.ToArray();
             long? nextWakeAtMs = null;
-            foreach (var routine in routines)
+            foreach (var routine in routineItems)
             {
                 if (!routine.Enabled)
                 {
@@ -86,11 +86,11 @@ public sealed partial class CommandService
                 || (!_routineSchedulerTask.IsFaulted && !_routineSchedulerTask.IsCanceled);
             return new CronToolStatusResult(
                 Enabled: schedulerEnabled,
-                StorePath: _routineStore.StorePath,
-                Jobs: routines.Length,
+                StorePath: _routineRegistry.StorePath,
+                Jobs: routineItems.Length,
                 NextWakeAtMs: nextWakeAtMs
             );
-        }
+        });
     }
 
     public CronToolListResult ListCronJobs(
@@ -99,33 +99,33 @@ public sealed partial class CommandService
         int? offset = null
     )
     {
-        lock (_routineLock)
+        return _routineRegistry.ReadAll(routines =>
         {
-            var mapped = _routinesById.Values
-                .Where(x => includeDisabled || x.Enabled)
-                .Select(ToCronToolJob)
-                .OrderBy(x => x.State.NextRunAtMs.HasValue ? 0 : 1)
-                .ThenBy(x => x.State.NextRunAtMs ?? long.MaxValue)
-                .ThenBy(x => x.Id, StringComparer.Ordinal)
-                .ToArray();
-            var total = mapped.Length;
-            var resolvedOffset = Math.Clamp(offset ?? 0, 0, total);
-            var defaultLimit = total == 0 ? 50 : total;
-            var resolvedLimit = Math.Clamp(limit ?? defaultLimit, 1, 200);
-            var page = mapped
-                .Skip(resolvedOffset)
-                .Take(resolvedLimit)
-                .ToArray();
-            var nextOffset = resolvedOffset + page.Length;
-            return new CronToolListResult(
-                Jobs: page,
-                Total: total,
-                Offset: resolvedOffset,
-                Limit: resolvedLimit,
-                HasMore: nextOffset < total,
-                NextOffset: nextOffset < total ? nextOffset : null
-            );
-        }
+        var mapped = routines
+            .Where(x => includeDisabled || x.Enabled)
+            .Select(ToCronToolJob)
+            .OrderBy(x => x.State.NextRunAtMs.HasValue ? 0 : 1)
+            .ThenBy(x => x.State.NextRunAtMs ?? long.MaxValue)
+            .ThenBy(x => x.Id, StringComparer.Ordinal)
+            .ToArray();
+        var total = mapped.Length;
+        var resolvedOffset = Math.Clamp(offset ?? 0, 0, total);
+        var defaultLimit = total == 0 ? 50 : total;
+        var resolvedLimit = Math.Clamp(limit ?? defaultLimit, 1, 200);
+        var page = mapped
+            .Skip(resolvedOffset)
+            .Take(resolvedLimit)
+            .ToArray();
+        var nextOffset = resolvedOffset + page.Length;
+        return new CronToolListResult(
+            Jobs: page,
+            Total: total,
+            Offset: resolvedOffset,
+            Limit: resolvedLimit,
+            HasMore: nextOffset < total,
+            NextOffset: nextOffset < total ? nextOffset : null
+        );
+        });
     }
 
     public CronToolRunsResult ListCronRuns(
@@ -145,24 +145,24 @@ public sealed partial class CommandService
             return new CronToolRunsResult(false, Array.Empty<CronToolRunLogEntry>(), 0, 0, 0, false, null, "invalid jobId");
         }
 
-        lock (_routineLock)
+        return _routineRegistry.Read(normalizedId, routine =>
         {
-            if (!_routinesById.TryGetValue(normalizedId, out var routine))
+            if (routine == null)
             {
                 return new CronToolRunsResult(false, Array.Empty<CronToolRunLogEntry>(), 0, 0, 0, false, null, $"job not found: {normalizedId}");
             }
 
             var entries = BuildCronRunEntries(routine)
-                .OrderByDescending(x => x.Ts)
-                .ThenByDescending(x => x.RunAtMs ?? 0L)
-                .ToArray();
+            .OrderByDescending(x => x.Ts)
+            .ThenByDescending(x => x.RunAtMs ?? 0L)
+            .ToArray();
             var total = entries.Length;
             var resolvedOffset = Math.Clamp(offset ?? 0, 0, total);
             var resolvedLimit = Math.Clamp(limit ?? 50, 1, 200);
             var page = entries
-                .Skip(resolvedOffset)
-                .Take(resolvedLimit)
-                .ToArray();
+            .Skip(resolvedOffset)
+            .Take(resolvedLimit)
+            .ToArray();
             var nextOffset = resolvedOffset + page.Length;
 
             return new CronToolRunsResult(
@@ -175,7 +175,7 @@ public sealed partial class CommandService
                 NextOffset: nextOffset < total ? nextOffset : null,
                 Error: null
             );
-        }
+        });
     }
 
     public CronToolAddResult AddCronJob(string? rawJobJson)
@@ -552,7 +552,7 @@ public sealed partial class CommandService
                 );
             }
 
-            var runDir = Path.Combine(_config.WorkspaceRootDir, "routines", id);
+            var runDir = Path.Combine(_paths.WorkspaceRootDir, "routines", id);
             Directory.CreateDirectory(runDir);
             var routineSchedule = new RoutineSchedule(hour, minute, scheduleDisplay);
             var routineCode = BuildFallbackRoutineCode(payloadTextValue, routineSchedule);
@@ -610,11 +610,10 @@ public sealed partial class CommandService
 
             routine.NextRunUtc = ComputeNextCronBridgeRunUtc(routine, createdAt);
 
-            lock (_routineLock)
+            _routineRegistry.Mutate(routines =>
             {
-                _routinesById[routine.Id] = routine;
-                SaveRoutineStateLocked();
-            }
+                routines[routine.Id] = routine;
+            });
 
             return new CronToolAddResult(true, ToCronToolJob(routine), null);
         }
@@ -652,15 +651,14 @@ public sealed partial class CommandService
                 return new CronToolUpdateResult(false, null, "patch must be a JSON object");
             }
 
-            lock (_routineLock)
+            return _routineRegistry.Mutate<CronToolUpdateResult>(routines =>
             {
-                if (!_routinesById.TryGetValue(normalizedId, out var routine))
+                if (!routines.TryGetValue(normalizedId, out var routine))
                 {
                     return new CronToolUpdateResult(false, null, $"job not found: {normalizedId}");
                 }
 
                 var now = DateTimeOffset.UtcNow;
-                var hasChanges = false;
                 var scheduleChanged = false;
                 var payloadTextChanged = false;
                 var nextSessionTarget = NormalizeCronSessionTargetOrDefault(routine.CronSessionTarget);
@@ -708,7 +706,6 @@ public sealed partial class CommandService
                     if (!string.Equals(routine.CronWakeMode, wakeMode, StringComparison.Ordinal))
                     {
                         routine.CronWakeMode = wakeMode;
-                        hasChanges = true;
                     }
                 }
 
@@ -728,7 +725,6 @@ public sealed partial class CommandService
                     if (!string.Equals(routine.Title, name, StringComparison.Ordinal))
                     {
                         routine.Title = name;
-                        hasChanges = true;
                     }
                 }
 
@@ -746,7 +742,6 @@ public sealed partial class CommandService
                     if (!string.Equals(routine.CronDescription ?? string.Empty, description ?? string.Empty, StringComparison.Ordinal))
                     {
                         routine.CronDescription = description;
-                        hasChanges = true;
                     }
                 }
 
@@ -777,8 +772,6 @@ public sealed partial class CommandService
                         {
                             routine.Running = false;
                         }
-
-                        hasChanges = true;
                     }
                 }
 
@@ -861,7 +854,6 @@ public sealed partial class CommandService
                             routine.CronScheduleEveryMs = null;
                             routine.CronScheduleAnchorMs = null;
                             scheduleChanged = true;
-                            hasChanges = true;
                         }
                     }
                     else if (string.Equals(scheduleKind, "at", StringComparison.Ordinal))
@@ -902,7 +894,6 @@ public sealed partial class CommandService
                             routine.Minute = localAt.Minute;
                             routine.ScheduleText = nextScheduleText;
                             scheduleChanged = true;
-                            hasChanges = true;
                         }
                     }
                     else if (string.Equals(scheduleKind, "every", StringComparison.Ordinal))
@@ -955,7 +946,6 @@ public sealed partial class CommandService
                             }
 
                             scheduleChanged = true;
-                            hasChanges = true;
                         }
                     }
                     else
@@ -1278,7 +1268,6 @@ public sealed partial class CommandService
                 if (!string.Equals(routine.CronSessionTarget, nextSessionTarget, StringComparison.OrdinalIgnoreCase))
                 {
                     routine.CronSessionTarget = nextSessionTarget;
-                    hasChanges = true;
                 }
 
                 if (!string.Equals(
@@ -1288,7 +1277,6 @@ public sealed partial class CommandService
                     ))
                 {
                     routine.CronPayloadKind = nextPayloadKind;
-                    hasChanges = true;
                 }
 
                 if (!string.Equals(
@@ -1298,7 +1286,6 @@ public sealed partial class CommandService
                     ))
                 {
                     routine.CronPayloadModel = nextPayloadModel;
-                    hasChanges = true;
                 }
 
                 if (!string.Equals(
@@ -1308,19 +1295,16 @@ public sealed partial class CommandService
                     ))
                 {
                     routine.CronPayloadThinking = nextPayloadThinking;
-                    hasChanges = true;
                 }
 
                 if (routine.CronPayloadTimeoutSeconds != nextPayloadTimeoutSeconds)
                 {
                     routine.CronPayloadTimeoutSeconds = nextPayloadTimeoutSeconds;
-                    hasChanges = true;
                 }
 
                 if (routine.CronPayloadLightContext != nextPayloadLightContext)
                 {
                     routine.CronPayloadLightContext = nextPayloadLightContext;
-                    hasChanges = true;
                 }
 
                 if (payloadTextSpecified
@@ -1328,7 +1312,6 @@ public sealed partial class CommandService
                 {
                     routine.Request = nextPayloadText;
                     payloadTextChanged = true;
-                    hasChanges = true;
                 }
 
                 if (scheduleChanged && routine.Enabled)
@@ -1370,13 +1353,8 @@ public sealed partial class CommandService
                     }
                 }
 
-                if (hasChanges)
-                {
-                    SaveRoutineStateLocked();
-                }
-
                 return new CronToolUpdateResult(true, ToCronToolJob(routine), null);
-            }
+            });
         }
     }
 
@@ -1394,17 +1372,19 @@ public sealed partial class CommandService
         }
 
         var dueOnly = string.Equals((runMode ?? string.Empty).Trim(), "due", StringComparison.OrdinalIgnoreCase);
-        DateTimeOffset dueAtUtc = DateTimeOffset.MinValue;
-        bool exists;
-        bool enabled;
-        bool running;
-        lock (_routineLock)
+        var routineState = _routineRegistry.Read(normalizedId, routine =>
         {
-            exists = _routinesById.TryGetValue(normalizedId, out var routine);
-            enabled = routine?.Enabled ?? false;
-            running = routine?.Running ?? false;
-            dueAtUtc = routine?.NextRunUtc ?? DateTimeOffset.MinValue;
-        }
+            return (
+                Exists: routine != null,
+                Enabled: routine?.Enabled ?? false,
+                Running: routine?.Running ?? false,
+                DueAtUtc: routine?.NextRunUtc ?? DateTimeOffset.MinValue
+            );
+        });
+        var exists = routineState.Exists;
+        var enabled = routineState.Enabled;
+        var running = routineState.Running;
+        var dueAtUtc = routineState.DueAtUtc;
 
         if (!exists)
         {
@@ -1551,7 +1531,7 @@ public sealed partial class CommandService
             );
         }
 
-        if (_config.EnableFastWebPipeline)
+        if (_context.EnableFastWebPipeline)
         {
             return await SearchWebViaGatewayFastPathAsync(
                 normalizedQuery,
@@ -1802,7 +1782,7 @@ public sealed partial class CommandService
                 {
                     var recoveryQuery = BuildEmergencyNewsRecoveryQuery(normalizedQuery);
                     using var recoveryCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    recoveryCts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp((_config.LlmTimeoutSec / 3) + 1, 2, 4)));
+                    recoveryCts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp((_context.LlmTimeoutSec / 3) + 1, 2, 4)));
                     var recoveryRequest = BuildSearchGatewayRequest(recoveryQuery, count, freshness);
                     var recoveryResponse = await _searchGateway.SearchAsync(recoveryRequest, recoveryCts.Token).ConfigureAwait(false);
                     var recoveryDocs = recoveryResponse.Documents;
@@ -1848,7 +1828,7 @@ public sealed partial class CommandService
                 try
                 {
                     using var fallbackCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    fallbackCts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp((_config.LlmTimeoutSec / 3) + 1, 2, 4)));
+                    fallbackCts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp((_context.LlmTimeoutSec / 3) + 1, 2, 4)));
                     var fallbackItems = await TryCollectGlobalNewsFeedItemsAsync(
                         normalizedQuery,
                         targetCount,
@@ -3277,15 +3257,14 @@ public sealed partial class CommandService
 
     private int TriggerDueRoutinesForWake(string source)
     {
-        List<string> dueIds;
-        lock (_routineLock)
+        var dueIds = _routineRegistry.ReadAll(routines =>
         {
             var now = DateTimeOffset.UtcNow;
-            dueIds = _routinesById.Values
+            return routines
                 .Where(x => x.Enabled && !x.Running && x.NextRunUtc <= now)
                 .Select(x => x.Id)
                 .ToList();
-        }
+        });
 
         foreach (var id in dueIds)
         {

@@ -66,6 +66,31 @@ public sealed partial class CommandService
             throw new InvalidOperationException("다시 실행할 명령을 구성하지 못했습니다.");
         }
 
+        if (!IsDynamicCodeExecutionEnabled())
+        {
+            var blockedExecution = new CodeExecutionResult(
+                normalizedLanguage,
+                target.RunDirectory,
+                target.EntryFile,
+                commandPlan.DisplayCommand,
+                126,
+                string.Empty,
+                BuildDynamicCodeDisabledMessage(),
+                "blocked"
+            );
+            return new CodingResultExecutionResult(
+                normalizedConversationId,
+                normalizedLanguage,
+                "command",
+                false,
+                BuildDynamicCodeDisabledMessage(),
+                target.Provider,
+                target.Model,
+                blockedExecution,
+                Evidence: BuildCodingEvidencePack("command", blockedExecution, target.ChangedFiles)
+            );
+        }
+
         var normalizedStandardInput = NormalizeLatestCodingExecutionInput(standardInput);
         var shell = await RunWorkspaceCommandWithAutoInstallAsync(
             commandPlan.ActualCommand,

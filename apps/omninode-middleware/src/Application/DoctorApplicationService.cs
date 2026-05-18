@@ -5,14 +5,14 @@ namespace OmniNode.Middleware;
 public sealed class DoctorApplicationService : IDoctorApplicationService
 {
     private readonly DoctorService _doctorService;
-    private readonly AppConfig _config;
+    private readonly PathOptions _paths;
     private readonly ConcurrentDictionary<string, DoctorFixPlanResult> _doctorFixPreviews
         = new(StringComparer.Ordinal);
 
-    public DoctorApplicationService(DoctorService doctorService, AppConfig config)
+    public DoctorApplicationService(DoctorService doctorService, PathOptions paths)
     {
         _doctorService = doctorService;
-        _config = config;
+        _paths = paths;
     }
 
     public Task<DoctorReport> RunDoctorAsync(CancellationToken cancellationToken)
@@ -87,12 +87,12 @@ public sealed class DoctorApplicationService : IDoctorApplicationService
         var actions = new List<DoctorFixAction>();
         var directories = new[]
         {
-            _config.WorkspaceRootDir,
-            _config.CodeRunsRootDir,
-            _config.RoutineRunsRootDir,
-            _config.MemoryNotesRootDir,
-            Path.GetDirectoryName(_config.ConversationStatePath) ?? string.Empty,
-            Path.GetDirectoryName(_config.AuditLogPath) ?? string.Empty
+            _paths.WorkspaceRootDir,
+            _paths.CodeRunsRootDir,
+            _paths.RoutineRunsRootDir,
+            _paths.MemoryNotesRootDir,
+            Path.GetDirectoryName(_paths.ConversationStatePath) ?? string.Empty,
+            Path.GetDirectoryName(_paths.AuditLogPath) ?? string.Empty
         }
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(Path.GetFullPath)

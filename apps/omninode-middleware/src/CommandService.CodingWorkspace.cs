@@ -18,8 +18,8 @@ public sealed partial class CommandService
             var configuredMaxEntries = Math.Max(
                 20,
                 string.Equals(provider, "copilot", StringComparison.OrdinalIgnoreCase)
-                    ? Math.Min(_config.CodingWorkspaceSnapshotMaxEntries, 60)
-                    : _config.CodingWorkspaceSnapshotMaxEntries
+                    ? Math.Min(_context.CodingWorkspaceSnapshotMaxEntries, 60)
+                    : _context.CodingWorkspaceSnapshotMaxEntries
             );
             var maxEntries = maxEntriesOverride.HasValue
                 ? Math.Max(12, maxEntriesOverride.Value)
@@ -68,9 +68,9 @@ public sealed partial class CommandService
 
     private string ResolveWorkspaceRoot()
     {
-        var configured = string.IsNullOrWhiteSpace(_config.WorkspaceRootDir)
+        var configured = string.IsNullOrWhiteSpace(_paths.WorkspaceRootDir)
             ? Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), ".."))
-            : _config.WorkspaceRootDir;
+            : _paths.WorkspaceRootDir;
         var fullPath = Path.GetFullPath(configured);
         try
         {

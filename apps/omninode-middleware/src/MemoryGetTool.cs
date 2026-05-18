@@ -20,11 +20,11 @@ public sealed class MemoryGetTool
     private readonly string _projectRootDir;
     private readonly string _middlewareRootDir;
 
-    public MemoryGetTool(AppConfig config)
+    public MemoryGetTool(PathOptions paths)
     {
-        _memoryNotesRootDir = Path.GetFullPath(config.MemoryNotesRootDir);
-        _conversationStatePath = Path.GetFullPath(config.ConversationStatePath);
-        _workspaceRootDir = Path.GetFullPath(config.WorkspaceRootDir);
+        _memoryNotesRootDir = Path.GetFullPath(paths.MemoryNotesRootDir);
+        _conversationStatePath = Path.GetFullPath(paths.ConversationStatePath);
+        _workspaceRootDir = Path.GetFullPath(paths.WorkspaceRootDir);
         _projectRootDir = Path.GetFullPath(Path.Combine(_workspaceRootDir, ".."));
         _middlewareRootDir = Path.GetFullPath(Directory.GetCurrentDirectory());
     }

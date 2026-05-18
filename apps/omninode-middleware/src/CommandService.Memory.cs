@@ -179,7 +179,7 @@ public sealed partial class CommandService
         {
             updated = _conversationStore.CompactWithSummary(
                 thread.Id,
-                _config.ConversationKeepRecentMessages,
+                _context.ConversationKeepRecentMessages,
                 $"수동 압축 완료. 메모리 노트 `{saved.Name}` 를 컨텍스트로 사용합니다."
             );
         }

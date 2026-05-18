@@ -5,7 +5,7 @@ public sealed class MemoryApplicationService : IMemoryApplicationService
     private readonly IConversationStore _conversationStore;
     private readonly IMemoryNoteStore _memoryNoteStore;
     private readonly AuditLogger _auditLogger;
-    private readonly AppConfig _config;
+    private readonly PathOptions _paths;
     private readonly MemorySearchTool _memorySearchTool;
     private readonly MemoryGetTool _memoryGetTool;
     private Func<string, string, bool, CancellationToken, Task<MemoryNoteCreateResult>>? _createMemoryNote;
@@ -14,7 +14,7 @@ public sealed class MemoryApplicationService : IMemoryApplicationService
         IConversationStore conversationStore,
         IMemoryNoteStore memoryNoteStore,
         AuditLogger auditLogger,
-        AppConfig config,
+        PathOptions paths,
         MemorySearchTool memorySearchTool,
         MemoryGetTool memoryGetTool
     )
@@ -22,7 +22,7 @@ public sealed class MemoryApplicationService : IMemoryApplicationService
         _conversationStore = conversationStore;
         _memoryNoteStore = memoryNoteStore;
         _auditLogger = auditLogger;
-        _config = config;
+        _paths = paths;
         _memorySearchTool = memorySearchTool;
         _memoryGetTool = memoryGetTool;
     }
@@ -164,9 +164,9 @@ public sealed class MemoryApplicationService : IMemoryApplicationService
     {
         try
         {
-            var schema = new MemoryIndexSchemaBootstrap(_config).EnsureInitialized();
-            var snapshot = new MemoryIndexDocumentSync(_config, schema).SyncOnce();
-            var message = $"메모리 인덱스 재빌드 완료: scanned={snapshot.ScannedDocuments}, indexed={snapshot.IndexedDocuments}, skipped={snapshot.SkippedDocuments}, removed={snapshot.RemovedDocuments}";
+            var schema = new MemoryIndexSchemaBootstrap(_paths).EnsureInitialized();
+            var snapshot = new MemoryIndexDocumentSync(_paths, schema).SyncOnce();
+            var message = $"메모리 인덱스 재빌드 완료: scanned={snapshot.ScannedDocuments}, indexed={snapshot.IndexedDocuments}, skipped={snapshot.SkippedDocuments}, removed={snapshot.RemovedDocuments}, memory={snapshot.MemoryDocuments}, sessions={snapshot.SessionDocuments}, project={snapshot.ProjectDocuments}, elapsedMs={snapshot.ElapsedMs}";
             _auditLogger.Log("web", "memory_index_rebuild", "ok", message);
             return new MemoryIndexRebuildResult(true, message, snapshot);
         }

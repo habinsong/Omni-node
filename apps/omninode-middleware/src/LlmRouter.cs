@@ -40,7 +40,9 @@ public sealed class LlmRouter : IDisposable
         @"max_tokens`?\s*must be less than or equal to `?(?<limit>\d+)`?|maximum value for `max_tokens` is(?: less than the `context_window` for this model)?\s*`?(?<limit2>\d+)`?",
         RegexOptions.Compiled | RegexOptions.IgnoreCase
     );
-    private readonly AppConfig _config;
+    private readonly ProviderOptions _providers;
+    private readonly PathOptions _paths;
+    private readonly ContextOptions _context;
     private readonly RuntimeSettings _runtimeSettings;
     private readonly HttpClient _httpClient;
     private readonly object _groqLock = new();
@@ -52,15 +54,17 @@ public sealed class LlmRouter : IDisposable
     private string _selectedGroqModel;
     private readonly AsyncLocal<TokenUsage?> _responseTokenUsage = new();
 
-    public LlmRouter(AppConfig config, RuntimeSettings runtimeSettings)
+    public LlmRouter(ProviderOptions providers, PathOptions paths, ContextOptions context, RuntimeSettings runtimeSettings)
     {
-        _config = config;
+        _providers = providers;
+        _paths = paths;
+        _context = context;
         _runtimeSettings = runtimeSettings;
-        _selectedGroqModel = _config.GroqModel;
-        _usageStatePath = _config.LlmUsageStatePath;
+        _selectedGroqModel = _providers.GroqModel;
+        _usageStatePath = _paths.LlmUsageStatePath;
         _httpClient = new HttpClient
         {
-            Timeout = ResolveSharedHttpTimeout(_config)
+            Timeout = ResolveSharedHttpTimeout(_providers, _context)
         };
 
         LoadUsageState();
@@ -170,8 +174,8 @@ public sealed class LlmRouter : IDisposable
 
     public bool HasSttSettings()
     {
-        return !string.IsNullOrWhiteSpace(_config.SttBaseUrl)
-               && !string.IsNullOrWhiteSpace(_config.SttModel)
+        return !string.IsNullOrWhiteSpace(_providers.SttBaseUrl)
+               && !string.IsNullOrWhiteSpace(_providers.SttModel)
                && !string.IsNullOrWhiteSpace(_runtimeSettings.GetSttApiKey());
     }
 
@@ -202,7 +206,7 @@ public sealed class LlmRouter : IDisposable
             return "음성 파일이 비어 있습니다.";
         }
 
-        var baseUrl = _config.SttBaseUrl.Trim();
+        var baseUrl = _providers.SttBaseUrl.Trim();
         var endpoint = baseUrl.EndsWith("/audio/transcriptions", StringComparison.OrdinalIgnoreCase)
             ? baseUrl
             : $"{baseUrl.TrimEnd('/')}/audio/transcriptions";
@@ -215,7 +219,7 @@ public sealed class LlmRouter : IDisposable
             using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
             using var form = new MultipartFormDataContent();
-            form.Add(new StringContent(_config.SttModel.Trim(), Encoding.UTF8), "model");
+            form.Add(new StringContent(_providers.SttModel.Trim(), Encoding.UTF8), "model");
             var fileContent = new ByteArrayContent(bytes);
             fileContent.Headers.ContentType = new MediaTypeHeaderValue(mimeType);
             form.Add(fileContent, "file", fileName);
@@ -252,7 +256,7 @@ public sealed class LlmRouter : IDisposable
         }
 
         var model = GetSelectedGroqModel();
-        var endpoint = $"{_config.GroqBaseUrl.TrimEnd('/')}/chat/completions";
+        var endpoint = $"{_providers.GroqBaseUrl.TrimEnd('/')}/chat/completions";
         var systemPrompt = "Classify intent into exactly one token: OS_CONTROL, QUERY_SYSTEM, DYNAMIC_CODE, UNKNOWN.";
         var userPrompt = $"Input: {input}";
 
@@ -303,7 +307,7 @@ public sealed class LlmRouter : IDisposable
             return fallback;
         }
 
-        var endpoint = $"{_config.GeminiBaseUrl.TrimEnd('/')}/models/{_config.GeminiModel}:generateContent";
+        var endpoint = $"{_providers.GeminiBaseUrl.TrimEnd('/')}/models/{_providers.GeminiModel}:generateContent";
 
         var prompt = "Generate a concise step-by-step execution plan for a local automation agent."
             + " Output only executable pseudo-steps without markdown fences.\n\n"
@@ -364,7 +368,7 @@ public sealed class LlmRouter : IDisposable
         {
             if (provider == "gemini" && HasGeminiApiKey())
             {
-                return $"{routeRole}:gemini:{_config.GeminiModel}";
+                return $"{routeRole}:gemini:{_providers.GeminiModel}";
             }
 
             if (provider == "groq" && HasGroqApiKey())
@@ -374,12 +378,12 @@ public sealed class LlmRouter : IDisposable
 
             if (provider == "nvidia" && HasNvidiaApiKey())
             {
-                return $"{routeRole}:nvidia:{_config.NvidiaModel}";
+                return $"{routeRole}:nvidia:{_providers.NvidiaModel}";
             }
 
             if (provider == "cerebras" && HasCerebrasApiKey())
             {
-                return $"{routeRole}:cerebras:{_config.CerebrasModel}";
+                return $"{routeRole}:cerebras:{_providers.CerebrasModel}";
             }
         }
 
@@ -400,7 +404,7 @@ public sealed class LlmRouter : IDisposable
         {
             if (provider == "gemini" && HasGeminiApiKey())
             {
-                return await GenerateGeminiChatAsync(prompt, _config.GeminiModel, 1024, cancellationToken);
+                return await GenerateGeminiChatAsync(prompt, _providers.GeminiModel, 1024, cancellationToken);
             }
 
             if (provider == "groq" && HasGroqApiKey())
@@ -410,12 +414,12 @@ public sealed class LlmRouter : IDisposable
 
             if (provider == "nvidia" && HasNvidiaApiKey())
             {
-                return await GenerateNvidiaChatAsync(prompt, _config.NvidiaModel, 1024, cancellationToken);
+                return await GenerateNvidiaChatAsync(prompt, _providers.NvidiaModel, 1024, cancellationToken);
             }
 
             if (provider == "cerebras" && HasCerebrasApiKey())
             {
-                return await GenerateCerebrasChatAsync(prompt, _config.CerebrasModel, 1024, cancellationToken);
+                return await GenerateCerebrasChatAsync(prompt, _providers.CerebrasModel, 1024, cancellationToken);
             }
         }
 
@@ -434,7 +438,7 @@ public sealed class LlmRouter : IDisposable
         {
             if (provider == "gemini" && HasGeminiApiKey())
             {
-                return await GenerateGeminiChatAsync(prompt, _config.GeminiModel, 768, cancellationToken);
+                return await GenerateGeminiChatAsync(prompt, _providers.GeminiModel, 768, cancellationToken);
             }
 
             if (provider == "groq" && HasGroqApiKey())
@@ -444,12 +448,12 @@ public sealed class LlmRouter : IDisposable
 
             if (provider == "nvidia" && HasNvidiaApiKey())
             {
-                return await GenerateNvidiaChatAsync(prompt, _config.NvidiaModel, 768, cancellationToken);
+                return await GenerateNvidiaChatAsync(prompt, _providers.NvidiaModel, 768, cancellationToken);
             }
 
             if (provider == "cerebras" && HasCerebrasApiKey())
             {
-                return await GenerateCerebrasChatAsync(prompt, _config.CerebrasModel, 768, cancellationToken);
+                return await GenerateCerebrasChatAsync(prompt, _providers.CerebrasModel, 768, cancellationToken);
             }
         }
 
@@ -486,7 +490,7 @@ public sealed class LlmRouter : IDisposable
         CancellationToken cancellationToken
     )
     {
-        return GenerateGroqChatAsync(userInput, modelOverride, _config.ChatMaxOutputTokens, cancellationToken);
+        return GenerateGroqChatAsync(userInput, modelOverride, _context.ChatMaxOutputTokens, cancellationToken);
     }
 
     public async Task<string> GenerateGroqChatAsync(
@@ -503,13 +507,13 @@ public sealed class LlmRouter : IDisposable
         }
 
         var model = string.IsNullOrWhiteSpace(modelOverride) ? GetSelectedGroqModel() : modelOverride.Trim();
-        var endpoint = $"{_config.GroqBaseUrl.TrimEnd('/')}/chat/completions";
+        var endpoint = $"{_providers.GroqBaseUrl.TrimEnd('/')}/chat/completions";
         var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
             + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them. "
             + "If conversation history is provided above, treat the user's short follow-up messages (e.g., '그니까 잘 돌아가?', '이 환경에서?', '24GB 구성임') as continuations of the prior turns. Never reply '이전 대화 맥락이 제공되지 않아' when [최근 대화] is in the prompt — use it. "
             + "When the user asks for your judgment or opinion (어때, 어떻게 생각해, 잘 돌아갈까, 검토해봐, 추천해, 너 생각, 네 의견 등), give a concrete, decisive answer based on the conversation history and your knowledge. Do not deflect with generic disclaimers like '정확도/정밀도/재현율/F1-score 같은 객관적 지표가 필요하다' or '구체적인 평가 지표와 데이터셋이 필요하다'. State your best assessment with a 1-2 sentence rationale, then optionally note any uncertainty. "
             + "Do not repeat the same paragraphs across multiple turns. If the user asks the same thing again, dig deeper or take a clearer stance instead of repeating prior wording.";
-        var requestedMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
+        var requestedMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _context.ChatMaxOutputTokens);
         var effectiveMaxOutputTokens = ClampGroqMaxOutputTokensForModel(model, requestedMaxOutputTokens);
         var promptBudgetChars = ResolveGroqPromptBudgetChars(model);
         var promptForTurn = TruncatePromptForGroq(userInput, promptBudgetChars);
@@ -642,13 +646,13 @@ public sealed class LlmRouter : IDisposable
         }
 
         var model = string.IsNullOrWhiteSpace(modelOverride) ? GetSelectedGroqModel() : modelOverride.Trim();
-        var endpoint = $"{_config.GroqBaseUrl.TrimEnd('/')}/chat/completions";
+        var endpoint = $"{_providers.GroqBaseUrl.TrimEnd('/')}/chat/completions";
         var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
             + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them. "
             + "If conversation history is provided above, treat the user's short follow-up messages (e.g., '그니까 잘 돌아가?', '이 환경에서?', '24GB 구성임') as continuations of the prior turns. Never reply '이전 대화 맥락이 제공되지 않아' when [최근 대화] is in the prompt — use it. "
             + "When the user asks for your judgment or opinion (어때, 어떻게 생각해, 잘 돌아갈까, 검토해봐, 추천해, 너 생각, 네 의견 등), give a concrete, decisive answer based on the conversation history and your knowledge. Do not deflect with generic disclaimers like '정확도/정밀도/재현율/F1-score 같은 객관적 지표가 필요하다' or '구체적인 평가 지표와 데이터셋이 필요하다'. State your best assessment with a 1-2 sentence rationale, then optionally note any uncertainty. "
             + "Do not repeat the same paragraphs across multiple turns. If the user asks the same thing again, dig deeper or take a clearer stance instead of repeating prior wording.";
-        var requestedMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
+        var requestedMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _context.ChatMaxOutputTokens);
         var effectiveMaxOutputTokens = ClampGroqMaxOutputTokensForModel(model, requestedMaxOutputTokens);
         var promptForRequest = TruncatePromptForGroq(userInput, ResolveGroqPromptBudgetChars(model));
         var multiTurn = SplitPromptToMultiTurn(promptForRequest);
@@ -692,9 +696,9 @@ public sealed class LlmRouter : IDisposable
             return await GenerateGroqChatAsync(userInput, model, maxOutputTokens, cancellationToken);
         }
 
-        var endpoint = $"{_config.GroqBaseUrl.TrimEnd('/')}/chat/completions";
+        var endpoint = $"{_providers.GroqBaseUrl.TrimEnd('/')}/chat/completions";
         var systemPrompt = "You are Omni-node assistant. Analyze attached images and answer in Korean concisely.";
-        var effectiveMaxOutputTokens = ClampGroqMaxOutputTokensForModel(model, NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens));
+        var effectiveMaxOutputTokens = ClampGroqMaxOutputTokensForModel(model, NormalizeMaxOutputTokens(maxOutputTokens, _context.ChatMaxOutputTokens));
 
         try
         {
@@ -774,7 +778,7 @@ public sealed class LlmRouter : IDisposable
 
     public Task<string> GenerateGeminiChatAsync(string userInput, CancellationToken cancellationToken)
     {
-        return GenerateGeminiChatAsync(userInput, _config.GeminiModel, _config.ChatMaxOutputTokens, cancellationToken);
+        return GenerateGeminiChatAsync(userInput, _providers.GeminiModel, _context.ChatMaxOutputTokens, cancellationToken);
     }
 
     public Task<string> GenerateGeminiChatAsync(
@@ -783,7 +787,7 @@ public sealed class LlmRouter : IDisposable
         CancellationToken cancellationToken
     )
     {
-        return GenerateGeminiChatAsync(userInput, _config.GeminiModel, maxOutputTokens, cancellationToken);
+        return GenerateGeminiChatAsync(userInput, _providers.GeminiModel, maxOutputTokens, cancellationToken);
     }
 
     public async Task<string> GenerateGeminiChatAsync(
@@ -799,9 +803,9 @@ public sealed class LlmRouter : IDisposable
             return "Gemini API 키가 설정되지 않았습니다.";
         }
 
-        var selectedModel = string.IsNullOrWhiteSpace(modelOverride) ? _config.GeminiModel : modelOverride.Trim();
-        var endpoint = $"{_config.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:generateContent";
-        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
+        var selectedModel = string.IsNullOrWhiteSpace(modelOverride) ? _providers.GeminiModel : modelOverride.Trim();
+        var endpoint = $"{_providers.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:generateContent";
+        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _context.ChatMaxOutputTokens);
         var promptForTurn = "한국어로 실무적으로 답변하세요.\n\n사용자 입력:\n" + userInput;
         var mergedBuilder = new StringBuilder();
 
@@ -880,9 +884,9 @@ public sealed class LlmRouter : IDisposable
             return "Gemini API 키가 설정되지 않았습니다.";
         }
 
-        var selectedModel = string.IsNullOrWhiteSpace(modelOverride) ? _config.GeminiModel : modelOverride.Trim();
-        var endpoint = $"{_config.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:streamGenerateContent?alt=sse";
-        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
+        var selectedModel = string.IsNullOrWhiteSpace(modelOverride) ? _providers.GeminiModel : modelOverride.Trim();
+        var endpoint = $"{_providers.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:streamGenerateContent?alt=sse";
+        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _context.ChatMaxOutputTokens);
         var prompt = "한국어로 실무적으로 답변하세요.\n\n사용자 입력:\n" + userInput;
         var body = "{"
             + "\"contents\":[{"
@@ -1013,8 +1017,8 @@ public sealed class LlmRouter : IDisposable
         }
 
         var selectedModel = string.IsNullOrWhiteSpace(model) ? "gemini-3.1-flash-lite-preview" : model.Trim();
-        var endpoint = $"{_config.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:generateContent";
-        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, Math.Min(_config.ChatMaxOutputTokens, 4096));
+        var endpoint = $"{_providers.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:generateContent";
+        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, Math.Min(_context.ChatMaxOutputTokens, 4096));
         var effectiveTimeoutMs = NormalizeGeminiGroundedTimeoutMs(timeoutMs);
         var body = BuildGeminiGroundedBody(prompt, effectiveMaxOutputTokens);
 
@@ -1068,8 +1072,8 @@ public sealed class LlmRouter : IDisposable
         }
 
         var selectedModel = string.IsNullOrWhiteSpace(model) ? "gemini-3.1-flash-lite-preview" : model.Trim();
-        var endpoint = $"{_config.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:streamGenerateContent?alt=sse";
-        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, Math.Min(_config.ChatMaxOutputTokens, 4096));
+        var endpoint = $"{_providers.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:streamGenerateContent?alt=sse";
+        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, Math.Min(_context.ChatMaxOutputTokens, 4096));
         var effectiveTimeoutMs = NormalizeGeminiGroundedTimeoutMs(timeoutMs);
         var effectiveFirstChunkTimeoutMs = NormalizeGeminiGroundedFirstChunkTimeoutMs(effectiveTimeoutMs);
         var body = BuildGeminiGroundedBody(prompt, effectiveMaxOutputTokens);
@@ -1262,9 +1266,9 @@ public sealed class LlmRouter : IDisposable
             );
         }
 
-        var selectedModel = string.IsNullOrWhiteSpace(model) ? _config.GeminiModel : model.Trim();
-        var endpoint = $"{_config.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:generateContent";
-        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, Math.Min(_config.ChatMaxOutputTokens, 2048));
+        var selectedModel = string.IsNullOrWhiteSpace(model) ? _providers.GeminiModel : model.Trim();
+        var endpoint = $"{_providers.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:generateContent";
+        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, Math.Min(_context.ChatMaxOutputTokens, 2048));
         var effectiveTimeoutMs = NormalizeGeminiGroundedTimeoutMs(timeoutMs);
         var stopwatch = Stopwatch.StartNew();
         var promptForTurn = prompt;
@@ -1385,9 +1389,9 @@ public sealed class LlmRouter : IDisposable
             );
         }
 
-        var selectedModel = string.IsNullOrWhiteSpace(model) ? _config.GeminiModel : model.Trim();
-        var endpoint = $"{_config.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:streamGenerateContent?alt=sse";
-        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, Math.Min(_config.ChatMaxOutputTokens, 2048));
+        var selectedModel = string.IsNullOrWhiteSpace(model) ? _providers.GeminiModel : model.Trim();
+        var endpoint = $"{_providers.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:streamGenerateContent?alt=sse";
+        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, Math.Min(_context.ChatMaxOutputTokens, 2048));
         var effectiveTimeoutMs = NormalizeGeminiGroundedTimeoutMs(timeoutMs);
         var effectiveFirstChunkTimeoutMs = NormalizeGeminiUrlContextFirstChunkTimeoutMs(effectiveTimeoutMs);
         var body = BuildGeminiUrlContextBody(prompt, effectiveMaxOutputTokens, includeGoogleSearch);
@@ -1591,9 +1595,9 @@ public sealed class LlmRouter : IDisposable
             return "Gemini API 키가 설정되지 않았습니다.";
         }
 
-        var selectedModel = string.IsNullOrWhiteSpace(modelOverride) ? _config.GeminiModel : modelOverride.Trim();
-        var endpoint = $"{_config.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:generateContent";
-        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
+        var selectedModel = string.IsNullOrWhiteSpace(modelOverride) ? _providers.GeminiModel : modelOverride.Trim();
+        var endpoint = $"{_providers.GeminiBaseUrl.TrimEnd('/')}/models/{selectedModel}:generateContent";
+        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _context.ChatMaxOutputTokens);
         var binaryAttachments = (attachments ?? Array.Empty<InputAttachment>())
             .Where(item => !string.IsNullOrWhiteSpace(item.DataBase64))
             .Take(6)
@@ -1652,14 +1656,14 @@ public sealed class LlmRouter : IDisposable
         }
     }
 
-    private static TimeSpan ResolveSharedHttpTimeout(AppConfig config)
+    private static TimeSpan ResolveSharedHttpTimeout(ProviderOptions providers, ContextOptions context)
     {
-        var llmTimeoutMs = Math.Max(5000, config.LlmTimeoutSec * 1000);
+        var llmTimeoutMs = Math.Max(5000, context.LlmTimeoutSec * 1000);
         var providerTimeoutMs = Math.Max(
-            Math.Max(config.NvidiaTimeoutSec, config.CerebrasTimeoutSec),
+            Math.Max(providers.NvidiaTimeoutSec, providers.CerebrasTimeoutSec),
             45
         ) * 1000;
-        var geminiWebTimeoutMs = NormalizeGeminiGroundedTimeoutMs(config.GeminiWebTimeoutMs);
+        var geminiWebTimeoutMs = NormalizeGeminiGroundedTimeoutMs(context.GeminiWebTimeoutMs);
         return TimeSpan.FromMilliseconds(Math.Max(Math.Max(llmTimeoutMs, providerTimeoutMs + 5000), geminiWebTimeoutMs + 5000));
     }
 
@@ -1764,16 +1768,16 @@ public sealed class LlmRouter : IDisposable
             return "Cerebras API 키가 설정되지 않았습니다.";
         }
 
-        var selectedModel = string.IsNullOrWhiteSpace(modelOverride) ? _config.CerebrasModel : modelOverride.Trim();
+        var selectedModel = string.IsNullOrWhiteSpace(modelOverride) ? _providers.CerebrasModel : modelOverride.Trim();
         var effectiveModel = selectedModel;
         var fallbackRetried = false;
-        var endpoint = $"{_config.CerebrasBaseUrl.TrimEnd('/')}/chat/completions";
+        var endpoint = $"{_providers.CerebrasBaseUrl.TrimEnd('/')}/chat/completions";
         var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
             + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them. "
             + "If conversation history is provided above, treat the user's short follow-up messages (e.g., '그니까 잘 돌아가?', '이 환경에서?', '24GB 구성임') as continuations of the prior turns. Never reply '이전 대화 맥락이 제공되지 않아' when [최근 대화] is in the prompt — use it. "
             + "When the user asks for your judgment or opinion (어때, 어떻게 생각해, 잘 돌아갈까, 검토해봐, 추천해, 너 생각, 네 의견 등), give a concrete, decisive answer based on the conversation history and your knowledge. Do not deflect with generic disclaimers like '정확도/정밀도/재현율/F1-score 같은 객관적 지표가 필요하다' or '구체적인 평가 지표와 데이터셋이 필요하다'. State your best assessment with a 1-2 sentence rationale, then optionally note any uncertainty. "
             + "Do not repeat the same paragraphs across multiple turns. If the user asks the same thing again, dig deeper or take a clearer stance instead of repeating prior wording.";
-        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
+        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _context.ChatMaxOutputTokens);
         var promptForTurn = userInput;
         var mergedBuilder = new StringBuilder();
 
@@ -1870,7 +1874,7 @@ public sealed class LlmRouter : IDisposable
             return "Cerebras API 키가 설정되지 않았습니다.";
         }
 
-        var initialModel = string.IsNullOrWhiteSpace(modelOverride) ? _config.CerebrasModel : modelOverride.Trim();
+        var initialModel = string.IsNullOrWhiteSpace(modelOverride) ? _providers.CerebrasModel : modelOverride.Trim();
         // 직전 호출에서 catalog로 가용 모델을 이미 알아냈다면 그것을 우선 사용
         if (!string.IsNullOrWhiteSpace(_cerebrasResolvedModelCache)
             && (DateTime.UtcNow - _cerebrasResolvedModelCachedAt).TotalSeconds < 60
@@ -1878,13 +1882,13 @@ public sealed class LlmRouter : IDisposable
         {
             initialModel = _cerebrasResolvedModelCache!;
         }
-        var endpoint = $"{_config.CerebrasBaseUrl.TrimEnd('/')}/chat/completions";
+        var endpoint = $"{_providers.CerebrasBaseUrl.TrimEnd('/')}/chat/completions";
         var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
             + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them. "
             + "If conversation history is provided above, treat the user's short follow-up messages (e.g., '그니까 잘 돌아가?', '이 환경에서?', '24GB 구성임') as continuations of the prior turns. Never reply '이전 대화 맥락이 제공되지 않아' when [최근 대화] is in the prompt — use it. "
             + "When the user asks for your judgment or opinion (어때, 어떻게 생각해, 잘 돌아갈까, 검토해봐, 추천해, 너 생각, 네 의견 등), give a concrete, decisive answer based on the conversation history and your knowledge. Do not deflect with generic disclaimers like '정확도/정밀도/재현율/F1-score 같은 객관적 지표가 필요하다' or '구체적인 평가 지표와 데이터셋이 필요하다'. State your best assessment with a 1-2 sentence rationale, then optionally note any uncertainty. "
             + "Do not repeat the same paragraphs across multiple turns. If the user asks the same thing again, dig deeper or take a clearer stance instead of repeating prior wording.";
-        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _config.ChatMaxOutputTokens);
+        var effectiveMaxOutputTokens = NormalizeMaxOutputTokens(maxOutputTokens, _context.ChatMaxOutputTokens);
 
         var firstResult = await GenerateOpenAiCompatibleChatStreamingAsync(
             "cerebras",
@@ -1941,8 +1945,8 @@ public sealed class LlmRouter : IDisposable
             return "NVIDIA NIM API 키가 설정되지 않았습니다.";
         }
 
-        var model = string.IsNullOrWhiteSpace(modelOverride) ? _config.NvidiaModel : modelOverride.Trim();
-        var endpoint = $"{_config.NvidiaBaseUrl.TrimEnd('/')}/chat/completions";
+        var model = string.IsNullOrWhiteSpace(modelOverride) ? _providers.NvidiaModel : modelOverride.Trim();
+        var endpoint = $"{_providers.NvidiaBaseUrl.TrimEnd('/')}/chat/completions";
         var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
             + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them. "
             + "If conversation history is provided above, treat the user's short follow-up messages (e.g., '그니까 잘 돌아가?', '이 환경에서?', '24GB 구성임') as continuations of the prior turns. Never reply '이전 대화 맥락이 제공되지 않아' when [최근 대화] is in the prompt — use it. "
@@ -2031,8 +2035,8 @@ public sealed class LlmRouter : IDisposable
             return "NVIDIA NIM API 키가 설정되지 않았습니다.";
         }
 
-        var model = string.IsNullOrWhiteSpace(modelOverride) ? _config.NvidiaModel : modelOverride.Trim();
-        var endpoint = $"{_config.NvidiaBaseUrl.TrimEnd('/')}/chat/completions";
+        var model = string.IsNullOrWhiteSpace(modelOverride) ? _providers.NvidiaModel : modelOverride.Trim();
+        var endpoint = $"{_providers.NvidiaBaseUrl.TrimEnd('/')}/chat/completions";
         var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
             + "Answer only the latest user request. Do not switch to news, search summaries, 3D printing, or other unrelated topics unless the user explicitly asks for them. "
             + "If conversation history is provided above, treat the user's short follow-up messages (e.g., '그니까 잘 돌아가?', '이 환경에서?', '24GB 구성임') as continuations of the prior turns. Never reply '이전 대화 맥락이 제공되지 않아' when [최근 대화] is in the prompt — use it. "
@@ -2063,7 +2067,7 @@ public sealed class LlmRouter : IDisposable
         }
         try
         {
-            var endpoint = $"{_config.CerebrasBaseUrl.TrimEnd('/')}/models";
+            var endpoint = $"{_providers.CerebrasBaseUrl.TrimEnd('/')}/models";
             using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
             using var response = await _httpClient.SendAsync(request, cancellationToken);
@@ -2196,7 +2200,7 @@ public sealed class LlmRouter : IDisposable
 
     private int NormalizeNvidiaMaxOutputTokens(int requested)
     {
-        return Math.Clamp(NormalizeMaxOutputTokens(requested, Math.Min(_config.ChatMaxOutputTokens, 4096)), 256, 4096);
+        return Math.Clamp(NormalizeMaxOutputTokens(requested, Math.Min(_context.ChatMaxOutputTokens, 4096)), 256, 4096);
     }
 
     private static bool IsGroqCompoundModel(string model)
@@ -2561,8 +2565,8 @@ public sealed class LlmRouter : IDisposable
             return;
         }
 
-        var addedCost = ((decimal)promptTokens * _config.GeminiInputPricePerMillionUsd / 1_000_000m)
-                        + ((decimal)completionTokens * _config.GeminiOutputPricePerMillionUsd / 1_000_000m);
+        var addedCost = ((decimal)promptTokens * _providers.GeminiInputPricePerMillionUsd / 1_000_000m)
+                        + ((decimal)completionTokens * _providers.GeminiOutputPricePerMillionUsd / 1_000_000m);
         lock (_geminiLock)
         {
             _geminiUsage.Requests += 1;
@@ -3206,8 +3210,8 @@ public sealed class LlmRouter : IDisposable
             throw new InvalidOperationException("NVIDIA NIM 202 응답에 requestId가 없습니다.");
         }
 
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(Math.Max(3, _config.NvidiaTimeoutSec));
-        var endpoint = $"{_config.NvidiaBaseUrl.TrimEnd('/')}/status/{Uri.EscapeDataString(requestId)}";
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(Math.Max(3, _providers.NvidiaTimeoutSec));
+        var endpoint = $"{_providers.NvidiaBaseUrl.TrimEnd('/')}/status/{Uri.EscapeDataString(requestId)}";
         while (DateTimeOffset.UtcNow < deadline)
         {
             await Task.Delay(750, cancellationToken);
