@@ -170,6 +170,7 @@ internal static class Program
             Console.Error.WriteLine($"[memory-index] bootstrap or sync failed: {ex.Message}");
         }
         var auditLogger = new AuditLogger(config.AuditLogPath);
+        var doctorApplicationService = new DoctorApplicationService(doctorService, config);
         var commandService = new CommandService(
             config,
             llmRouter,
@@ -213,7 +214,8 @@ internal static class Program
             anchorEditService,
             diffPreviewService,
             lspRefactorService,
-            astGrepRefactorService
+            astGrepRefactorService,
+            doctorApplicationService
         );
         var commandExecutionService = new CommandExecutionService(commandService);
         var settingsApplicationService = new SettingsApplicationService(commandService);
@@ -224,7 +226,6 @@ internal static class Program
         var logicGraphRuntimeCoordinator = new LogicGraphRuntimeCoordinator(pathResolver);
         commandService.ConfigureLogicGraphRuntime(pathResolver, logicGraphRuntimeCoordinator);
         var logicApplicationService = new LogicApplicationService(commandService);
-        var doctorApplicationService = new DoctorApplicationService(commandService);
         var planApplicationService = new PlanApplicationService(commandService);
         var taskGraphApplicationService = new TaskGraphApplicationService(commandService);
         var refactorApplicationService = new RefactorApplicationService(commandService);

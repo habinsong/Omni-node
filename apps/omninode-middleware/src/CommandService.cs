@@ -145,7 +145,7 @@ public sealed partial class CommandService :
     private readonly object _telegramUpgradeQuotaLock = new();
     private readonly object _routineLock = new();
     private readonly object _planLock = new();
-    private readonly ConcurrentDictionary<string, DoctorFixPlanResult> _doctorFixPreviews = new(StringComparer.Ordinal);
+    private readonly IDoctorApplicationService _doctorAppService;
     private readonly ConcurrentDictionary<string, CleanupPreviewResult> _cleanupPreviews = new(StringComparer.Ordinal);
     private readonly AsyncLocal<TelegramExecutionMetadata?> _telegramExecutionMetadata = new();
     private readonly AsyncLocal<TelegramTurnContext?> _telegramTurnContext = new();
@@ -208,7 +208,8 @@ public sealed partial class CommandService :
         AnchorEditService anchorEditService,
         DiffPreviewService diffPreviewService,
         LspRefactorService lspRefactorService,
-        AstGrepRefactorService astGrepRefactorService
+        AstGrepRefactorService astGrepRefactorService,
+        IDoctorApplicationService doctorAppService
     )
     {
         _config = config;
@@ -254,6 +255,7 @@ public sealed partial class CommandService :
         _diffPreviewService = diffPreviewService;
         _lspRefactorService = lspRefactorService;
         _astGrepRefactorService = astGrepRefactorService;
+        _doctorAppService = doctorAppService;
         _killAllowlist = (_config.KillAllowlistCsv ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(x => !string.IsNullOrWhiteSpace(x))
