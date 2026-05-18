@@ -244,7 +244,7 @@ public sealed class LlmRouter : IDisposable
 
     public async Task<RouterIntent> ClassifyIntentAsync(string input, CancellationToken cancellationToken)
     {
-        var fallback = ClassifyIntentFallback(input);
+        var fallback = RouterIntentClassifier.ClassifyHeuristic(input);
         var groqApiKey = _runtimeSettings.GetGroqApiKey();
         if (string.IsNullOrWhiteSpace(groqApiKey))
         {
@@ -284,7 +284,7 @@ public sealed class LlmRouter : IDisposable
 
             CaptureGroqUsage(model, responseBody);
             var content = ExtractGroqContent(responseBody);
-            var mapped = MapIntent(content);
+            var mapped = RouterIntentClassifier.MapFromLlmContent(content);
             return mapped == RouterIntent.Unknown ? fallback : mapped;
         }
         catch (Exception ex)
@@ -2200,32 +2200,6 @@ public sealed class LlmRouter : IDisposable
         }
     }
 
-    private static RouterIntent ClassifyIntentFallback(string input)
-    {
-        var normalized = input.Trim().ToLowerInvariant();
-
-        if (normalized.StartsWith("/kill ", StringComparison.Ordinal) || normalized.Contains("terminate", StringComparison.Ordinal))
-        {
-            return RouterIntent.OsControl;
-        }
-
-        if (normalized.StartsWith("/metrics", StringComparison.Ordinal)
-            || normalized.Contains("status", StringComparison.Ordinal)
-            || normalized.Contains("로그", StringComparison.Ordinal))
-        {
-            return RouterIntent.QuerySystem;
-        }
-
-        if (normalized.StartsWith("/code ", StringComparison.Ordinal)
-            || normalized.Contains("script", StringComparison.Ordinal)
-            || normalized.Contains("파이썬", StringComparison.Ordinal))
-        {
-            return RouterIntent.DynamicCode;
-        }
-
-        return RouterIntent.Unknown;
-    }
-
     private static string ExtractGroqContent(string json)
     {
         return ExtractGroqChatChunk(json).Content;
@@ -2582,28 +2556,6 @@ public sealed class LlmRouter : IDisposable
                [이미 작성된 답변 끝부분]
                """
                + tail;
-    }
-
-    private static RouterIntent MapIntent(string content)
-    {
-        var normalized = content.Trim().ToUpperInvariant();
-
-        if (normalized.Contains("OS_CONTROL", StringComparison.Ordinal))
-        {
-            return RouterIntent.OsControl;
-        }
-
-        if (normalized.Contains("QUERY_SYSTEM", StringComparison.Ordinal))
-        {
-            return RouterIntent.QuerySystem;
-        }
-
-        if (normalized.Contains("DYNAMIC_CODE", StringComparison.Ordinal))
-        {
-            return RouterIntent.DynamicCode;
-        }
-
-        return RouterIntent.Unknown;
     }
 
     private static string EscapeJson(string value)

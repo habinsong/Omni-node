@@ -60,8 +60,8 @@ git diff --check
 최근 확인 결과:
 
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 130 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 210
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 148 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 216
 - `npm test`: 통과
 - `make -C apps/omninode-core -B`: 통과
 - `git diff --check`: 통과
@@ -482,7 +482,14 @@ git diff --check
   - 계획 LLM 프롬프트의 “반드시 JSON 객체 하나만 출력한다” 계약을 `PlanningPromptPolicy.cs` 기준으로 옮기고, `LlmRouter`가 `PlanningPromptPolicy.BuildPlanningPrompt`로 위임하는지 확인하는 계약을 추가했다.
 - `scripts/check-security-boundaries.mjs`
   - 아홉 정책/파서/프로토콜 클래스가 책임을 들고 있고, `LlmRouter`가 정책/파서/프로토콜만 호출하도록 정리되었는지 계약 검사를 추가했다 (assertions 117 → 210).
-- `LlmRouter` 본문 크기: 3755 → 2697 라인 (≈ 28% 감축).
+- `apps/omninode-middleware/src/RouterIntentClassifier.cs`
+  - LLM 응답 텍스트에서 카테고리 키워드(`OS_CONTROL`/`QUERY_SYSTEM`/`DYNAMIC_CODE`)를 골라 `RouterIntent`로 매핑하는 `MapFromLlmContent`와, LLM 호출 실패 시 사용자 입력의 prefix/keyword(`/kill`/`/metrics`/`/code`/`terminate`/`status`/`로그`/`파이썬`)로 추정하는 `ClassifyHeuristic`을 분리했다.
+  - `LlmRouter`는 `RouterIntentClassifier.MapFromLlmContent`와 `RouterIntentClassifier.ClassifyHeuristic`만 호출하고, 사설 `MapIntent`/`ClassifyIntentFallback` helper는 제거했다.
+- `apps/omninode-middleware-tests/RouterIntentClassifierTests.cs`
+  - LLM 응답 매핑(다중 키워드 우선순위 포함), heuristic의 prefix/keyword 매칭, null/empty 입력 폴백 동작을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - 열 정책/파서/프로토콜/분류기 클래스 책임과 `LlmRouter` 위임을 계약 검사하도록 확장했다 (assertions 117 → 216).
+- `LlmRouter` 본문 크기: 3755 → 2649 라인 (≈ 29% 감축).
 
 남은 범위:
 
@@ -538,10 +545,10 @@ git diff --check
 | P1. 문서 불일치 정리 | 완료 | 100% | — |
 | P2. WebSocket runtime 통합 테스트 | 진행 중 | 60% | 비 loopback 원격 endpoint에서 remote limited 실행 차단/read-only 허용 시나리오 자동화 |
 | P3. CommandService 도메인 분리 | 시작됨 | 10% | search/telegram/coding/routine/logic graph 서비스 단위 실제 추출 |
-| P4. Provider adapter 구조 정리 | 진행 중 | 80% | provider별 HTTP 호출 자체를 `IProviderChatAdapter` 인터페이스로 분리, Cerebras 모델 resolver cache 재설계, Gemini/NVIDIA streaming pipeline 어댑터화 |
+| P4. Provider adapter 구조 정리 | 진행 중 | 82% | provider별 HTTP 호출 자체를 `IProviderChatAdapter` 인터페이스로 분리, Cerebras 모델 resolver cache 재설계, Gemini/NVIDIA streaming pipeline 어댑터화 |
 | P5. 상태 저장소 복구 정책 확대 | 완료 | 100% | — |
 
-전체 산술 평균: 75% (P0 100, P1 100, P2 60, P3 10, P4 80, P5 100 → 평균 75.0%).
+전체 산술 평균: 75% (P0 100, P1 100, P2 60, P3 10, P4 82, P5 100 → 평균 75.3%).
 
 이 수치는 책임 분량을 동등 가중치로 본 추정이다. P3는 후보 도메인이 매우 크고 P4는 어댑터 인터페이스 도입이 남은 작업의 무게중심이라, 실제 코드 양 기준으로 가중치를 다시 잡으면 60%대 후반이 더 보수적이다.
 

@@ -141,6 +141,7 @@ const groqRateLimitHeaderParser = read("apps/omninode-middleware/src/GroqRateLim
 const openAiCompatibleProtocol = read("apps/omninode-middleware/src/OpenAiCompatibleProtocol.cs");
 const geminiCitationParser = read("apps/omninode-middleware/src/GeminiCitationParser.cs");
 const planningPromptPolicy = read("apps/omninode-middleware/src/PlanningPromptPolicy.cs");
+const routerIntentClassifier = read("apps/omninode-middleware/src/RouterIntentClassifier.cs");
 const atomicFileStore = read("apps/omninode-middleware/src/AtomicFileStore.cs");
 const conversationStore = read("apps/omninode-middleware/src/ConversationStore.cs");
 const sessionManager = read("apps/omninode-middleware/src/SessionManager.cs");
@@ -257,6 +258,12 @@ assertNotIncludes(llmRouterSource, "private static string BuildPlanningPrompt(",
 assertNotIncludes(llmRouterSource, "private static string BuildPlanReviewPrompt(", "llm router no longer owns plan review prompt builder");
 assertNotIncludes(llmRouterSource, "private static string BuildFallbackPlan(", "llm router no longer owns fallback plan builder");
 assertNotIncludes(llmRouterSource, "private static string BuildFallbackPlanReview(", "llm router no longer owns fallback review builder");
+assertIncludes(routerIntentClassifier, "MapFromLlmContent", "router intent classifier owns llm content mapping");
+assertIncludes(routerIntentClassifier, "ClassifyHeuristic", "router intent classifier owns heuristic fallback");
+assertIncludes(llmRouterSource, "RouterIntentClassifier.MapFromLlmContent", "llm router uses intent classifier for llm content");
+assertIncludes(llmRouterSource, "RouterIntentClassifier.ClassifyHeuristic", "llm router uses intent classifier heuristic fallback");
+assertNotIncludes(llmRouterSource, "private static RouterIntent ClassifyIntentFallback(", "llm router no longer owns heuristic intent classifier");
+assertNotIncludes(llmRouterSource, "private static RouterIntent MapIntent(", "llm router no longer owns llm content intent mapper");
 assertIncludes(codingExecution, "if (!IsDynamicCodeExecutionEnabled())", "workspace shell execution checks dynamic code flag");
 assertIncludes(codingExecution, "new ShellRunResult(126", "workspace shell execution returns blocked result");
 assertIncludes(codingExecution, "if (_execution.EnableAutoInstall)", "auto install pipeline checks explicit flag");
