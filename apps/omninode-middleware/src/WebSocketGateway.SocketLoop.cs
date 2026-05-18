@@ -502,18 +502,7 @@ public sealed partial class WebSocketGateway
 
     private static bool IsAllowedRemoteLimitedMessage(string? messageType)
     {
-        return messageType is
-            "list_conversations" or
-            "get_conversation" or
-            "list_memory_notes" or
-            "read_memory_note" or
-            "memory_search" or
-            "conversation_search" or
-            "memory_get" or
-            "context_scan" or
-            "skills_list" or
-            "commands_list" or
-            "notebook_get";
+        return RemoteLimitedMessagePolicy.IsAllowed(messageType);
     }
 
     private static bool TryValidateClientPayloadLimits(string json, out string errorMessage)

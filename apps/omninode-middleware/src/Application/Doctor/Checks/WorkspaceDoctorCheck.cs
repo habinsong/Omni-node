@@ -51,6 +51,10 @@ public sealed class WorkspaceDoctorCheck : IDoctorCheck
         if (stateArtifacts.CorruptJsonCount > 0)
         {
             actions.Add("손상된 상태 JSON을 점검하고, 필요한 경우 같은 경로의 `.bak` 파일로 복구하세요.");
+            if (stateArtifacts.CorruptJsonFiles.Any(x => x.EndsWith(":backup=no", StringComparison.OrdinalIgnoreCase)))
+            {
+                actions.Add("`.bak`가 없는 손상 JSON은 자동 복구 대상이 아니므로 파일별 수동 확인이 필요합니다.");
+            }
         }
 
         return new DoctorCheckResult(
@@ -61,7 +65,7 @@ public sealed class WorkspaceDoctorCheck : IDoctorCheck
                 : status == DoctorStatus.Warn
                     ? "상태 루트에 접근 가능하지만 손상된 상태 JSON이 감지되었습니다."
                     : "워크스페이스 또는 상태 루트 접근이 실패했습니다.",
-            $"workspace={workspaceRoot}; env={(string.IsNullOrWhiteSpace(workspaceEnv) ? "auto" : workspaceEnv)}; workspaceProbe={workspaceProbe.Detail}; stateRoot={_pathResolver.StateRootDir}; stateProbe={stateProbe.Detail}; stateJson={stateArtifacts.JsonCount}; backups={stateArtifacts.BackupCount}; locks={stateArtifacts.LockCount}; corruptJson={stateArtifacts.CorruptJsonCount}",
+            $"workspace={workspaceRoot}; env={(string.IsNullOrWhiteSpace(workspaceEnv) ? "auto" : workspaceEnv)}; workspaceProbe={workspaceProbe.Detail}; stateRoot={_pathResolver.StateRootDir}; stateProbe={stateProbe.Detail}; stateJson={stateArtifacts.JsonCount}; backups={stateArtifacts.BackupCount}; locks={stateArtifacts.LockCount}; corruptJson={stateArtifacts.CorruptJsonCount}{FormatCorruptJsonFilesDetail(stateArtifacts)}",
             actions
         );
     }
@@ -90,13 +94,14 @@ public sealed class WorkspaceDoctorCheck : IDoctorCheck
     {
         if (!Directory.Exists(stateRootDir))
         {
-            return new StateArtifactSummary(0, 0, 0, 0);
+            return new StateArtifactSummary(0, 0, 0, 0, Array.Empty<string>());
         }
 
         var jsonCount = 0;
         var backupCount = 0;
         var lockCount = 0;
         var corruptJsonCount = 0;
+        var corruptJsonFiles = new List<string>();
 
         foreach (var path in Directory.EnumerateFiles(stateRootDir, "*", SearchOption.AllDirectories))
         {
@@ -126,16 +131,47 @@ public sealed class WorkspaceDoctorCheck : IDoctorCheck
             catch
             {
                 corruptJsonCount++;
+                if (corruptJsonFiles.Count < 8)
+                {
+                    corruptJsonFiles.Add(FormatCorruptJsonFileRisk(stateRootDir, path));
+                }
             }
         }
 
-        return new StateArtifactSummary(jsonCount, backupCount, lockCount, corruptJsonCount);
+        return new StateArtifactSummary(jsonCount, backupCount, lockCount, corruptJsonCount, corruptJsonFiles);
+    }
+
+    private static string FormatCorruptJsonFilesDetail(StateArtifactSummary stateArtifacts)
+    {
+        if (stateArtifacts.CorruptJsonFiles.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var hiddenCount = Math.Max(0, stateArtifacts.CorruptJsonCount - stateArtifacts.CorruptJsonFiles.Count);
+        var suffix = hiddenCount > 0 ? $",+{hiddenCount} more" : string.Empty;
+        return $"; corruptJsonFiles={string.Join(",", stateArtifacts.CorruptJsonFiles)}{suffix}";
+    }
+
+    private static string FormatCorruptJsonFileRisk(string stateRootDir, string path)
+    {
+        var relativePath = Path.GetRelativePath(stateRootDir, path)
+            .Replace(Path.DirectorySeparatorChar, '/')
+            .Replace(Path.AltDirectorySeparatorChar, '/');
+        if (relativePath.StartsWith("..", StringComparison.Ordinal))
+        {
+            relativePath = Path.GetFileName(path);
+        }
+
+        var hasBackup = File.Exists(path + ".bak") ? "yes" : "no";
+        return $"{relativePath}:backup={hasBackup}";
     }
 
     private sealed record StateArtifactSummary(
         int JsonCount,
         int BackupCount,
         int LockCount,
-        int CorruptJsonCount
+        int CorruptJsonCount,
+        IReadOnlyList<string> CorruptJsonFiles
     );
 }

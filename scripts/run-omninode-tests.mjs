@@ -139,6 +139,11 @@ function main() {
     "dotnet",
     ["test", "apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj"]
   );
+  runStep(
+    "gateway runtime contract",
+    "node",
+    [toRelative(path.join(repoRoot, "scripts", "check-gateway-runtime-contract.mjs"))]
+  );
 
   const pythonCommand = resolvePythonCommand();
   runStep(

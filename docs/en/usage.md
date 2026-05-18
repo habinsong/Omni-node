@@ -2,7 +2,7 @@
 
 [한국어](../사용법_빠른시작.md) · [English](./usage.md)
 
-Updated: 2026-05-15
+Updated: 2026-05-18
 
 For a fresh checkout, run `./scripts/Omni-node setup` before starting the dashboard. It checks or installs dependencies, builds the core and middleware, runs `npm test`, and registers the launcher.
 
@@ -32,11 +32,11 @@ The routine overview keeps refresh/sync actions aligned with the status summary 
 
 Logic graphs connect chat, coding, routines, and tools on a node canvas.
 
-Remote limited mode keeps logic graph list, open, path browse, save, delete, run, cancel, and run-result lookup available.
+Remote limited mode blocks logic graph execution actions. Local authenticated clients can still list, edit, run, cancel, and inspect logic graph results.
 
 ## Settings and Remote Access
 
-Remote clients enter limited mode without an OTP prompt. Chat, coding, routines, logic graphs, notebooks, plans, routing policy, and model selection remain available. OTP/CLI auth, Telegram/LLM keys, and external-access toggle changes are blocked.
+Remote clients enter limited mode without an OTP prompt. Limited mode allows read-oriented views, routing policy changes, and model selection. Chat, coding, routine, logic graph, task, refactor, and tool execution actions are blocked along with OTP/CLI auth, Telegram/LLM keys, and external-access toggle changes.
 
 ## Notebooks and Plans
 

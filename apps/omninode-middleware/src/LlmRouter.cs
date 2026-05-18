@@ -2610,19 +2610,7 @@ public sealed class LlmRouter : IDisposable
     {
         try
         {
-            var fullPath = Path.GetFullPath(_usageStatePath);
-            if (!File.Exists(fullPath))
-            {
-                return;
-            }
-
-            var json = File.ReadAllText(fullPath);
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                return;
-            }
-
-            var state = JsonSerializer.Deserialize(json, OmniJsonContext.Default.LlmUsageState);
+            var state = UsageStatePersistence.LoadLlmUsageState(_usageStatePath);
             if (state == null)
             {
                 return;

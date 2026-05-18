@@ -4,16 +4,19 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+let assertionCount = 0;
 
 function read(relativePath) {
   return readFileSync(path.join(repoRoot, relativePath), "utf8");
 }
 
 function assertIncludes(text, needle, label) {
+  assertionCount += 1;
   assert.ok(text.includes(needle), `${label}: expected to include ${needle}`);
 }
 
 function assertNotIncludes(text, needle, label) {
+  assertionCount += 1;
   assert.ok(!text.includes(needle), `${label}: expected not to include ${needle}`);
 }
 
@@ -25,12 +28,15 @@ assertIncludes(socketLoop, "AllowCommand(sessionId!)", "websocket command rate l
 assertIncludes(socketLoop, "TryHandleAsync(message, remoteDashboardClient, authenticated", "setup dispatcher receives auth state");
 assertIncludes(socketLoop, "IsAllowedRemoteLimitedMessage(message.Type)", "remote limited mode has explicit message allowlist gate");
 assertIncludes(socketLoop, "forbidden_remote_limited_action", "remote limited mode blocks non-allowlisted actions");
-assertIncludes(socketLoop, "\"list_conversations\"", "remote limited mode allows read-only conversation list");
-assertIncludes(socketLoop, "\"notebook_get\"", "remote limited mode allows notebook read");
-assertNotIncludes(socketLoop, "\"llm_chat_single\"", "remote limited mode must not allow chat execution");
-assertNotIncludes(socketLoop, "\"coding_run_single\"", "remote limited mode must not allow coding execution");
-assertNotIncludes(socketLoop, "\"run_routine\"", "remote limited mode must not allow routine execution");
-assertNotIncludes(socketLoop, "\"logic_graph_run\"", "remote limited mode must not allow logic execution");
+assertIncludes(socketLoop, "RemoteLimitedMessagePolicy.IsAllowed(messageType)", "remote limited mode delegates allowlist to policy");
+
+const remoteLimitedPolicy = read("apps/omninode-middleware/src/RemoteLimitedMessagePolicy.cs");
+assertIncludes(remoteLimitedPolicy, "\"list_conversations\"", "remote limited mode allows read-only conversation list");
+assertIncludes(remoteLimitedPolicy, "\"notebook_get\"", "remote limited mode allows notebook read");
+assertNotIncludes(remoteLimitedPolicy, "\"llm_chat_single\"", "remote limited mode must not allow chat execution");
+assertNotIncludes(remoteLimitedPolicy, "\"coding_run_single\"", "remote limited mode must not allow coding execution");
+assertNotIncludes(remoteLimitedPolicy, "\"run_routine\"", "remote limited mode must not allow routine execution");
+assertNotIncludes(remoteLimitedPolicy, "\"logic_graph_run\"", "remote limited mode must not allow logic execution");
 
 const authGateway = read("apps/omninode-middleware/src/AuthSessionGateway.cs");
 assertIncludes(authGateway, "if (remoteDashboardClient)", "remote dashboard limited-mode branch");
@@ -99,7 +105,8 @@ assertIncludes(dashboardApp, "send({ type: \"get_settings\" });\n      if (!remo
 const settingsRenderer = read("apps/omninode-dashboard/modules/dashboard-settings-renderers.js");
 assertIncludes(settingsRenderer, "basic-remote-limited", "remote dashboard settings use limited-mode panel");
 assertIncludes(settingsRenderer, "OTP 요청과 인증 재개", "remote dashboard panel explains blocked auth actions");
-assertIncludes(settingsRenderer, "로직 그래프 목록, 열기, 저장, 삭제, 실행, 취소, 결과 조회", "remote dashboard panel explains allowed logic actions");
+assertIncludes(settingsRenderer, "읽기 중심 조회, 모델 선택, 라우팅 정책", "remote dashboard panel explains allowed limited actions");
+assertIncludes(settingsRenderer, "대화, 코딩, 루틴, 로직 그래프, task graph 실행", "remote dashboard panel explains blocked execution actions");
 
 const errorMessages = read("apps/omninode-dashboard/modules/error-messages.js");
 assertIncludes(errorMessages, "forbidden_remote_auth", "dashboard has auth-specific remote restriction copy");
@@ -130,6 +137,9 @@ const routineStore = read("apps/omninode-middleware/src/Infrastructure/Persisten
 const planStore = read("apps/omninode-middleware/src/Infrastructure/Persistence/FilePlanStore.cs");
 const taskGraphStore = read("apps/omninode-middleware/src/Infrastructure/Persistence/FileTaskGraphStore.cs");
 const telegramOutboxStore = read("apps/omninode-middleware/src/Infrastructure/Persistence/FileTelegramReplyOutboxStore.cs");
+const usageStatePersistence = read("apps/omninode-middleware/src/UsageStatePersistence.cs");
+const llmRouter = read("apps/omninode-middleware/src/LlmRouter.cs");
+const copilotCliWrapper = read("apps/omninode-middleware/src/CopilotCliWrapper.cs");
 const workspaceDoctorCheck = read("apps/omninode-middleware/src/Application/Doctor/Checks/WorkspaceDoctorCheck.cs");
 const memoryIndexDocumentSync = read("apps/omninode-middleware/src/MemoryIndexDocumentSync.cs");
 const wsConversationMemoryDispatcher = read("apps/omninode-middleware/src/WsConversationMemoryDispatcher.cs");
@@ -156,7 +166,13 @@ assertIncludes(routineStore, "ReadAllTextWithBackup", "routine state uses backup
 assertIncludes(planStore, "ReadAllTextWithBackup", "plan state uses backup recovery");
 assertIncludes(taskGraphStore, "ReadAllTextWithBackup", "task graph state uses backup recovery");
 assertIncludes(telegramOutboxStore, "ReadAllTextWithBackup", "telegram outbox uses backup recovery");
+assertIncludes(usageStatePersistence, "ReadAllTextWithBackup", "usage state reads can recover from backup");
+assertIncludes(usageStatePersistence, "LoadLlmUsageState", "llm usage state has typed recovery loader");
+assertIncludes(usageStatePersistence, "LoadCopilotState", "copilot usage state has typed recovery loader");
+assertIncludes(llmRouter, "UsageStatePersistence.LoadLlmUsageState", "llm router loads usage state through recovery helper");
+assertIncludes(copilotCliWrapper, "UsageStatePersistence.LoadCopilotState", "copilot wrapper loads usage state through recovery helper");
 assertIncludes(workspaceDoctorCheck, "corruptJson", "doctor exposes corrupt state json count");
+assertIncludes(workspaceDoctorCheck, "corruptJsonFiles", "doctor exposes corrupt state json file risk details");
 assertIncludes(workspaceDoctorCheck, "backups=", "doctor exposes backup state file count");
 assertIncludes(workspaceDoctorCheck, "locks=", "doctor exposes state lock file count");
 assertIncludes(memoryIndexDocumentSync, "ElapsedMs", "memory index sync reports elapsed time");
@@ -167,4 +183,4 @@ assertIncludes(memoryApplicationService, "elapsedMs=", "memory index rebuild aud
 assertIncludes(wsConversationMemoryDispatcher, "\\\"elapsedMs\\\"", "memory index rebuild websocket result includes elapsed time");
 assertIncludes(wsConversationMemoryDispatcher, "\\\"projectDocuments\\\"", "memory index rebuild websocket result includes project document count");
 
-console.log(JSON.stringify({ ok: true, assertions: 101 }, null, 2));
+console.log(JSON.stringify({ ok: true, assertions: assertionCount }, null, 2));

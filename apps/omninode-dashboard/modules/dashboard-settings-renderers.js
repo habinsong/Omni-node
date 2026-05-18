@@ -438,25 +438,27 @@ export function renderSettingsPanel(props) {
     e("div", { className: "settings-panel-hero" },
       e("div", null,
         e("h2", null, "외부 접속 제한 모드"),
-        e("p", null, "외부 접속에서는 OTP 없이 작업 기능을 사용하되, 인증과 시크릿 설정만 막습니다.")
+        e("p", null, "외부 접속에서는 OTP 없이 읽기 중심 조회와 모델/라우팅 설정만 허용합니다.")
       ),
       e("div", { className: "settings-visual-card auth" },
         e("span", null, "REMOTE"),
         e("strong", null, "제한 모드"),
-        renderStatusChip("작업 기능 허용", true)
+        renderStatusChip("실행 차단", true)
       )
     ),
     e("div", { className: "settings-info-grid" },
       renderInfoRow("접속 방식", "OTP 요청 없음"),
-      renderInfoRow("차단 기준", "인증/시크릿/외부접속 설정"),
-      renderInfoRow("작업 기능", "대화·코딩·루틴·로직·노트북 허용")
+      renderInfoRow("허용 기준", "읽기 중심 조회, 모델 선택, 라우팅 정책"),
+      renderInfoRow("차단 기준", "작업 실행, 인증, 시크릿, 외부접속 설정")
     ),
     renderPermissionList("허용", [
-      "대화, 코딩, 루틴 실행",
-      "로직 그래프 목록, 열기, 저장, 삭제, 실행, 취소, 결과 조회",
-      "노트북, 작업 계획, 라우팅 정책, 모델 선택"
+      "설정 상태, 대화 목록/상세, 메모리 읽기/검색",
+      "context, skills, commands 목록과 노트북 조회",
+      "라우팅 정책 조회/저장/초기화, 모델 목록과 모델 선택"
     ]),
     renderPermissionList("차단", [
+      "대화, 코딩, 루틴, 로직 그래프, task graph 실행",
+      "리팩터 적용과 도구 실행",
       "OTP 요청과 인증 재개",
       "외부접속 토글 변경",
       "Telegram/LLM 키 저장, 삭제, 테스트",

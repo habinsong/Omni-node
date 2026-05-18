@@ -84,7 +84,7 @@ Omni-node turns those loose pieces into a working loop.
 - **Notebooks**: learnings, decisions, verification notes, and handoff documents
 - **Safe Refactor**: anchor edits, LSP rename, ast-grep replacement with preview and guarded apply
 - **Skills**: project/global `SKILL.md` files, sticky activation, shared chat and Telegram behavior, single-skill guard, and quick aliases
-- **Remote dashboard**: LAN access toggle with no OTP prompt for remote clients; chat, coding, routines, logic graphs, routing policy, and model selection remain available while auth, secrets, and external-access settings stay blocked
+- **Remote dashboard**: LAN access toggle with no OTP prompt for remote clients; read-oriented views, routing policy, and model selection remain available while chat, coding, routines, logic graph execution, auth, secrets, and external-access settings stay blocked
 
 ## Recent updates
 

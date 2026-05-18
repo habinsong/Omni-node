@@ -721,19 +721,7 @@ public sealed class CopilotCliWrapper
     {
         try
         {
-            var fullPath = Path.GetFullPath(_usageStatePath);
-            if (!File.Exists(fullPath))
-            {
-                return;
-            }
-
-            var json = File.ReadAllText(fullPath);
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                return;
-            }
-
-            var state = System.Text.Json.JsonSerializer.Deserialize(json, OmniJsonContext.Default.CopilotState);
+            var state = UsageStatePersistence.LoadCopilotState(_usageStatePath);
             if (state == null)
             {
                 return;

@@ -60,8 +60,8 @@ git diff --check
 최근 확인 결과:
 
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 10 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 101
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 35 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 111
 - `npm test`: 통과
 - `make -C apps/omninode-core -B`: 통과
 - `git diff --check`: 통과
@@ -179,7 +179,8 @@ git diff --check
 
 - 대표 JSON 저장소에는 `.lock`, `.bak`, 복구 경로가 들어갔다.
 - 모든 JSON 읽기 경로가 같은 복구 정책을 쓰는 것은 아니다.
-- usage 계열과 일부 읽기 전용 tool 상태는 후속 정리 대상이다.
+- `llm_usage.json`, `copilot_usage.json` 계열은 `.bak` 복구 로더를 통과한다.
+- 일부 읽기 전용 tool 상태는 후속 정리 대상이다.
 
 영향:
 
@@ -189,7 +190,7 @@ git diff --check
 권장 방향:
 
 - JSON 상태 저장소 목록을 작성하고 AtomicFileStore 적용 여부를 표로 관리한다.
-- usage 계열부터 backup recovery를 확대한다.
+- 남은 JSON 상태 저장소의 recovery 적용 여부를 inventory로 관리한다.
 - 상태 스키마 versioning과 migration 정책을 정리한다.
 
 ### 7. 테스트 성격의 한계
@@ -217,23 +218,29 @@ git diff --check
 
 ### 1. 원격 제한 모드의 로직 그래프 정책
 
-상태: 수정 필요
+상태: 완료
 
 현재 코드와 최신 주요 문서 기준:
 
 - 원격 제한 모드는 읽기 중심 조회와 모델/라우팅 일부만 허용한다.
 - 대화, 코딩, 루틴, 로직 그래프, task graph, refactor, tool 실행은 차단한다.
 
-불일치 파일:
+확인된 불일치 파일:
 
 - `docs/검증_가이드.md`
-  - 보안 경계 항목에 “외부 로직 그래프 동작 허용”이라고 남아 있다.
+  - 보안 경계 항목에 외부 로직 그래프 동작 허용 기준이 남아 있었다.
 - `docs/en/usage.md`
-  - remote limited 설명에서 chat, coding, routines, logic graphs, notebooks, plans 등이 available로 적혀 있다.
+  - remote limited 설명에서 chat, coding, routines, logic graphs, notebooks, plans 등이 available 기준으로 적혀 있었다.
 - `docs/OMNINODE_실환경_수동_최종회귀_체크리스트.md`
-  - 외부 클라이언트에서 로직 그래프 목록/열기/저장/삭제/실행/취소/결과 조회 허용으로 남아 있다.
+  - 외부 클라이언트에서 로직 그래프 목록/열기/저장/삭제/실행/취소/결과 조회 허용 기준이 남아 있었다.
+- `docs/en/manual-regression-checklist.md`
+  - remote logic graph actions available 기준이 남아 있었다.
+- `docs/en/validation.md`
+  - 원격 로직 그래프 동작을 허용한다는 영문 기준이 남아 있었다.
+- `README.en.md`
+  - remote dashboard에서 chat/coding/routines/logic graphs가 available로 적혀 있었다.
 
-권장 수정:
+완료 내용:
 
 - 원격 제한 모드 문구를 `README.md`, `docs/아키텍처_흐름.md`, `docs/QUICKSTART.md`, `docs/en/architecture.md`, `docs/en/quickstart.md`와 맞춘다.
 - 실행 가능/불가능을 표로 통일한다.
@@ -241,7 +248,7 @@ git diff --check
 
 ### 2. 문서 업데이트 날짜
 
-상태: 점검 필요
+상태: 진행 중
 
 근거:
 
@@ -257,6 +264,8 @@ git diff --check
 
 ### P0. 현재 작업트리 커밋
 
+상태: 완료
+
 목표:
 
 - 현재 안정화 작업을 하나의 기준점으로 고정한다.
@@ -268,7 +277,13 @@ git diff --check
 - 커밋이 생성된다.
 - 커밋 후 `git status --short`가 깨끗해야 한다.
 
+완료 내용:
+
+- `e1ef479 chore: stabilize Omni-node runtime boundaries` 커밋으로 안정화 변경과 기존 분석 문서를 기준점으로 고정했다.
+
 ### P1. 문서 불일치 정리
+
+상태: 완료
 
 목표:
 
@@ -281,6 +296,35 @@ git diff --check
 - `docs/OMNINODE_실환경_수동_최종회귀_체크리스트.md`
 - 필요 시 `docs/en/manual-regression-checklist.md`
 
+진행 내용:
+
+- `docs/검증_가이드.md`
+  - 외부 로직 그래프 동작 허용 문구를 외부 실행 차단과 읽기/모델/라우팅 허용 기준으로 교체했다.
+- `docs/en/usage.md`
+  - remote limited mode에서 logic graph 실행이 가능하다는 설명을 차단 기준으로 교체했다.
+- `docs/OMNINODE_실환경_수동_최종회귀_체크리스트.md`
+  - 외부 로직 그래프 실행 허용 체크를 외부 실행 차단 체크로 교체했다.
+- `docs/en/manual-regression-checklist.md`
+  - remote logic graph actions available 문구를 remote execution blocked 기준으로 교체했다.
+- `README.en.md`
+  - remote dashboard 설명을 한국어 README와 같은 제한 모드 기준으로 맞췄다.
+- `docs/en/validation.md`
+  - 원격 로직 그래프 동작 허용 문구를 remote execution blocked와 read/model/routing allowed 기준으로 교체했다.
+- `apps/omninode-dashboard/modules/dashboard-settings-renderers.js`
+  - 외부 접속 제한 모드 패널을 읽기 중심 조회/모델/라우팅 허용, 실행 계열 차단 기준으로 교체했다.
+- `scripts/check-security-boundaries.mjs`
+  - 대시보드 설정 패널이 최신 제한 모드 정책을 설명하는지 계약 검사를 추가했다.
+  - 원격 제한 모드 allowlist가 별도 policy로 분리되어 있는지 확인한다.
+- `apps/omninode-middleware/src/RemoteLimitedMessagePolicy.cs`
+  - read-oriented message allowlist를 `WebSocketGateway` 내부 private 분기에서 분리했다.
+- `apps/omninode-middleware-tests/RemoteLimitedMessagePolicyTests.cs`
+  - 원격 제한 모드에서 허용되는 읽기 메시지와 차단되는 실행/인증 메시지를 단위 테스트로 고정했다.
+
+검증 결과:
+
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 111
+- `git diff --check`: 통과
+
 검증:
 
 - `rg -n "외부 로직 그래프|logic graph.*available|로직 그래프.*허용|logic graph.*blocked|로직 그래프 실행" docs README.md`
@@ -288,6 +332,8 @@ git diff --check
 - `git diff --check`
 
 ### P2. WebSocket runtime 통합 테스트 추가
+
+상태: 진행 중
 
 목표:
 
@@ -306,7 +352,38 @@ git diff --check
 
 - 새 integration test script를 `npm test`에 포함한다.
 
+진행 내용:
+
+- `scripts/check-gateway-runtime-contract.mjs`
+  - 임시 포트와 임시 HOME/워크스페이스로 실제 미들웨어를 기동한다.
+  - `/healthz` 응답을 확인한다.
+  - 로컬 loopback WebSocket의 Origin 없는 handshake가 `101`로 허용되는지 확인한다.
+  - 잘못된 Origin handshake가 `403`으로 거부되는지 확인한다.
+  - WebSocket `ping`/`pong` round-trip 뒤 `/readyz`가 `200`이 되는지 확인한다.
+  - 대시보드 index 정적 파일이 `ETag`, `Last-Modified`, 조건부 `304 Not Modified`를 제공하는지 확인한다.
+- `scripts/run-omninode-tests.mjs`
+  - `npm test`에 `gateway runtime contract` 단계를 추가했다.
+- `apps/omninode-middleware/src/Program.cs`
+  - gateway runtime test가 기존 사용자 core daemon이나 memory index scan 비용에 영향받지 않도록 `OMNINODE_SKIP_CORE_BOOTSTRAP`, `OMNINODE_SKIP_MEMORY_INDEX_BOOTSTRAP` 테스트용 skip 경로를 추가했다.
+
+검증 결과:
+
+- `node scripts/check-gateway-runtime-contract.mjs`: 통과
+- `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 35 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 111
+- `npm test`: 통과
+- `make -C apps/omninode-core -B`: 통과
+- `git diff --check`: 통과
+
+남은 범위:
+
+- 원격 제한 모드의 read-only 허용/실행 차단은 아직 실제 원격 endpoint 기준으로 검증하지 않았다.
+- 테스트 환경에서 비 loopback 원격 접속을 안정적으로 재현할 방법을 설계해야 한다.
+
 ### P3. `CommandService` 도메인 분리 시작
+
+상태: 시작됨
 
 목표:
 
@@ -325,6 +402,11 @@ git diff --check
 - 외부 API 계약을 바꾸지 않는다.
 - 먼저 read-only 또는 pure helper 성격부터 옮긴다.
 - 각 추출마다 기존 contract test를 유지하고 필요한 단위 테스트를 추가한다.
+
+진행 내용:
+
+- `RemoteLimitedMessagePolicy`를 추가해 remote limited allowlist를 gateway loop 내부에서 분리했다.
+- 이 변경은 아직 `CommandService` 분리는 아니지만, P2에서 지적한 message policy 선언화의 첫 단계다.
 
 ### P4. Provider adapter 구조 정리
 
@@ -347,6 +429,8 @@ git diff --check
 
 ### P5. 상태 저장소 복구 정책 확대
 
+상태: 진행 중
+
 목표:
 
 - JSON 상태 파일의 lock/backup/recovery 적용 범위를 명확히 한다.
@@ -355,8 +439,18 @@ git diff --check
 
 - 상태 파일 inventory 작성.
 - AtomicFileStore 적용 여부 표시.
-- usage 계열 상태 복구 정책 추가.
-- doctor detail에 파일별 위험을 더 구체화.
+- usage 계열 상태 복구 정책 추가. 완료:
+  - `apps/omninode-middleware/src/UsageStatePersistence.cs`
+    - `llm_usage.json`, `copilot_usage.json` 로드 시 `AtomicFileStore.ReadAllTextWithBackup`을 통과한다.
+    - primary JSON이 손상되고 `.bak`가 유효하면 primary를 백업 내용으로 복구한다.
+  - `apps/omninode-middleware-tests/UsageStatePersistenceTests.cs`
+    - LLM usage와 Copilot usage의 손상 primary → 유효 backup 복구를 단위 테스트로 고정했다.
+  - `scripts/check-security-boundaries.mjs`
+    - usage 상태 로더가 backup recovery helper를 쓰는지 계약 검사에 추가했다.
+- doctor detail에 파일별 위험을 더 구체화. 완료:
+  - `WorkspaceDoctorCheck`가 손상 JSON 상세를 `corruptJsonFiles=상대경로:backup=yes|no` 형태로 노출한다.
+  - `.bak`가 없는 손상 JSON이 있으면 별도 suggested action을 추가한다.
+  - `WorkspaceDoctorCheckTests`가 backup 유무가 섞인 손상 JSON을 경고와 detail로 고정했다.
 
 ## 운영 판단
 

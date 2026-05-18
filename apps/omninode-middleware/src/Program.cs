@@ -48,7 +48,14 @@ internal static class Program
         };
 
         var coreBootstrapper = new CoreProcessBootstrapper(paths, coreClient, coreAuthToken);
-        await coreBootstrapper.EnsureRunningAsync(cts.Token);
+        if (IsCoreBootstrapEnabled())
+        {
+            await coreBootstrapper.EnsureRunningAsync(cts.Token);
+        }
+        else
+        {
+            Console.WriteLine("[core-bootstrap] skipped by OMNINODE_SKIP_CORE_BOOTSTRAP");
+        }
 
         if (await DoctorCli.TryHandleAsync(args, doctorService, cts.Token))
         {
@@ -75,7 +82,14 @@ internal static class Program
         );
         var refactorServices = ConfigureRefactorServices(config, pathResolver);
         var toolServices = ConfigureToolServices(config, runtimeSettings, persistence.ConversationStore);
-        BootstrapMemoryIndex(paths);
+        if (IsMemoryIndexBootstrapEnabled())
+        {
+            BootstrapMemoryIndex(paths);
+        }
+        else
+        {
+            Console.WriteLine("[memory-index] bootstrap skipped by OMNINODE_SKIP_MEMORY_INDEX_BOOTSTRAP");
+        }
         var auditLogger = new AuditLogger(config.AuditLogPath);
         var appServices = ConfigureApplicationServices(
             config,
@@ -252,6 +266,24 @@ internal static class Program
             new FileRunArtifactStore(paths.RoutineRunsRootDir),
             new FileNotebookStore(pathResolver)
         );
+    }
+
+    private static bool IsCoreBootstrapEnabled()
+    {
+        var value = Environment.GetEnvironmentVariable("OMNINODE_SKIP_CORE_BOOTSTRAP");
+        return string.IsNullOrWhiteSpace(value)
+               || !(value.Equals("1", StringComparison.OrdinalIgnoreCase)
+                    || value.Equals("true", StringComparison.OrdinalIgnoreCase)
+                    || value.Equals("yes", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsMemoryIndexBootstrapEnabled()
+    {
+        var value = Environment.GetEnvironmentVariable("OMNINODE_SKIP_MEMORY_INDEX_BOOTSTRAP");
+        return string.IsNullOrWhiteSpace(value)
+               || !(value.Equals("1", StringComparison.OrdinalIgnoreCase)
+                    || value.Equals("true", StringComparison.OrdinalIgnoreCase)
+                    || value.Equals("yes", StringComparison.OrdinalIgnoreCase));
     }
 
     private static SearchServices ConfigureSearchServices(
