@@ -38,36 +38,19 @@ public sealed partial class CommandService
         string? search = null,
         string? scope = null,
         string? mode = null
-    )
-    {
-        return _sessionListTool.List(
-            kinds,
-            limit,
-            activeMinutes,
-            messageLimit,
-            search,
-            scope,
-            mode
-        );
-    }
+    ) => _toolAppService.ListSessions(kinds, limit, activeMinutes, messageLimit, search, scope, mode);
 
     public SessionHistoryToolResult GetSessionHistory(
         string? sessionKey,
         int? limit = null,
         bool includeTools = false
-    )
-    {
-        return _sessionHistoryTool.Get(sessionKey, limit, includeTools);
-    }
+    ) => _toolAppService.GetSessionHistory(sessionKey, limit, includeTools);
 
     public SessionSendToolResult SendToSession(
         string? sessionKey,
         string? message,
         int? timeoutSeconds = null
-    )
-    {
-        return _sessionSendTool.Send(sessionKey, message, timeoutSeconds);
-    }
+    ) => _toolAppService.SendToSession(sessionKey, message, timeoutSeconds);
 
     public SessionSpawnToolResult SpawnSession(
         string? task,
@@ -77,18 +60,7 @@ public sealed partial class CommandService
         int? timeoutSeconds = null,
         bool? thread = null,
         string? mode = null
-    )
-    {
-        return _sessionSpawnTool.Spawn(
-            task,
-            label,
-            runtime,
-            runTimeoutSeconds,
-            timeoutSeconds,
-            thread,
-            mode
-        );
-    }
+    ) => _toolAppService.SpawnSession(task, label, runtime, runTimeoutSeconds, timeoutSeconds, thread, mode);
 
     public CronToolStatusResult GetCronStatus()
     {
@@ -3255,10 +3227,7 @@ public sealed partial class CommandService
         string? extractMode = null,
         int? maxChars = null,
         CancellationToken cancellationToken = default
-    )
-    {
-        return _webFetchTool.FetchAsync(url, extractMode, maxChars, cancellationToken);
-    }
+    ) => _toolAppService.FetchWebAsync(url, extractMode, maxChars, cancellationToken);
 
     public BrowserToolResult ExecuteBrowser(
         string? action,
@@ -3266,10 +3235,7 @@ public sealed partial class CommandService
         string? profile = null,
         string? targetId = null,
         int? limit = null
-    )
-    {
-        return _browserTool.Execute(action, targetUrl, profile, targetId, limit);
-    }
+    ) => _toolAppService.ExecuteBrowser(action, targetUrl, profile, targetId, limit);
 
     public CanvasToolResult ExecuteCanvas(
         string? action,
@@ -3280,10 +3246,7 @@ public sealed partial class CommandService
         string? jsonl = null,
         string? outputFormat = null,
         int? maxWidth = null
-    )
-    {
-        return _canvasTool.Execute(action, profile, target, targetUrl, javaScript, jsonl, outputFormat, maxWidth);
-    }
+    ) => _toolAppService.ExecuteCanvas(action, profile, target, targetUrl, javaScript, jsonl, outputFormat, maxWidth);
 
     public NodesToolResult ExecuteNodes(
         string? action,
@@ -3298,7 +3261,7 @@ public sealed partial class CommandService
         string? invokeParamsJson = null
     )
     {
-        return _nodesTool.Execute(
+        return _toolAppService.ExecuteNodes(
             action,
             profile,
             node,

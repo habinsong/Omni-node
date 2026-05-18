@@ -219,6 +219,17 @@ internal static class Program
             config,
             memorySearchTool
         );
+        var toolApplicationService = new ToolApplicationService(
+            sessionListTool,
+            sessionHistoryTool,
+            sessionSendTool,
+            sessionSpawnTool,
+            webFetchTool,
+            browserTool,
+            canvasTool,
+            nodesTool,
+            cleanupService
+        );
         var commandService = new CommandService(
             config,
             llmRouter,
@@ -272,12 +283,23 @@ internal static class Program
             taskGraphApplicationService,
             memoryApplicationService,
             planApplicationService,
-            conversationApplicationService
+            conversationApplicationService,
+            toolApplicationService
         );
         memoryApplicationService.ConfigureCreateMemoryNoteDelegate(commandService.CreateMemoryNoteAsync);
         conversationApplicationService.ConfigureClearActiveSkillDelegate(commandService.ClearActiveSkillForConversation);
+        toolApplicationService.ConfigureCronAndSearchDelegates(new ToolApplicationService.CronSearchDelegates(
+            commandService.GetCronStatus,
+            commandService.ListCronJobs,
+            commandService.ListCronRuns,
+            commandService.AddCronJob,
+            commandService.UpdateCronJob,
+            commandService.RunCronJobAsync,
+            commandService.WakeCron,
+            commandService.RemoveCronJob,
+            commandService.SearchWebAsync
+        ));
         var commandExecutionService = new CommandExecutionService(commandService);
-        var toolApplicationService = new ToolApplicationService(commandService);
         var routineApplicationService = new RoutineApplicationService(commandService);
         var logicGraphRuntimeCoordinator = new LogicGraphRuntimeCoordinator(pathResolver);
         commandService.ConfigureLogicGraphRuntime(pathResolver, logicGraphRuntimeCoordinator);
