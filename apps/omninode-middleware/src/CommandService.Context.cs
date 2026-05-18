@@ -3,32 +3,11 @@ namespace OmniNode.Middleware;
 public sealed partial class CommandService
 {
     public Task<ProjectContextSnapshot> ScanProjectContextAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(_projectContextLoader.LoadSnapshot());
-    }
+        => _contextAppService.ScanProjectContextAsync(cancellationToken);
 
     public Task<SkillManifestListResult> ListSkillsAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var snapshot = _projectContextLoader.LoadSnapshot();
-        return Task.FromResult(new SkillManifestListResult(
-            snapshot.ProjectRoot,
-            snapshot.CurrentDirectory,
-            snapshot.Skills,
-            snapshot.ScannedAtUtc
-        ));
-    }
+        => _contextAppService.ListSkillsAsync(cancellationToken);
 
     public Task<CommandTemplateListResult> ListCommandsAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var snapshot = _projectContextLoader.LoadSnapshot();
-        return Task.FromResult(new CommandTemplateListResult(
-            snapshot.ProjectRoot,
-            snapshot.CurrentDirectory,
-            snapshot.Commands,
-            snapshot.ScannedAtUtc
-        ));
-    }
+        => _contextAppService.ListCommandsAsync(cancellationToken);
 }

@@ -2,25 +2,40 @@ namespace OmniNode.Middleware;
 
 public sealed class ContextApplicationService : IContextApplicationService
 {
-    private readonly CommandService _inner;
+    private readonly ProjectContextLoader _projectContextLoader;
 
-    public ContextApplicationService(CommandService inner)
+    public ContextApplicationService(ProjectContextLoader projectContextLoader)
     {
-        _inner = inner;
+        _projectContextLoader = projectContextLoader;
     }
 
     public Task<ProjectContextSnapshot> ScanProjectContextAsync(CancellationToken cancellationToken)
     {
-        return _inner.ScanProjectContextAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(_projectContextLoader.LoadSnapshot());
     }
 
     public Task<SkillManifestListResult> ListSkillsAsync(CancellationToken cancellationToken)
     {
-        return _inner.ListSkillsAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        var snapshot = _projectContextLoader.LoadSnapshot();
+        return Task.FromResult(new SkillManifestListResult(
+            snapshot.ProjectRoot,
+            snapshot.CurrentDirectory,
+            snapshot.Skills,
+            snapshot.ScannedAtUtc
+        ));
     }
 
     public Task<CommandTemplateListResult> ListCommandsAsync(CancellationToken cancellationToken)
     {
-        return _inner.ListCommandsAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        var snapshot = _projectContextLoader.LoadSnapshot();
+        return Task.FromResult(new CommandTemplateListResult(
+            snapshot.ProjectRoot,
+            snapshot.CurrentDirectory,
+            snapshot.Commands,
+            snapshot.ScannedAtUtc
+        ));
     }
 }

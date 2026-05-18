@@ -191,6 +191,8 @@ internal static class Program
             auditLogger,
             config
         );
+        var contextApplicationService = new ContextApplicationService(projectContextLoader);
+        var cleanupService = new CleanupService(config);
         var commandService = new CommandService(
             config,
             llmRouter,
@@ -238,7 +240,9 @@ internal static class Program
             doctorApplicationService,
             notebookApplicationService,
             settingsApplicationService,
-            refactorApplicationService
+            refactorApplicationService,
+            contextApplicationService,
+            cleanupService
         );
         var commandExecutionService = new CommandExecutionService(commandService);
         var conversationApplicationService = new ConversationApplicationService(commandService);
@@ -250,7 +254,6 @@ internal static class Program
         var logicApplicationService = new LogicApplicationService(commandService);
         var planApplicationService = new PlanApplicationService(commandService);
         var taskGraphApplicationService = new TaskGraphApplicationService(commandService);
-        var contextApplicationService = new ContextApplicationService(commandService);
         var chatApplicationService = new ChatApplicationService(commandService);
         var codingApplicationService = new CodingApplicationService(commandService);
         taskGraphCoordinator.ConfigureExecutors(codingApplicationService, commandExecutionService);
