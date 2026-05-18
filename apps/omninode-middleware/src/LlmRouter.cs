@@ -2097,25 +2097,11 @@ public sealed class LlmRouter : IDisposable
 
     private void CaptureGroqRateLimitHeaders(string model, HttpResponseHeaders headers)
     {
-        var limitRequests = ReadHeaderLong(headers, "x-ratelimit-limit-requests");
-        var remainingRequests = ReadHeaderLong(headers, "x-ratelimit-remaining-requests");
-        var limitTokens = ReadHeaderLong(headers, "x-ratelimit-limit-tokens");
-        var remainingTokens = ReadHeaderLong(headers, "x-ratelimit-remaining-tokens");
-        var resetRequests = ReadHeaderString(headers, "x-ratelimit-reset-requests");
-        var resetTokens = ReadHeaderString(headers, "x-ratelimit-reset-tokens");
+        var snapshot = GroqRateLimitHeaderParser.Parse(headers, DateTimeOffset.UtcNow);
 
         lock (_groqLock)
         {
-            _groqRateByModel[model] = new GroqRateLimit
-            {
-                LimitRequests = limitRequests,
-                RemainingRequests = remainingRequests,
-                LimitTokens = limitTokens,
-                RemainingTokens = remainingTokens,
-                ResetRequests = resetRequests,
-                ResetTokens = resetTokens,
-                LastUpdatedUtc = DateTimeOffset.UtcNow
-            };
+            _groqRateByModel[model] = snapshot;
         }
 
         SaveUsageState();
@@ -2236,47 +2222,6 @@ public sealed class LlmRouter : IDisposable
         {
             Console.Error.WriteLine($"[usage] save failed: {ex.Message}");
         }
-    }
-
-    private static long? ReadHeaderLong(HttpResponseHeaders headers, string key)
-    {
-        if (!headers.TryGetValues(key, out var values))
-        {
-            return null;
-        }
-
-        var first = values.FirstOrDefault();
-        if (long.TryParse(first, out var parsed))
-        {
-            return parsed;
-        }
-
-        return null;
-    }
-
-    private static string? ReadHeaderString(HttpResponseHeaders headers, string key)
-    {
-        if (!headers.TryGetValues(key, out var values))
-        {
-            return null;
-        }
-
-        return values.FirstOrDefault();
-    }
-
-    private static int GetInt(JsonElement element, string name)
-    {
-        if (!element.TryGetProperty(name, out var prop))
-        {
-            return 0;
-        }
-
-        if (prop.ValueKind == JsonValueKind.Number && prop.TryGetInt32(out var parsed))
-        {
-            return parsed;
-        }
-
-        return 0;
     }
 
     private static RouterIntent ClassifyIntentFallback(string input)

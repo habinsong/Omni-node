@@ -137,6 +137,7 @@ const groqPromptPolicy = read("apps/omninode-middleware/src/GroqPromptPolicy.cs"
 const geminiRequestPolicy = read("apps/omninode-middleware/src/GeminiRequestPolicy.cs");
 const cerebrasErrorPolicy = read("apps/omninode-middleware/src/CerebrasErrorPolicy.cs");
 const providerResponseParser = read("apps/omninode-middleware/src/ProviderResponseParser.cs");
+const groqRateLimitHeaderParser = read("apps/omninode-middleware/src/GroqRateLimitHeaderParser.cs");
 const atomicFileStore = read("apps/omninode-middleware/src/AtomicFileStore.cs");
 const conversationStore = read("apps/omninode-middleware/src/ConversationStore.cs");
 const sessionManager = read("apps/omninode-middleware/src/SessionManager.cs");
@@ -209,6 +210,13 @@ assertNotIncludes(llmRouterSource, "private static bool IsOpenAiCompatibleTrunca
 assertNotIncludes(llmRouterSource, "private static bool IsGeminiTruncated(", "llm router no longer owns gemini truncation check");
 assertNotIncludes(llmRouterSource, "private sealed record GroqChatChunk(", "llm router no longer owns groq chunk record");
 assertNotIncludes(llmRouterSource, "private sealed record GeminiChatChunk(", "llm router no longer owns gemini chunk record");
+assertIncludes(groqRateLimitHeaderParser, "x-ratelimit-limit-requests", "groq rate limit parser reads request limit header");
+assertIncludes(groqRateLimitHeaderParser, "x-ratelimit-remaining-tokens", "groq rate limit parser reads remaining token header");
+assertIncludes(groqRateLimitHeaderParser, "x-ratelimit-reset-requests", "groq rate limit parser reads request reset header");
+assertIncludes(llmRouterSource, "GroqRateLimitHeaderParser.Parse", "llm router uses groq rate limit header parser");
+assertNotIncludes(llmRouterSource, "private static long? ReadHeaderLong(", "llm router no longer owns long header reader");
+assertNotIncludes(llmRouterSource, "private static string? ReadHeaderString(", "llm router no longer owns string header reader");
+assertNotIncludes(llmRouterSource, "x-ratelimit-limit-requests", "llm router no longer reads ratelimit headers inline");
 assertIncludes(codingExecution, "if (!IsDynamicCodeExecutionEnabled())", "workspace shell execution checks dynamic code flag");
 assertIncludes(codingExecution, "new ShellRunResult(126", "workspace shell execution returns blocked result");
 assertIncludes(codingExecution, "if (_execution.EnableAutoInstall)", "auto install pipeline checks explicit flag");
