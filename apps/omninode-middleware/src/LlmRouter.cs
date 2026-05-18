@@ -590,7 +590,7 @@ public sealed class LlmRouter : IDisposable
                     break;
                 }
 
-                promptForTurn = GroqPromptPolicy.TruncatePromptForGroq(BuildContinuationPrompt(userInput, mergedBuilder.ToString()), promptBudgetChars);
+                promptForTurn = GroqPromptPolicy.TruncatePromptForGroq(ChatStreamingContinuation.BuildContinuationPrompt(userInput, mergedBuilder.ToString()), promptBudgetChars);
             }
 
             var content = mergedBuilder.ToString().Trim();
@@ -824,7 +824,7 @@ public sealed class LlmRouter : IDisposable
                     break;
                 }
 
-                promptForTurn = BuildContinuationPrompt(userInput, mergedBuilder.ToString());
+                promptForTurn = ChatStreamingContinuation.BuildContinuationPrompt(userInput, mergedBuilder.ToString());
             }
 
             var text = mergedBuilder.ToString().Trim();
@@ -957,7 +957,7 @@ public sealed class LlmRouter : IDisposable
                 }
 
                 mergedBuilder.Append(delta);
-                SafeEmitDelta(deltaCallback, delta);
+                ChatStreamingContinuation.SafeEmitDelta(deltaCallback, delta);
             }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -1185,7 +1185,7 @@ public sealed class LlmRouter : IDisposable
             if (streamedTextStarted && !string.IsNullOrWhiteSpace(partialContent))
             {
                 return new GeminiGroundedChatResponse(
-                    partialContent + "\n\n" + BuildPartialTruncationSuffix("gemini", $"timeout_{timeoutKind}"),
+                    partialContent + "\n\n" + ChatStreamingContinuation.BuildPartialTruncationSuffix("gemini", $"timeout_{timeoutKind}"),
                     firstChunkMs,
                     Math.Max(0L, stopwatch.ElapsedMilliseconds)
                 );
@@ -1204,7 +1204,7 @@ public sealed class LlmRouter : IDisposable
             if (streamedTextStarted && !string.IsNullOrWhiteSpace(partialContent))
             {
                 return new GeminiGroundedChatResponse(
-                    partialContent + "\n\n" + BuildPartialTruncationSuffix("gemini", ex.Message),
+                    partialContent + "\n\n" + ChatStreamingContinuation.BuildPartialTruncationSuffix("gemini", ex.Message),
                     firstChunkMs,
                     Math.Max(0L, stopwatch.ElapsedMilliseconds)
                 );
@@ -1291,7 +1291,7 @@ public sealed class LlmRouter : IDisposable
                     break;
                 }
 
-                promptForTurn = BuildContinuationPrompt(prompt, mergedBuilder.ToString());
+                promptForTurn = ChatStreamingContinuation.BuildContinuationPrompt(prompt, mergedBuilder.ToString());
             }
 
             var content = mergedBuilder.ToString().Trim();
@@ -1516,7 +1516,7 @@ public sealed class LlmRouter : IDisposable
             if (streamedTextStarted && !string.IsNullOrWhiteSpace(partialContent))
             {
                 return new GeminiUrlContextChatResponse(
-                    partialContent + "\n\n" + BuildPartialTruncationSuffix("gemini", $"timeout_{timeoutKind}"),
+                    partialContent + "\n\n" + ChatStreamingContinuation.BuildPartialTruncationSuffix("gemini", $"timeout_{timeoutKind}"),
                     firstChunkMs,
                     Math.Max(0L, stopwatch.ElapsedMilliseconds),
                     citationByUrl.Values.ToArray()
@@ -1537,7 +1537,7 @@ public sealed class LlmRouter : IDisposable
             if (streamedTextStarted && !string.IsNullOrWhiteSpace(partialContent))
             {
                 return new GeminiUrlContextChatResponse(
-                    partialContent + "\n\n" + BuildPartialTruncationSuffix("gemini", ex.Message),
+                    partialContent + "\n\n" + ChatStreamingContinuation.BuildPartialTruncationSuffix("gemini", ex.Message),
                     firstChunkMs,
                     Math.Max(0L, stopwatch.ElapsedMilliseconds),
                     citationByUrl.Values.ToArray()
@@ -1720,7 +1720,7 @@ public sealed class LlmRouter : IDisposable
                     break;
                 }
 
-                promptForTurn = BuildContinuationPrompt(userInput, mergedBuilder.ToString());
+                promptForTurn = ChatStreamingContinuation.BuildContinuationPrompt(userInput, mergedBuilder.ToString());
             }
 
             var content = mergedBuilder.ToString().Trim();
@@ -1877,7 +1877,7 @@ public sealed class LlmRouter : IDisposable
                     break;
                 }
 
-                promptForTurn = BuildContinuationPrompt(userInput, mergedBuilder.ToString());
+                promptForTurn = ChatStreamingContinuation.BuildContinuationPrompt(userInput, mergedBuilder.ToString());
             }
 
             var content = mergedBuilder.ToString().Trim();
@@ -2263,8 +2263,8 @@ public sealed class LlmRouter : IDisposable
                     var finalContent = polledChunk.Content.Trim();
                     if (!string.IsNullOrWhiteSpace(finalContent))
                     {
-                        AppendGeneratedChunk(mergedBuilder, finalContent);
-                        SafeEmitDelta(deltaCallback, finalContent);
+                        ChatStreamingContinuation.AppendChunk(mergedBuilder, finalContent);
+                        ChatStreamingContinuation.SafeEmitDelta(deltaCallback, finalContent);
                     }
 
                     if (!ProviderResponseParser.IsOpenAiCompatibleTruncated(polledChunk.FinishReason)
@@ -2273,7 +2273,7 @@ public sealed class LlmRouter : IDisposable
                         break;
                     }
 
-                    promptForTurn = BuildContinuationPrompt(userInput, mergedBuilder.ToString());
+                    promptForTurn = ChatStreamingContinuation.BuildContinuationPrompt(userInput, mergedBuilder.ToString());
                     continue;
                 }
 
@@ -2331,7 +2331,7 @@ public sealed class LlmRouter : IDisposable
                     break;
                 }
 
-                promptForTurn = BuildContinuationPrompt(userInput, mergedBuilder.ToString());
+                promptForTurn = ChatStreamingContinuation.BuildContinuationPrompt(userInput, mergedBuilder.ToString());
 
                 void ConsumeOpenAiStreamEvent(string eventPayload)
                 {
@@ -2356,7 +2356,7 @@ public sealed class LlmRouter : IDisposable
 
                     mergedBuilder.Append(delta);
                     turnBuilder.Append(delta);
-                    SafeEmitDelta(deltaCallback, delta);
+                    ChatStreamingContinuation.SafeEmitDelta(deltaCallback, delta);
                 }
             }
 
@@ -2371,9 +2371,9 @@ public sealed class LlmRouter : IDisposable
             var partial = mergedBuilder.ToString().Trim();
             if (string.IsNullOrWhiteSpace(partial))
             {
-                return BuildOpenAiCompatibleTimeoutMessage(provider);
+                return ChatStreamingContinuation.BuildTimeoutMessage(provider);
             }
-            return partial + "\n\n" + BuildPartialTruncationSuffix(provider, "timeout");
+            return partial + "\n\n" + ChatStreamingContinuation.BuildPartialTruncationSuffix(provider, "timeout");
         }
         catch (Exception ex)
         {
@@ -2383,49 +2383,11 @@ public sealed class LlmRouter : IDisposable
             {
                 return $"{OpenAiCompatibleProtocol.DisplayName(provider)} 호출 오류: {ex.Message}";
             }
-            return partial + "\n\n" + BuildPartialTruncationSuffix(provider, ex.Message);
+            return partial + "\n\n" + ChatStreamingContinuation.BuildPartialTruncationSuffix(provider, ex.Message);
         }
     }
 
     // 부분 스트림이 끊겼을 때 사용자가 즉시 인식할 수 있도록 한 줄 안내를 본문 끝에 덧붙인다.
-    private static string BuildPartialTruncationSuffix(string provider, string reasonHint)
-    {
-        var name = OpenAiCompatibleProtocol.DisplayName(provider);
-        var safeReason = string.IsNullOrWhiteSpace(reasonHint) ? "stream interrupted" : reasonHint.Trim();
-        if (safeReason.Length > 80)
-        {
-            safeReason = safeReason[..80] + "…";
-        }
-        return $"⚠️ [{name} 응답이 도중에 끊겼습니다 — {safeReason}. 다시 시도해 주세요.]";
-    }
-
-    // NVIDIA NIM에서 자주 보이는 quota/rate 응답을 사용자 친화 메시지로 변환.
-    private static string BuildOpenAiCompatibleTimeoutMessage(string provider)
-    {
-        if (string.Equals(provider, "nvidia", StringComparison.OrdinalIgnoreCase))
-        {
-            return "NVIDIA NIM 응답 시간이 초과되었습니다. 무료 할당량 한계나 큐잉 지연일 수 있습니다. 잠시 후 다시 시도하거나 다른 provider로 바꿔 보세요.";
-        }
-        return $"{OpenAiCompatibleProtocol.DisplayName(provider)} 응답 시간이 초과되었습니다.";
-    }
-
-    // OpenAI 호환 응답이 비정상 상태일 때 provider별로 알기 쉬운 메시지를 만든다. NVIDIA의 quota/rate-limit 본문을 식별해 안내.
-    private static void SafeEmitDelta(Action<string>? deltaCallback, string delta)
-    {
-        if (deltaCallback == null || string.IsNullOrEmpty(delta))
-        {
-            return;
-        }
-
-        try
-        {
-            deltaCallback(delta);
-        }
-        catch
-        {
-        }
-    }
-
     private async Task<string> PollNvidiaStatusAsync(
         string apiKey,
         string acceptedBody,
@@ -2523,40 +2485,6 @@ public sealed class LlmRouter : IDisposable
 
     private static ProviderChatChunk ExtractGeminiChatChunk(string json)
         => ProviderResponseParser.ExtractGeminiChunk(json);
-
-    private static void AppendGeneratedChunk(StringBuilder builder, string chunk)
-    {
-        var normalized = (chunk ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return;
-        }
-
-        if (builder.Length > 0)
-        {
-            builder.AppendLine();
-        }
-
-        builder.Append(normalized);
-    }
-
-    private static string BuildContinuationPrompt(string originalInput, string writtenText)
-    {
-        var tail = writtenText.Length <= 6000 ? writtenText : writtenText[^6000..];
-        return """
-               아래 답변이 길이 제한으로 중간에서 끊겼습니다.
-               이미 작성된 내용은 절대 반복하지 말고, 바로 다음 문장부터 자연스럽게 이어서만 작성하세요.
-               마크다운 머리말/서론 재출력 금지.
-
-               [원래 사용자 입력]
-               """
-               + originalInput
-               + """
-
-               [이미 작성된 답변 끝부분]
-               """
-               + tail;
-    }
 
     private static string EscapeJson(string value)
     {

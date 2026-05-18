@@ -60,8 +60,8 @@ git diff --check
 최근 확인 결과:
 
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 148 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 216
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 162 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 231
 - `npm test`: 통과
 - `make -C apps/omninode-core -B`: 통과
 - `git diff --check`: 통과
@@ -489,7 +489,14 @@ git diff --check
   - LLM 응답 매핑(다중 키워드 우선순위 포함), heuristic의 prefix/keyword 매칭, null/empty 입력 폴백 동작을 단위 테스트로 고정했다.
 - `scripts/check-security-boundaries.mjs`
   - 열 정책/파서/프로토콜/분류기 클래스 책임과 `LlmRouter` 위임을 계약 검사하도록 확장했다 (assertions 117 → 216).
-- `LlmRouter` 본문 크기: 3755 → 2649 라인 (≈ 29% 감축).
+- `apps/omninode-middleware/src/ChatStreamingContinuation.cs`
+  - 스트리밍 응답 중단 시 사용자 안내 suffix(`BuildPartialTruncationSuffix`), provider별 timeout 메시지(NVIDIA quota/queue 안내 포함, `BuildTimeoutMessage`), delta callback 예외 차폐(`SafeEmitDelta`), chunk를 줄바꿈 포함 누적(`AppendChunk`), max_tokens 등으로 끊긴 응답의 continuation 프롬프트(`BuildContinuationPrompt`)를 단일 policy로 분리했다.
+  - `LlmRouter`는 `ChatStreamingContinuation.*`만 호출하고, 사설 `BuildPartialTruncationSuffix`/`BuildOpenAiCompatibleTimeoutMessage`/`SafeEmitDelta`/`AppendGeneratedChunk`/`BuildContinuationPrompt` helper는 모두 제거했다.
+- `apps/omninode-middleware-tests/ChatStreamingContinuationTests.cs`
+  - provider display name 활용, 긴 reason hint 자르기, blank reason fallback, NVIDIA timeout 안내, 다른 provider의 generic 메시지, delta callback의 예외 차폐, chunk append의 줄바꿈/blank 무시, continuation prompt의 입력 포함과 tail 6000자 제한 동작을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - 열한 정책/파서/프로토콜/분류기 클래스 책임과 `LlmRouter` 위임을 계약 검사하도록 확장했다 (assertions 117 → 231).
+- `LlmRouter` 본문 크기: 3755 → 2577 라인 (≈ 31% 감축).
 
 남은 범위:
 
@@ -545,10 +552,10 @@ git diff --check
 | P1. 문서 불일치 정리 | 완료 | 100% | — |
 | P2. WebSocket runtime 통합 테스트 | 진행 중 | 60% | 비 loopback 원격 endpoint에서 remote limited 실행 차단/read-only 허용 시나리오 자동화 |
 | P3. CommandService 도메인 분리 | 시작됨 | 10% | search/telegram/coding/routine/logic graph 서비스 단위 실제 추출 |
-| P4. Provider adapter 구조 정리 | 진행 중 | 82% | provider별 HTTP 호출 자체를 `IProviderChatAdapter` 인터페이스로 분리, Cerebras 모델 resolver cache 재설계, Gemini/NVIDIA streaming pipeline 어댑터화 |
+| P4. Provider adapter 구조 정리 | 진행 중 | 84% | provider별 HTTP 호출 자체를 `IProviderChatAdapter` 인터페이스로 분리, Cerebras 모델 resolver cache 재설계, Gemini/NVIDIA streaming pipeline 어댑터화 |
 | P5. 상태 저장소 복구 정책 확대 | 완료 | 100% | — |
 
-전체 산술 평균: 75% (P0 100, P1 100, P2 60, P3 10, P4 82, P5 100 → 평균 75.3%).
+전체 산술 평균: 76% (P0 100, P1 100, P2 60, P3 10, P4 84, P5 100 → 평균 75.7%).
 
 이 수치는 책임 분량을 동등 가중치로 본 추정이다. P3는 후보 도메인이 매우 크고 P4는 어댑터 인터페이스 도입이 남은 작업의 무게중심이라, 실제 코드 양 기준으로 가중치를 다시 잡으면 60%대 후반이 더 보수적이다.
 
