@@ -60,8 +60,8 @@ git diff --check
 최근 확인 결과:
 
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 120 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 195
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 130 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 210
 - `npm test`: 통과
 - `make -C apps/omninode-core -B`: 통과
 - `git diff --check`: 통과
@@ -473,9 +473,16 @@ git diff --check
   - `LlmRouter`는 `GeminiCitationParser.ExtractUrlContextCitations/ExtractGroundingCitations/BuildDedupKey`만 호출하고, 사설 `TryGetPropertyIgnoreCase`, `GetJsonString`, `BuildUrlContextCitationTitle`, `BuildCitationDedupKey` helper는 모두 제거했다.
 - `apps/omninode-middleware-tests/GeminiCitationParserTests.cs`
   - URL 중복 제거와 호스트 기반 제목 fallback, 메타데이터 부재/손상 JSON 분기, grounding 응답의 title 우선/host fallback 분기, `web.uri` 없는 chunk 무시, dedup key URL 우선/title fallback 동작을 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/PlanningPromptPolicy.cs`
+  - planning provider chain 정규화(default `[gemini, groq, nvidia, cerebras]`, `nvidia-nim`/`nvidia_nim`/`nim` 정규화, 미지 provider/중복 제거), planner 프롬프트(JSON 스키마와 mode=interview 분기), reviewer 프롬프트(constraints/steps/verification 나열), fallback plan/review를 단일 policy로 분리했다.
+  - `LlmRouter`는 `PlanningPromptPolicy.NormalizeProviderChain/BuildPlanningPrompt/BuildPlanReviewPrompt/BuildFallbackPlan/BuildFallbackPlanReview`만 호출한다.
+- `apps/omninode-middleware-tests/PlanningPromptPolicyTests.cs`
+  - 기본 provider chain, NVIDIA alias 정규화, 미지 provider 거름, planner 프롬프트의 objective/constraints/`planning_mode` 출력, interview 모드, reviewer 프롬프트의 step/verification 나열과 context 생략 분기, fallback 정상/누락 경고 동작을 단위 테스트로 고정했다.
+- `scripts/check-plan-tab-contract.mjs`
+  - 계획 LLM 프롬프트의 “반드시 JSON 객체 하나만 출력한다” 계약을 `PlanningPromptPolicy.cs` 기준으로 옮기고, `LlmRouter`가 `PlanningPromptPolicy.BuildPlanningPrompt`로 위임하는지 확인하는 계약을 추가했다.
 - `scripts/check-security-boundaries.mjs`
-  - 여덟 정책/파서/프로토콜 클래스가 책임을 들고 있고, `LlmRouter`가 정책/파서/프로토콜만 호출하도록 정리되었는지 계약 검사를 추가했다 (assertions 117 → 195).
-- `LlmRouter` 본문 크기: 3755 → 2853 라인 (≈ 24% 감축).
+  - 아홉 정책/파서/프로토콜 클래스가 책임을 들고 있고, `LlmRouter`가 정책/파서/프로토콜만 호출하도록 정리되었는지 계약 검사를 추가했다 (assertions 117 → 210).
+- `LlmRouter` 본문 크기: 3755 → 2697 라인 (≈ 28% 감축).
 
 남은 범위:
 
@@ -531,10 +538,10 @@ git diff --check
 | P1. 문서 불일치 정리 | 완료 | 100% | — |
 | P2. WebSocket runtime 통합 테스트 | 진행 중 | 60% | 비 loopback 원격 endpoint에서 remote limited 실행 차단/read-only 허용 시나리오 자동화 |
 | P3. CommandService 도메인 분리 | 시작됨 | 10% | search/telegram/coding/routine/logic graph 서비스 단위 실제 추출 |
-| P4. Provider adapter 구조 정리 | 진행 중 | 78% | provider별 HTTP 호출 자체를 `IProviderChatAdapter` 인터페이스로 분리, Cerebras 모델 resolver cache 재설계, Gemini/NVIDIA streaming pipeline 어댑터화 |
+| P4. Provider adapter 구조 정리 | 진행 중 | 80% | provider별 HTTP 호출 자체를 `IProviderChatAdapter` 인터페이스로 분리, Cerebras 모델 resolver cache 재설계, Gemini/NVIDIA streaming pipeline 어댑터화 |
 | P5. 상태 저장소 복구 정책 확대 | 완료 | 100% | — |
 
-전체 산술 평균: 75% (P0 100, P1 100, P2 60, P3 10, P4 78, P5 100 → 평균 74.7%).
+전체 산술 평균: 75% (P0 100, P1 100, P2 60, P3 10, P4 80, P5 100 → 평균 75.0%).
 
 이 수치는 책임 분량을 동등 가중치로 본 추정이다. P3는 후보 도메인이 매우 크고 P4는 어댑터 인터페이스 도입이 남은 작업의 무게중심이라, 실제 코드 양 기준으로 가중치를 다시 잡으면 60%대 후반이 더 보수적이다.
 

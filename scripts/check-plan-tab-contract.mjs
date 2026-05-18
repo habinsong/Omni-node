@@ -18,6 +18,7 @@ const planJson = read("apps/omninode-middleware/src/Application/Planning/PlanJso
 const planJsonContext = read("apps/omninode-middleware/src/Application/Planning/PlanJsonContext.cs");
 const planService = read("apps/omninode-middleware/src/Application/Planning/PlanService.cs");
 const llmRouter = read("apps/omninode-middleware/src/LlmRouter.cs");
+const planningPromptPolicy = read("apps/omninode-middleware/src/PlanningPromptPolicy.cs");
 const telegram = read("apps/omninode-middleware/src/CommandService.Telegram.cs");
 const telegramCoding = read("apps/omninode-middleware/src/CommandService.Telegram.Coding.cs");
 
@@ -38,7 +39,8 @@ assert.match(planJson, /DeserializeDraft/, "계획 draft JSON 역직렬화가 �
 assert.match(planJsonContext, /JsonSerializable\(typeof\(PlanDraft\)\)/, "source generation context에 PlanDraft가 포함되어야 합니다.");
 assert.match(planService, /TryParseStructuredDraft/, "계획 생성은 구조화 draft를 먼저 파싱해야 합니다.");
 assert.match(planService, /ParseSteps\(draft/, "기존 줄 파서 fallback은 유지해야 합니다.");
-assert.match(llmRouter, /반드시 JSON 객체 하나만 출력한다/, "계획 LLM 프롬프트는 JSON 출력을 요구해야 합니다.");
+assert.match(planningPromptPolicy, /반드시 JSON 객체 하나만 출력한다/, "계획 LLM 프롬프트는 JSON 출력을 요구해야 합니다.");
+assert.match(llmRouter, /PlanningPromptPolicy\.BuildPlanningPrompt/, "LlmRouter는 PlanningPromptPolicy.BuildPlanningPrompt로 위임해야 합니다.");
 
 assert.match(telegram, /TryBuildLastTelegramAssistantPlanCreate/, "텔레그램 최근 답변 계획 shortcut이 있어야 합니다.");
 assert.match(telegramCoding, /TryBuildLatestTelegramCodingPlanCreate/, "텔레그램 최근 코딩 결과 계획 shortcut이 있어야 합니다.");
