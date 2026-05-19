@@ -154,6 +154,8 @@ const logicNodeRuntimePolicy = read("apps/omninode-middleware/src/LogicNodeRunti
 const commandServiceLogicGraphs = read("apps/omninode-middleware/src/CommandService.LogicGraphs.cs");
 const codingOrchestrationPromptPolicy = read("apps/omninode-middleware/src/CodingOrchestrationPromptPolicy.cs");
 const commandServiceCoding = read("apps/omninode-middleware/src/CommandService.Coding.cs");
+const textOutputTruncator = read("apps/omninode-middleware/src/TextOutputTruncator.cs");
+const commandServiceTelegram = read("apps/omninode-middleware/src/CommandService.Telegram.cs");
 const planningPromptPolicy = read("apps/omninode-middleware/src/PlanningPromptPolicy.cs");
 const routerIntentClassifier = read("apps/omninode-middleware/src/RouterIntentClassifier.cs");
 const chatStreamingContinuation = read("apps/omninode-middleware/src/ChatStreamingContinuation.cs");
@@ -726,5 +728,13 @@ assertNotIncludes(commandServiceCoding, "private static string BuildOrchestratio
 assertNotIncludes(commandServiceCoding, "private static string BuildOrchestrationFixPrompt(", "command service no longer owns fix prompt builder");
 assertNotIncludes(commandServiceCoding, "private static string BuildMultiCodingWorkerPrompt(", "command service no longer owns multi worker prompt builder");
 assertNotIncludes(commandServiceCoding, "private static string BuildAutoOrchestrationCodingInput(", "command service no longer owns auto input builder");
+assertIncludes(textOutputTruncator, "TruncateWithMin200", "text output truncator owns min-200 variant");
+assertIncludes(textOutputTruncator, "TruncateRaw", "text output truncator owns raw variant");
+assertIncludes(textOutputTruncator, "TruncateWithEllipsis", "text output truncator owns ellipsis variant");
+assertIncludes(textOutputTruncator, "DefaultTruncationMarker", "text output truncator owns marker constant");
+assertIncludes(codingFallbackPolicy, "TextOutputTruncator.TruncateWithEllipsis", "coding fallback delegates trim to truncator");
+assertIncludes(codingLoopTuningPolicy, "TextOutputTruncator.TruncateRaw", "coding loop tuning delegates trim to truncator");
+assertIncludes(codingProgressPolicy, "TextOutputTruncator.TruncateWithMin200", "coding progress delegates trim to truncator");
+assertIncludes(commandServiceTelegram, "TextOutputTruncator.TruncateWithMin200", "telegram delegates trim to truncator");
 
 console.log(JSON.stringify({ ok: true, assertions: assertionCount }, null, 2));

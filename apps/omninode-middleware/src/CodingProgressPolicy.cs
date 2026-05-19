@@ -125,15 +125,6 @@ internal static class CodingProgressPolicy
         return string.Join(" · ", parts.Where(part => !string.IsNullOrWhiteSpace(part)));
     }
 
-    private static string TrimForOutput(string text, int limit)
-    {
-        var normalized = text ?? string.Empty;
-        var safeLimit = Math.Max(200, limit);
-        if (normalized.Length <= safeLimit)
-        {
-            return normalized;
-        }
-
-        return normalized[..safeLimit] + "...(truncated)";
-    }
+    private static string TrimForOutput(string text, int limit) =>
+        TextOutputTruncator.TruncateWithMin200(text, limit);
 }

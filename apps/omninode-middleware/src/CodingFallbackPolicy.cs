@@ -800,16 +800,8 @@ internal static class CodingFallbackPolicy
         }
     }
 
-    private static string TrimForOutput(string text, int limit)
-    {
-        var normalized = (text ?? string.Empty).Trim();
-        if (normalized.Length <= limit)
-        {
-            return normalized;
-        }
-
-        return normalized[..Math.Max(0, limit - 3)] + "...";
-    }
+    private static string TrimForOutput(string text, int limit) =>
+        TextOutputTruncator.TruncateWithEllipsis(text, limit);
 
     private static string TryExtractRelativePathAfterRunsMarker(string path)
     {

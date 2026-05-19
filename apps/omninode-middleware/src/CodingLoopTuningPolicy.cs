@@ -82,13 +82,6 @@ internal static class CodingLoopTuningPolicy
         return string.Join("\n", selected);
     }
 
-    private static string TrimForOutput(string text, int maxChars)
-    {
-        if (string.IsNullOrEmpty(text) || maxChars <= 0 || text.Length <= maxChars)
-        {
-            return text ?? string.Empty;
-        }
-
-        return text[..maxChars] + "...(truncated)";
-    }
+    private static string TrimForOutput(string text, int maxChars) =>
+        TextOutputTruncator.TruncateRaw(text, maxChars);
 }

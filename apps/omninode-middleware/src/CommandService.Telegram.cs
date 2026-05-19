@@ -2199,17 +2199,8 @@ public sealed partial class CommandService
         }
     }
 
-    private static string TrimForOutput(string text, int limit = 3500)
-    {
-        var normalized = text ?? string.Empty;
-        var safeLimit = Math.Max(200, limit);
-        if (normalized.Length <= safeLimit)
-        {
-            return normalized;
-        }
-
-        return normalized[..safeLimit] + "...(truncated)";
-    }
+    private static string TrimForOutput(string text, int limit = 3500) =>
+        TextOutputTruncator.TruncateWithMin200(text, limit);
 
     private static string BuildTelegramConcisePrompt(string input)
     {
