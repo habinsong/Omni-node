@@ -152,6 +152,8 @@ const logicGraphValidationPolicy = read("apps/omninode-middleware/src/LogicGraph
 const logicValueParsingPolicy = read("apps/omninode-middleware/src/LogicValueParsingPolicy.cs");
 const logicNodeRuntimePolicy = read("apps/omninode-middleware/src/LogicNodeRuntimePolicy.cs");
 const commandServiceLogicGraphs = read("apps/omninode-middleware/src/CommandService.LogicGraphs.cs");
+const codingOrchestrationPromptPolicy = read("apps/omninode-middleware/src/CodingOrchestrationPromptPolicy.cs");
+const commandServiceCoding = read("apps/omninode-middleware/src/CommandService.Coding.cs");
 const planningPromptPolicy = read("apps/omninode-middleware/src/PlanningPromptPolicy.cs");
 const routerIntentClassifier = read("apps/omninode-middleware/src/RouterIntentClassifier.cs");
 const chatStreamingContinuation = read("apps/omninode-middleware/src/ChatStreamingContinuation.cs");
@@ -706,5 +708,23 @@ assertNotIncludes(commandServiceLogicGraphs, "private static bool RequiresAllLog
 assertNotIncludes(commandServiceLogicGraphs, "private static bool IsLogicNodeReadyToRun(", "command service no longer owns node readiness check");
 assertNotIncludes(commandServiceLogicGraphs, "private static string BuildLogicConversationTitle(", "command service no longer owns conversation title builder");
 assertNotIncludes(commandServiceLogicGraphs, "private static readonly Regex LogicTemplateRegex", "command service no longer owns template regex");
+assertIncludes(codingOrchestrationPromptPolicy, "BuildPlannerPrompt", "coding orchestration prompt policy owns planner prompt builder");
+assertIncludes(codingOrchestrationPromptPolicy, "BuildImplementationPrompt", "coding orchestration prompt policy owns implementation prompt builder");
+assertIncludes(codingOrchestrationPromptPolicy, "BuildVerificationPrompt", "coding orchestration prompt policy owns verification prompt builder");
+assertIncludes(codingOrchestrationPromptPolicy, "BuildFixPrompt", "coding orchestration prompt policy owns fix prompt builder");
+assertIncludes(codingOrchestrationPromptPolicy, "BuildMultiWorkerPrompt", "coding orchestration prompt policy owns multi worker prompt builder");
+assertIncludes(codingOrchestrationPromptPolicy, "BuildAutoInput", "coding orchestration prompt policy owns auto input builder");
+assertIncludes(commandServiceCoding, "CodingOrchestrationPromptPolicy.BuildPlannerPrompt", "command service uses orchestration policy planner prompt");
+assertIncludes(commandServiceCoding, "CodingOrchestrationPromptPolicy.BuildImplementationPrompt", "command service uses orchestration policy implementation prompt");
+assertIncludes(commandServiceCoding, "CodingOrchestrationPromptPolicy.BuildVerificationPrompt", "command service uses orchestration policy verification prompt");
+assertIncludes(commandServiceCoding, "CodingOrchestrationPromptPolicy.BuildFixPrompt", "command service uses orchestration policy fix prompt");
+assertIncludes(commandServiceCoding, "CodingOrchestrationPromptPolicy.BuildMultiWorkerPrompt", "command service uses orchestration policy multi worker prompt");
+assertIncludes(commandServiceCoding, "CodingOrchestrationPromptPolicy.BuildAutoInput", "command service uses orchestration policy auto input");
+assertNotIncludes(commandServiceCoding, "private static string BuildOrchestrationPlannerPrompt(", "command service no longer owns planner prompt builder");
+assertNotIncludes(commandServiceCoding, "private static string BuildOrchestrationImplementationPrompt(", "command service no longer owns implementation prompt builder");
+assertNotIncludes(commandServiceCoding, "private static string BuildOrchestrationVerificationPrompt(", "command service no longer owns verification prompt builder");
+assertNotIncludes(commandServiceCoding, "private static string BuildOrchestrationFixPrompt(", "command service no longer owns fix prompt builder");
+assertNotIncludes(commandServiceCoding, "private static string BuildMultiCodingWorkerPrompt(", "command service no longer owns multi worker prompt builder");
+assertNotIncludes(commandServiceCoding, "private static string BuildAutoOrchestrationCodingInput(", "command service no longer owns auto input builder");
 
 console.log(JSON.stringify({ ok: true, assertions: assertionCount }, null, 2));
