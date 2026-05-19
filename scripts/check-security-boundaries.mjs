@@ -149,6 +149,7 @@ const geminiStreamingAdapter = read("apps/omninode-middleware/src/GeminiStreamin
 const geminiCitationParser = read("apps/omninode-middleware/src/GeminiCitationParser.cs");
 const citationAccumulator = read("apps/omninode-middleware/src/CitationAccumulator.cs");
 const logicGraphValidationPolicy = read("apps/omninode-middleware/src/LogicGraphValidationPolicy.cs");
+const logicValueParsingPolicy = read("apps/omninode-middleware/src/LogicValueParsingPolicy.cs");
 const commandServiceLogicGraphs = read("apps/omninode-middleware/src/CommandService.LogicGraphs.cs");
 const planningPromptPolicy = read("apps/omninode-middleware/src/PlanningPromptPolicy.cs");
 const routerIntentClassifier = read("apps/omninode-middleware/src/RouterIntentClassifier.cs");
@@ -659,5 +660,27 @@ assertNotIncludes(commandServiceLogicGraphs, "private static readonly IReadOnlyS
 assertNotIncludes(commandServiceLogicGraphs, "private static readonly IReadOnlySet<string> LogicSupportedOperators", "command service no longer owns supported operator set");
 assertNotIncludes(commandServiceLogicGraphs, "private static readonly IReadOnlyDictionary<string, IReadOnlySet<string>> LogicBindableTargetPortsByType", "command service no longer owns bindable target ports map");
 assertNotIncludes(commandServiceLogicGraphs, "private const string LogicGraphSchemaVersion", "command service no longer owns schema version constant");
+assertIncludes(logicValueParsingPolicy, "FirstNonEmpty", "logic value parsing policy owns FirstNonEmpty helper");
+assertIncludes(logicValueParsingPolicy, "ParseCsvValues", "logic value parsing policy owns csv values parser");
+assertIncludes(logicValueParsingPolicy, "ParseMultilineValues", "logic value parsing policy owns multiline values parser");
+assertIncludes(logicValueParsingPolicy, "ParsePositiveInt", "logic value parsing policy owns positive int parser");
+assertIncludes(logicValueParsingPolicy, "ParseOptionalInt", "logic value parsing policy owns optional int parser");
+assertIncludes(logicValueParsingPolicy, "ParseDouble", "logic value parsing policy owns double parser");
+assertIncludes(logicValueParsingPolicy, "ParseBool", "logic value parsing policy owns bool parser");
+assertIncludes(logicValueParsingPolicy, "ParseOptionalBool", "logic value parsing policy owns optional bool parser");
+assertIncludes(logicValueParsingPolicy, "CompareNumbers", "logic value parsing policy owns number comparator");
+assertIncludes(logicValueParsingPolicy, "EvaluateCondition", "logic value parsing policy owns condition evaluator");
+assertIncludes(commandServiceLogicGraphs, "LogicValueParsingPolicy.FirstNonEmpty", "command service uses value parsing policy FirstNonEmpty");
+assertIncludes(commandServiceLogicGraphs, "LogicValueParsingPolicy.EvaluateCondition", "command service uses value parsing policy EvaluateCondition");
+assertIncludes(commandServiceLogicGraphs, "LogicValueParsingPolicy.ParseBool", "command service uses value parsing policy ParseBool");
+assertNotIncludes(commandServiceLogicGraphs, "private static bool EvaluateLogicCondition(", "command service no longer owns condition evaluator");
+assertNotIncludes(commandServiceLogicGraphs, "private static int CompareLogicNumbers(", "command service no longer owns number comparator");
+assertNotIncludes(commandServiceLogicGraphs, "private static string FirstNonEmpty(", "command service no longer owns FirstNonEmpty helper");
+assertNotIncludes(commandServiceLogicGraphs, "private static IReadOnlyList<string>? ParseCsvValues(", "command service no longer owns csv values parser");
+assertNotIncludes(commandServiceLogicGraphs, "private static int ParseLogicPositiveInt(", "command service no longer owns positive int parser");
+assertNotIncludes(commandServiceLogicGraphs, "private static int? ParseOptionalLogicInt(", "command service no longer owns optional int parser");
+assertNotIncludes(commandServiceLogicGraphs, "private static double ParseLogicDouble(", "command service no longer owns double parser");
+assertNotIncludes(commandServiceLogicGraphs, "private static bool ParseLogicBool(", "command service no longer owns bool parser");
+assertNotIncludes(commandServiceLogicGraphs, "private static bool? ParseOptionalLogicBool(", "command service no longer owns optional bool parser");
 
 console.log(JSON.stringify({ ok: true, assertions: assertionCount }, null, 2));

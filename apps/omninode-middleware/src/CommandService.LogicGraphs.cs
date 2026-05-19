@@ -946,7 +946,7 @@ public sealed partial class CommandService
         IReadOnlyDictionary<string, string> config
     )
     {
-        var text = FirstNonEmpty(
+        var text = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue("result", out var resultValue) ? resultValue : null,
             config.TryGetValue("text", out var textValue) ? textValue : null,
             config.TryGetValue(LogicResolvedMainInputKey, out var mainInput) ? mainInput : null,
@@ -970,7 +970,7 @@ public sealed partial class CommandService
         IReadOnlyDictionary<string, string> config
     )
     {
-        var text = FirstNonEmpty(
+        var text = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue("result", out var resultValue) ? resultValue : null,
             config.TryGetValue("text", out var textValue) ? textValue : null,
             config.TryGetValue(LogicResolvedMainInputKey, out var mainInput) ? mainInput : null,
@@ -993,7 +993,7 @@ public sealed partial class CommandService
         IReadOnlyDictionary<string, string> config
     )
     {
-        var text = FirstNonEmpty(
+        var text = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue("template", out var template) ? template : null,
             config.TryGetValue("text", out var textValue) ? textValue : null,
             string.Empty
@@ -1029,7 +1029,7 @@ public sealed partial class CommandService
             ));
         }
 
-        var value = FirstNonEmpty(
+        var value = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue("value", out var rawValue) ? rawValue : null,
             config.TryGetValue("text", out var textValue) ? textValue : null,
             string.Empty
@@ -1053,8 +1053,8 @@ public sealed partial class CommandService
         CancellationToken cancellationToken
     )
     {
-        var milliseconds = ParseLogicPositiveInt(
-            FirstNonEmpty(
+        var milliseconds = LogicValueParsingPolicy.ParsePositiveInt(
+            LogicValueParsingPolicy.FirstNonEmpty(
                 config.TryGetValue("milliseconds", out var rawMilliseconds) ? rawMilliseconds : null,
                 config.TryGetValue("ms", out var rawMs) ? rawMs : null,
                 null
@@ -1064,7 +1064,7 @@ public sealed partial class CommandService
         );
         if (milliseconds <= 0)
         {
-            var seconds = ParseLogicPositiveInt(
+            var seconds = LogicValueParsingPolicy.ParsePositiveInt(
                 config.TryGetValue("seconds", out var rawSeconds) ? rawSeconds : null,
                 fallbackValue: 0,
                 maxValue: 300
@@ -1077,7 +1077,7 @@ public sealed partial class CommandService
             await Task.Delay(milliseconds, cancellationToken).ConfigureAwait(false);
         }
 
-        var text = FirstNonEmpty(
+        var text = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue(LogicResolvedMainInputKey, out var mainInput) ? mainInput : null,
             $"{milliseconds}ms 대기 완료"
         );
@@ -1101,9 +1101,9 @@ public sealed partial class CommandService
     {
         var condition = ResolveLogicCondition(node, config);
         var left = ResolveLogicReference(condition.LeftRef, context);
-        var matched = EvaluateLogicCondition(left, condition.Operator, condition.RightValue);
+        var matched = LogicValueParsingPolicy.EvaluateCondition(left, condition.Operator, condition.RightValue);
         var branch = matched ? "true" : "false";
-        var payload = FirstNonEmpty(
+        var payload = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue(LogicResolvedMainInputKey, out var mainInput) ? mainInput : null,
             left,
             matched ? "조건 참" : "조건 거짓"
@@ -1131,7 +1131,7 @@ public sealed partial class CommandService
         string fallbackText
     )
     {
-        var text = FirstNonEmpty(
+        var text = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue(LogicResolvedMainInputKey, out var mainInput) ? mainInput : null,
             fallbackText
         );
@@ -1151,7 +1151,7 @@ public sealed partial class CommandService
         CancellationToken cancellationToken
     )
     {
-        var input = FirstNonEmpty(
+        var input = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue("input", out var rawInput) ? rawInput : null,
             config.TryGetValue("prompt", out var rawPrompt) ? rawPrompt : null,
             config.TryGetValue("text", out var rawText) ? rawText : null,
@@ -1180,14 +1180,14 @@ public sealed partial class CommandService
                 new[] { "logic_graph", node.Type },
                 config.TryGetValue("provider", out var provider) ? provider : null,
                 config.TryGetValue("model", out var model) ? model : null,
-                ParseCsvValues(config.TryGetValue("memoryNotes", out var memoryNotes) ? memoryNotes : null),
+                LogicValueParsingPolicy.ParseCsvValues(config.TryGetValue("memoryNotes", out var memoryNotes) ? memoryNotes : null),
                 config.TryGetValue("groqModel", out var groqModel) ? groqModel : null,
                 config.TryGetValue("geminiModel", out var geminiModel) ? geminiModel : null,
                 config.TryGetValue("copilotModel", out var copilotModel) ? copilotModel : null,
                 config.TryGetValue("cerebrasModel", out var cerebrasModel) ? cerebrasModel : null,
                 null,
-                ParseMultilineValues(config.TryGetValue("webUrls", out var webUrls) ? webUrls : null),
-                ParseLogicBool(config.TryGetValue("webSearchEnabled", out var webSearchEnabled) ? webSearchEnabled : null, true),
+                LogicValueParsingPolicy.ParseMultilineValues(config.TryGetValue("webUrls", out var webUrls) ? webUrls : null),
+                LogicValueParsingPolicy.ParseBool(config.TryGetValue("webSearchEnabled", out var webSearchEnabled) ? webSearchEnabled : null, true),
                 config.TryGetValue("codexModel", out var codexModel) ? codexModel : null,
                 NvidiaModel: config.TryGetValue("nvidiaModel", out var nvidiaModel) ? nvidiaModel : null
             );
@@ -1219,14 +1219,14 @@ public sealed partial class CommandService
             new[] { "logic_graph", node.Type },
             config.TryGetValue("provider", out var orchestrationProvider) ? orchestrationProvider : null,
             config.TryGetValue("model", out var orchestrationModel) ? orchestrationModel : null,
-            ParseCsvValues(config.TryGetValue("memoryNotes", out var orchestrationNotes) ? orchestrationNotes : null),
+            LogicValueParsingPolicy.ParseCsvValues(config.TryGetValue("memoryNotes", out var orchestrationNotes) ? orchestrationNotes : null),
             config.TryGetValue("groqModel", out var orchestrationGroqModel) ? orchestrationGroqModel : null,
             config.TryGetValue("geminiModel", out var orchestrationGeminiModel) ? orchestrationGeminiModel : null,
             config.TryGetValue("copilotModel", out var orchestrationCopilotModel) ? orchestrationCopilotModel : null,
             config.TryGetValue("cerebrasModel", out var orchestrationCerebrasModel) ? orchestrationCerebrasModel : null,
             null,
-            ParseMultilineValues(config.TryGetValue("webUrls", out var orchestrationWebUrls) ? orchestrationWebUrls : null),
-            ParseLogicBool(config.TryGetValue("webSearchEnabled", out var orchestrationSearch) ? orchestrationSearch : null, true),
+            LogicValueParsingPolicy.ParseMultilineValues(config.TryGetValue("webUrls", out var orchestrationWebUrls) ? orchestrationWebUrls : null),
+            LogicValueParsingPolicy.ParseBool(config.TryGetValue("webSearchEnabled", out var orchestrationSearch) ? orchestrationSearch : null, true),
             config.TryGetValue("codexModel", out var orchestrationCodexModel) ? orchestrationCodexModel : null,
             NvidiaModel: config.TryGetValue("nvidiaModel", out var orchestrationNvidiaModel) ? orchestrationNvidiaModel : null
         );
@@ -1256,7 +1256,7 @@ public sealed partial class CommandService
         CancellationToken cancellationToken
     )
     {
-        var input = FirstNonEmpty(
+        var input = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue("input", out var rawInput) ? rawInput : null,
             config.TryGetValue("prompt", out var rawPrompt) ? rawPrompt : null,
             config.TryGetValue("text", out var rawText) ? rawText : null,
@@ -1284,10 +1284,10 @@ public sealed partial class CommandService
             config.TryGetValue("copilotModel", out var copilotModel) ? copilotModel : null,
             config.TryGetValue("cerebrasModel", out var cerebrasModel) ? cerebrasModel : null,
             config.TryGetValue("summaryProvider", out var summaryProvider) ? summaryProvider : null,
-            ParseCsvValues(config.TryGetValue("memoryNotes", out var memoryNotes) ? memoryNotes : null),
+            LogicValueParsingPolicy.ParseCsvValues(config.TryGetValue("memoryNotes", out var memoryNotes) ? memoryNotes : null),
             null,
-            ParseMultilineValues(config.TryGetValue("webUrls", out var webUrls) ? webUrls : null),
-            ParseLogicBool(config.TryGetValue("webSearchEnabled", out var webSearchEnabled) ? webSearchEnabled : null, true),
+            LogicValueParsingPolicy.ParseMultilineValues(config.TryGetValue("webUrls", out var webUrls) ? webUrls : null),
+            LogicValueParsingPolicy.ParseBool(config.TryGetValue("webSearchEnabled", out var webSearchEnabled) ? webSearchEnabled : null, true),
             config.TryGetValue("codexModel", out var codexModel) ? codexModel : null,
             config.TryGetValue("nvidiaModel", out var nvidiaModel) ? nvidiaModel : null
         );
@@ -1319,7 +1319,7 @@ public sealed partial class CommandService
         CancellationToken cancellationToken
     )
     {
-        var input = FirstNonEmpty(
+        var input = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue("input", out var rawInput) ? rawInput : null,
             config.TryGetValue("prompt", out var rawPrompt) ? rawPrompt : null,
             config.TryGetValue("text", out var rawText) ? rawText : null,
@@ -1344,18 +1344,18 @@ public sealed partial class CommandService
             new[] { "logic_graph", node.Type },
             config.TryGetValue("provider", out var provider) ? provider : null,
             config.TryGetValue("model", out var model) ? model : null,
-            FirstNonEmpty(
+            LogicValueParsingPolicy.FirstNonEmpty(
                 config.TryGetValue("language", out var language) ? language : null,
                 "auto"
             ),
-            ParseCsvValues(config.TryGetValue("memoryNotes", out var memoryNotes) ? memoryNotes : null),
+            LogicValueParsingPolicy.ParseCsvValues(config.TryGetValue("memoryNotes", out var memoryNotes) ? memoryNotes : null),
             config.TryGetValue("groqModel", out var groqModel) ? groqModel : null,
             config.TryGetValue("geminiModel", out var geminiModel) ? geminiModel : null,
             config.TryGetValue("cerebrasModel", out var cerebrasModel) ? cerebrasModel : null,
             config.TryGetValue("copilotModel", out var copilotModel) ? copilotModel : null,
             null,
-            ParseMultilineValues(config.TryGetValue("webUrls", out var webUrls) ? webUrls : null),
-            ParseLogicBool(config.TryGetValue("webSearchEnabled", out var webSearchEnabled) ? webSearchEnabled : null, true),
+            LogicValueParsingPolicy.ParseMultilineValues(config.TryGetValue("webUrls", out var webUrls) ? webUrls : null),
+            LogicValueParsingPolicy.ParseBool(config.TryGetValue("webSearchEnabled", out var webSearchEnabled) ? webSearchEnabled : null, true),
             config.TryGetValue("codexModel", out var codexModel) ? codexModel : null,
             NvidiaModel: config.TryGetValue("nvidiaModel", out var nvidiaModel) ? nvidiaModel : null
         );
@@ -1370,7 +1370,7 @@ public sealed partial class CommandService
         return new LogicNodeExecutionOutcome(BuildLogicEnvelope(
             ok: true,
             type: node.Type,
-            text: FirstNonEmpty(result.Summary, result.Code, "코딩 실행 완료"),
+            text: LogicValueParsingPolicy.FirstNonEmpty(result.Summary, result.Code, "코딩 실행 완료"),
             data: new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["provider"] = result.Provider,
@@ -1390,7 +1390,7 @@ public sealed partial class CommandService
         CancellationToken cancellationToken
     )
     {
-        var targetRoutineId = FirstNonEmpty(
+        var targetRoutineId = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue("routineId", out var routineId) ? routineId : null,
             config.TryGetValue("graphId", out var graphId) ? graphId : null
         );
@@ -1452,7 +1452,7 @@ public sealed partial class CommandService
             Envelope = outcome.Envelope with
             {
                 Ok = false,
-                Text = FirstNonEmpty(outcome.Envelope.Text, $"코딩 실행 상태가 성공이 아닙니다: {executionStatus}"),
+                Text = LogicValueParsingPolicy.FirstNonEmpty(outcome.Envelope.Text, $"코딩 실행 상태가 성공이 아닙니다: {executionStatus}"),
                 Data = MergeLogicData(outcome.Envelope.Data, "error", error)
             }
         };
@@ -1497,7 +1497,7 @@ public sealed partial class CommandService
         IReadOnlyDictionary<string, string> config
     )
     {
-        var query = FirstNonEmpty(
+        var query = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue("query", out var rawQuery) ? rawQuery : null,
             config.TryGetValue("text", out var rawText) ? rawText : null
         );
@@ -1508,8 +1508,8 @@ public sealed partial class CommandService
 
         var result = SearchMemory(
             query,
-            ParseLogicPositiveInt(config.TryGetValue("maxResults", out var maxResults) ? maxResults : null, 6, 24),
-            ParseLogicDouble(config.TryGetValue("minScore", out var minScore) ? minScore : null, 0.35d)
+            LogicValueParsingPolicy.ParsePositiveInt(config.TryGetValue("maxResults", out var maxResults) ? maxResults : null, 6, 24),
+            LogicValueParsingPolicy.ParseDouble(config.TryGetValue("minScore", out var minScore) ? minScore : null, 0.35d)
         );
         var text = result.Results.Count == 0
             ? "메모리 검색 결과가 없습니다."
@@ -1532,7 +1532,7 @@ public sealed partial class CommandService
         IReadOnlyDictionary<string, string> config
     )
     {
-        var path = FirstNonEmpty(config.TryGetValue("path", out var rawPath) ? rawPath : null);
+        var path = LogicValueParsingPolicy.FirstNonEmpty(config.TryGetValue("path", out var rawPath) ? rawPath : null);
         if (string.IsNullOrWhiteSpace(path))
         {
             return new LogicNodeExecutionOutcome(BuildLogicEnvelope(false, node.Type, "memory path가 필요합니다."));
@@ -1540,8 +1540,8 @@ public sealed partial class CommandService
 
         var result = GetMemory(
             path,
-            ParseLogicPositiveInt(config.TryGetValue("from", out var fromValue) ? fromValue : null, 1, 100_000),
-            ParseLogicPositiveInt(config.TryGetValue("lines", out var lineValue) ? lineValue : null, 120, 100_000)
+            LogicValueParsingPolicy.ParsePositiveInt(config.TryGetValue("from", out var fromValue) ? fromValue : null, 1, 100_000),
+            LogicValueParsingPolicy.ParsePositiveInt(config.TryGetValue("lines", out var lineValue) ? lineValue : null, 120, 100_000)
         );
         return new LogicNodeExecutionOutcome(BuildLogicEnvelope(
             ok: !result.Disabled && string.IsNullOrWhiteSpace(result.Error),
@@ -1562,7 +1562,7 @@ public sealed partial class CommandService
         CancellationToken cancellationToken
     )
     {
-        var query = FirstNonEmpty(
+        var query = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue("query", out var rawQuery) ? rawQuery : null,
             config.TryGetValue("text", out var rawText) ? rawText : null
         );
@@ -1573,7 +1573,7 @@ public sealed partial class CommandService
 
         var result = await SearchWebAsync(
             query,
-            ParseLogicPositiveInt(config.TryGetValue("count", out var count) ? count : null, 5, 10),
+            LogicValueParsingPolicy.ParsePositiveInt(config.TryGetValue("count", out var count) ? count : null, 5, 10),
             config.TryGetValue("freshness", out var freshness) ? freshness : null,
             cancellationToken,
             "logic_graph"
@@ -1600,7 +1600,7 @@ public sealed partial class CommandService
         CancellationToken cancellationToken
     )
     {
-        var url = FirstNonEmpty(config.TryGetValue("url", out var rawUrl) ? rawUrl : null);
+        var url = LogicValueParsingPolicy.FirstNonEmpty(config.TryGetValue("url", out var rawUrl) ? rawUrl : null);
         if (string.IsNullOrWhiteSpace(url))
         {
             return new LogicNodeExecutionOutcome(BuildLogicEnvelope(false, node.Type, "web fetch url이 필요합니다."));
@@ -1609,7 +1609,7 @@ public sealed partial class CommandService
         var result = await FetchWebAsync(
             url,
             config.TryGetValue("extractMode", out var extractMode) ? extractMode : null,
-            ParseLogicPositiveInt(config.TryGetValue("maxChars", out var maxChars) ? maxChars : null, 50_000, 120_000),
+            LogicValueParsingPolicy.ParsePositiveInt(config.TryGetValue("maxChars", out var maxChars) ? maxChars : null, 50_000, 120_000),
             cancellationToken
         ).ConfigureAwait(false);
         return new LogicNodeExecutionOutcome(BuildLogicEnvelope(
@@ -1632,7 +1632,7 @@ public sealed partial class CommandService
         IReadOnlyDictionary<string, string> config
     )
     {
-        var path = FirstNonEmpty(config.TryGetValue("path", out var rawPath) ? rawPath : null);
+        var path = LogicValueParsingPolicy.FirstNonEmpty(config.TryGetValue("path", out var rawPath) ? rawPath : null);
         if (string.IsNullOrWhiteSpace(path))
         {
             return new LogicNodeExecutionOutcome(BuildLogicEnvelope(false, node.Type, "file path가 필요합니다."));
@@ -1640,7 +1640,7 @@ public sealed partial class CommandService
 
         var preview = ReadWorkspaceFile(
             path,
-            ParseLogicPositiveInt(config.TryGetValue("maxChars", out var maxChars) ? maxChars : null, 120_000, 200_000)
+            LogicValueParsingPolicy.ParsePositiveInt(config.TryGetValue("maxChars", out var maxChars) ? maxChars : null, 120_000, 200_000)
         );
         if (preview == null)
         {
@@ -1665,13 +1665,13 @@ public sealed partial class CommandService
         LogicExecutionContext context
     )
     {
-        var path = FirstNonEmpty(config.TryGetValue("path", out var rawPath) ? rawPath : null);
+        var path = LogicValueParsingPolicy.FirstNonEmpty(config.TryGetValue("path", out var rawPath) ? rawPath : null);
         if (string.IsNullOrWhiteSpace(path))
         {
             return new LogicNodeExecutionOutcome(BuildLogicEnvelope(false, node.Type, "file path가 필요합니다."));
         }
 
-        var content = FirstNonEmpty(
+        var content = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue("content", out var rawContent) ? rawContent : null,
             config.TryGetValue("text", out var rawText) ? rawText : null,
             context.Nodes.Values.LastOrDefault()?.Text,
@@ -1715,10 +1715,10 @@ public sealed partial class CommandService
     )
     {
         var result = ListSessions(
-            ParseCsvValues(config.TryGetValue("kinds", out var kinds) ? kinds : null),
-            ParseLogicPositiveInt(config.TryGetValue("limit", out var limit) ? limit : null, 20, 200),
-            ParseOptionalLogicInt(config.TryGetValue("activeMinutes", out var activeMinutes) ? activeMinutes : null, 43_200),
-            ParseOptionalLogicInt(config.TryGetValue("messageLimit", out var messageLimit) ? messageLimit : null, 20),
+            LogicValueParsingPolicy.ParseCsvValues(config.TryGetValue("kinds", out var kinds) ? kinds : null),
+            LogicValueParsingPolicy.ParsePositiveInt(config.TryGetValue("limit", out var limit) ? limit : null, 20, 200),
+            LogicValueParsingPolicy.ParseOptionalInt(config.TryGetValue("activeMinutes", out var activeMinutes) ? activeMinutes : null, 43_200),
+            LogicValueParsingPolicy.ParseOptionalInt(config.TryGetValue("messageLimit", out var messageLimit) ? messageLimit : null, 20),
             config.TryGetValue("search", out var search) ? search : null,
             config.TryGetValue("scope", out var scope) ? scope : null,
             config.TryGetValue("mode", out var mode) ? mode : null
@@ -1741,7 +1741,7 @@ public sealed partial class CommandService
         LogicExecutionContext context
     )
     {
-        var task = FirstNonEmpty(
+        var task = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue("task", out var rawTask) ? rawTask : null,
             config.TryGetValue("text", out var rawText) ? rawText : null
         );
@@ -1754,14 +1754,14 @@ public sealed partial class CommandService
             task,
             config.TryGetValue("label", out var label) ? label : null,
             config.TryGetValue("runtime", out var runtime) ? runtime : null,
-            ParseOptionalLogicInt(config.TryGetValue("runTimeoutSeconds", out var runTimeout) ? runTimeout : null, 86_400),
-            ParseOptionalLogicInt(config.TryGetValue("timeoutSeconds", out var timeout) ? timeout : null, 86_400),
-            ParseOptionalLogicBool(config.TryGetValue("thread", out var thread) ? thread : null),
+            LogicValueParsingPolicy.ParseOptionalInt(config.TryGetValue("runTimeoutSeconds", out var runTimeout) ? runTimeout : null, 86_400),
+            LogicValueParsingPolicy.ParseOptionalInt(config.TryGetValue("timeoutSeconds", out var timeout) ? timeout : null, 86_400),
+            LogicValueParsingPolicy.ParseOptionalBool(config.TryGetValue("thread", out var thread) ? thread : null),
             config.TryGetValue("mode", out var mode) ? mode : null
         );
         if (!string.IsNullOrWhiteSpace(result.ChildSessionKey))
         {
-            var alias = FirstNonEmpty(
+            var alias = LogicValueParsingPolicy.FirstNonEmpty(
                 config.TryGetValue("alias", out var aliasValue) ? aliasValue : null,
                 node.NodeId
             );
@@ -1792,7 +1792,7 @@ public sealed partial class CommandService
         LogicExecutionContext context
     )
     {
-        var sessionKey = FirstNonEmpty(
+        var sessionKey = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue("sessionKey", out var rawSessionKey) ? rawSessionKey : null,
             config.TryGetValue("targetSession", out var targetSession) ? targetSession : null
         );
@@ -1801,7 +1801,7 @@ public sealed partial class CommandService
             sessionKey = ResolveLogicReference(sessionKey, context);
         }
 
-        var message = FirstNonEmpty(
+        var message = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue("message", out var rawMessage) ? rawMessage : null,
             config.TryGetValue("text", out var rawText) ? rawText : null
         );
@@ -1813,12 +1813,12 @@ public sealed partial class CommandService
         var result = SendToSession(
             sessionKey,
             message,
-            ParseOptionalLogicInt(config.TryGetValue("timeoutSeconds", out var timeout) ? timeout : null, 300)
+            LogicValueParsingPolicy.ParseOptionalInt(config.TryGetValue("timeoutSeconds", out var timeout) ? timeout : null, 300)
         );
         return new LogicNodeExecutionOutcome(BuildLogicEnvelope(
             ok: !string.Equals(result.Status, "error", StringComparison.OrdinalIgnoreCase),
             type: node.Type,
-            text: FirstNonEmpty(result.Reply, result.Status),
+            text: LogicValueParsingPolicy.FirstNonEmpty(result.Reply, result.Status),
             data: new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["status"] = result.Status,
@@ -1853,7 +1853,7 @@ public sealed partial class CommandService
         CancellationToken cancellationToken
     )
     {
-        var jobId = FirstNonEmpty(
+        var jobId = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue("jobId", out var jobIdValue) ? jobIdValue : null,
             config.TryGetValue("routineId", out var routineIdValue) ? routineIdValue : null
         );
@@ -1891,7 +1891,7 @@ public sealed partial class CommandService
             config.TryGetValue("targetUrl", out var targetUrl) ? targetUrl : null,
             config.TryGetValue("profile", out var profile) ? profile : null,
             config.TryGetValue("targetId", out var targetId) ? targetId : null,
-            ParseOptionalLogicInt(config.TryGetValue("limit", out var limit) ? limit : null, 100)
+            LogicValueParsingPolicy.ParseOptionalInt(config.TryGetValue("limit", out var limit) ? limit : null, 100)
         );
         return new LogicNodeExecutionOutcome(BuildLogicEnvelope(
             ok: result.Ok,
@@ -1920,7 +1920,7 @@ public sealed partial class CommandService
             config.TryGetValue("javaScript", out var javaScript) ? javaScript : null,
             config.TryGetValue("jsonl", out var jsonl) ? jsonl : null,
             config.TryGetValue("outputFormat", out var outputFormat) ? outputFormat : null,
-            ParseOptionalLogicInt(config.TryGetValue("maxWidth", out var maxWidth) ? maxWidth : null, 4096)
+            LogicValueParsingPolicy.ParseOptionalInt(config.TryGetValue("maxWidth", out var maxWidth) ? maxWidth : null, 4096)
         );
         return new LogicNodeExecutionOutcome(BuildLogicEnvelope(
             ok: result.Ok,
@@ -1970,7 +1970,7 @@ public sealed partial class CommandService
         IReadOnlyDictionary<string, string> config
     )
     {
-        var action = FirstNonEmpty(
+        var action = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue("action", out var actionValue) ? actionValue : null,
             "invoke"
         );
@@ -2005,7 +2005,7 @@ public sealed partial class CommandService
         CancellationToken cancellationToken
     )
     {
-        var input = FirstNonEmpty(
+        var input = LogicValueParsingPolicy.FirstNonEmpty(
             config.TryGetValue("text", out var rawText) ? rawText : null,
             config.TryGetValue("message", out var rawMessage) ? rawMessage : null
         );
@@ -2019,8 +2019,8 @@ public sealed partial class CommandService
             "telegram",
             cancellationToken,
             null,
-            ParseMultilineValues(config.TryGetValue("webUrls", out var webUrls) ? webUrls : null),
-            ParseLogicBool(config.TryGetValue("webSearchEnabled", out var webSearchEnabled) ? webSearchEnabled : null, true)
+            LogicValueParsingPolicy.ParseMultilineValues(config.TryGetValue("webUrls", out var webUrls) ? webUrls : null),
+            LogicValueParsingPolicy.ParseBool(config.TryGetValue("webSearchEnabled", out var webSearchEnabled) ? webSearchEnabled : null, true)
         ).ConfigureAwait(false);
         var executionMeta = GetCurrentTelegramExecutionMetadata();
         return new LogicNodeExecutionOutcome(BuildLogicEnvelope(
@@ -2186,7 +2186,7 @@ public sealed partial class CommandService
 
         if (string.Equals(sourcePort, "session", StringComparison.Ordinal))
         {
-            return FirstNonEmpty(source.SessionKey, source.ConversationId);
+            return LogicValueParsingPolicy.FirstNonEmpty(source.SessionKey, source.ConversationId);
         }
 
         if (string.Equals(sourcePort, "conversation", StringComparison.Ordinal))
@@ -2240,7 +2240,7 @@ public sealed partial class CommandService
             if (edge.Condition != null)
             {
                 var left = ResolveLogicReference(edge.Condition.LeftRef, context);
-                if (!EvaluateLogicCondition(left, edge.Condition.Operator, edge.Condition.RightValue))
+                if (!LogicValueParsingPolicy.EvaluateCondition(left, edge.Condition.Operator, edge.Condition.RightValue))
                 {
                     continue;
                 }
@@ -2298,15 +2298,15 @@ public sealed partial class CommandService
         node.Config.TryGetValue("rightValue", out var originalRight);
         return new LogicEdgeCondition
         {
-            LeftRef = FirstNonEmpty(
+            LeftRef = LogicValueParsingPolicy.FirstNonEmpty(
                 config.TryGetValue("leftRef", out var fallbackLeft) ? fallbackLeft : originalLeft,
                 string.Empty
             ),
-            Operator = LogicGraphValidationPolicy.NormalizeOperator(FirstNonEmpty(
+            Operator = LogicGraphValidationPolicy.NormalizeOperator(LogicValueParsingPolicy.FirstNonEmpty(
                 config.TryGetValue("operator", out var fallbackOperator) ? fallbackOperator : originalOperator,
                 "equals"
             )),
-            RightValue = FirstNonEmpty(
+            RightValue = LogicValueParsingPolicy.FirstNonEmpty(
                 config.TryGetValue("rightValue", out var fallbackRight) ? fallbackRight : originalRight,
                 string.Empty
             )
@@ -2400,43 +2400,6 @@ public sealed partial class CommandService
         }
 
         return raw;
-    }
-
-    private static bool EvaluateLogicCondition(string left, string? op, string? rightValue)
-    {
-        var normalizedOperator = LogicGraphValidationPolicy.NormalizeOperator(op);
-        var right = rightValue ?? string.Empty;
-        return normalizedOperator switch
-        {
-            "equals" => string.Equals(left, right, StringComparison.Ordinal),
-            "not_equals" => !string.Equals(left, right, StringComparison.Ordinal),
-            "contains" => left.Contains(right, StringComparison.OrdinalIgnoreCase),
-            "not_contains" => !left.Contains(right, StringComparison.OrdinalIgnoreCase),
-            "starts_with" => left.StartsWith(right, StringComparison.OrdinalIgnoreCase),
-            "ends_with" => left.EndsWith(right, StringComparison.OrdinalIgnoreCase),
-            "gt" => CompareLogicNumbers(left, right) > 0,
-            "gte" => CompareLogicNumbers(left, right) >= 0,
-            "lt" => CompareLogicNumbers(left, right) < 0,
-            "lte" => CompareLogicNumbers(left, right) <= 0,
-            "is_truthy" => ParseLogicBool(left, false),
-            "is_falsy" => !ParseLogicBool(left, false),
-            _ => false
-        };
-    }
-
-    private static int CompareLogicNumbers(string left, string right)
-    {
-        if (!double.TryParse(left, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var leftValue))
-        {
-            leftValue = 0;
-        }
-
-        if (!double.TryParse(right, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var rightValue))
-        {
-            rightValue = 0;
-        }
-
-        return leftValue.CompareTo(rightValue);
     }
 
     private static string BuildLogicConversationTitle(
@@ -2587,7 +2550,7 @@ public sealed partial class CommandService
         string? requestedGraphId
     )
     {
-        var graphId = FirstNonEmpty(
+        var graphId = LogicValueParsingPolicy.FirstNonEmpty(
             (requestedGraphId ?? string.Empty).Trim(),
             (input.GraphId ?? string.Empty).Trim(),
             $"logic-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..8]}"
@@ -2596,7 +2559,7 @@ public sealed partial class CommandService
         return new LogicGraphDefinition
         {
             GraphId = graphId,
-            Title = FirstNonEmpty(input.Title?.Trim(), $"작업 흐름 {DateTimeOffset.UtcNow:MM-dd HH:mm}"),
+            Title = LogicValueParsingPolicy.FirstNonEmpty(input.Title?.Trim(), $"작업 흐름 {DateTimeOffset.UtcNow:MM-dd HH:mm}"),
             Description = (input.Description ?? string.Empty).Trim(),
             Version = LogicGraphValidationPolicy.SchemaVersion,
             Viewport = new LogicViewport
@@ -2609,7 +2572,7 @@ public sealed partial class CommandService
             {
                 ScheduleSourceMode = NormalizeRoutineScheduleSourceMode(schedule.ScheduleSourceMode, input.Description),
                 ScheduleKind = NormalizeRoutineScheduleKind(schedule.ScheduleKind),
-                ScheduleTime = FirstNonEmpty(schedule.ScheduleTime, "08:00"),
+                ScheduleTime = LogicValueParsingPolicy.FirstNonEmpty(schedule.ScheduleTime, "08:00"),
                 TimezoneId = ResolveTimeZone(schedule.TimezoneId).Id,
                 DayOfMonth = schedule.DayOfMonth,
                 Weekdays = NormalizeRoutineWeekdays(schedule.Weekdays).ToList(),
@@ -2619,9 +2582,9 @@ public sealed partial class CommandService
             Nodes = (input.Nodes ?? new List<LogicNodeDefinition>())
                 .Select(node => new LogicNodeDefinition
                 {
-                    NodeId = FirstNonEmpty(node.NodeId?.Trim(), $"node-{Guid.NewGuid().ToString("N")[..8]}"),
+                    NodeId = LogicValueParsingPolicy.FirstNonEmpty(node.NodeId?.Trim(), $"node-{Guid.NewGuid().ToString("N")[..8]}"),
                     Type = (node.Type ?? string.Empty).Trim().ToLowerInvariant(),
-                    Title = FirstNonEmpty(node.Title?.Trim(), node.Type?.Trim(), "Node"),
+                    Title = LogicValueParsingPolicy.FirstNonEmpty(node.Title?.Trim(), node.Type?.Trim(), "Node"),
                     Position = new LogicNodePosition
                     {
                         X = node.Position?.X ?? 0,
@@ -2641,7 +2604,7 @@ public sealed partial class CommandService
             Edges = (input.Edges ?? new List<LogicEdgeDefinition>())
                 .Select(edge => new LogicEdgeDefinition
                 {
-                    EdgeId = FirstNonEmpty(edge.EdgeId?.Trim(), $"edge-{Guid.NewGuid().ToString("N")[..8]}"),
+                    EdgeId = LogicValueParsingPolicy.FirstNonEmpty(edge.EdgeId?.Trim(), $"edge-{Guid.NewGuid().ToString("N")[..8]}"),
                     SourceNodeId = (edge.SourceNodeId ?? string.Empty).Trim(),
                     SourcePort = LogicGraphValidationPolicy.NormalizePort(edge.SourcePort),
                     TargetNodeId = (edge.TargetNodeId ?? string.Empty).Trim(),
@@ -2716,105 +2679,11 @@ public sealed partial class CommandService
 
     private static string ResolveLogicGraphRequestText(LogicGraphDefinition graph)
     {
-        return FirstNonEmpty(
+        return LogicValueParsingPolicy.FirstNonEmpty(
             (graph.Description ?? string.Empty).Trim(),
             (graph.Title ?? string.Empty).Trim(),
             graph.GraphId
         );
     }
 
-    private static string FirstNonEmpty(params string?[] values)
-    {
-        foreach (var value in values)
-        {
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                return value.Trim();
-            }
-        }
-
-        return string.Empty;
-    }
-
-    private static IReadOnlyList<string>? ParseCsvValues(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            return null;
-        }
-
-        var values = raw
-            .Split(new[] { ',', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        return values.Length == 0 ? null : values;
-    }
-
-    private static IReadOnlyList<string>? ParseMultilineValues(string? raw)
-    {
-        return ParseCsvValues(raw);
-    }
-
-    private static int ParseLogicPositiveInt(string? raw, int fallbackValue, int maxValue)
-    {
-        if (!int.TryParse((raw ?? string.Empty).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
-        {
-            return fallbackValue;
-        }
-
-        return Math.Clamp(value, 0, maxValue);
-    }
-
-    private static int? ParseOptionalLogicInt(string? raw, int maxValue)
-    {
-        var normalized = (raw ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return null;
-        }
-
-        if (!int.TryParse(normalized, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
-        {
-            return null;
-        }
-
-        return Math.Clamp(value, 0, maxValue);
-    }
-
-    private static double ParseLogicDouble(string? raw, double fallbackValue)
-    {
-        if (!double.TryParse((raw ?? string.Empty).Trim(), NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value))
-        {
-            return fallbackValue;
-        }
-
-        return value;
-    }
-
-    private static bool ParseLogicBool(string? raw, bool fallbackValue)
-    {
-        var normalized = (raw ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return fallbackValue;
-        }
-
-        return normalized.Equals("1", StringComparison.Ordinal)
-               || normalized.Equals("true", StringComparison.OrdinalIgnoreCase)
-               || normalized.Equals("yes", StringComparison.OrdinalIgnoreCase)
-               || normalized.Equals("y", StringComparison.OrdinalIgnoreCase)
-               || normalized.Equals("on", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool? ParseOptionalLogicBool(string? raw)
-    {
-        var normalized = (raw ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return null;
-        }
-
-        return ParseLogicBool(normalized, false);
-    }
 }
