@@ -141,7 +141,7 @@ public sealed partial class CommandService
         if (!string.IsNullOrWhiteSpace(extractiveRepositoryAnswer))
         {
             var extractiveSanitizeStopwatch = Stopwatch.StartNew();
-            var extractiveOutputText = EnsureReadableWebAnswerResponse(extractiveRepositoryAnswer, input, allowMarkdownTable);
+            var extractiveOutputText = SearchAnswerFormatterPolicy.EnsureReadableWebAnswerResponse(extractiveRepositoryAnswer, input, allowMarkdownTable);
             var extractiveSanitizeMs = Math.Max(0L, extractiveSanitizeStopwatch.ElapsedMilliseconds);
             ChatLatencyMetrics? extractiveLatency = null;
             if (!string.IsNullOrWhiteSpace(decisionPath))
@@ -222,7 +222,7 @@ public sealed partial class CommandService
         else
         {
             outputText = SanitizeChatOutput(response.Text, keepMarkdownTables: allowMarkdownTable);
-            outputText = EnsureReadableWebAnswerResponse(outputText, input, allowMarkdownTable);
+            outputText = SearchAnswerFormatterPolicy.EnsureReadableWebAnswerResponse(outputText, input, allowMarkdownTable);
         }
 
         var sanitizeMs = Math.Max(0L, sanitizeStopwatch.ElapsedMilliseconds);
@@ -346,7 +346,7 @@ public sealed partial class CommandService
         else
         {
             outputText = SanitizeChatOutput(response.Text, keepMarkdownTables: allowMarkdownTable);
-            outputText = EnsureReadableWebAnswerResponse(outputText, input, allowMarkdownTable);
+            outputText = SearchAnswerFormatterPolicy.EnsureReadableWebAnswerResponse(outputText, input, allowMarkdownTable);
         }
 
         var sanitizeMs = Math.Max(0L, sanitizeStopwatch.ElapsedMilliseconds);
@@ -367,82 +367,6 @@ public sealed partial class CommandService
             new LlmSingleChatResult("gemini", model, outputText),
             latency
         );
-    }
-
-    private static string EnsureReadableWebAnswerResponse(string text, string input, bool allowMarkdownTable)
-    {
-        var normalized = (text ?? string.Empty)
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace("\r", "\n", StringComparison.Ordinal)
-            .Trim();
-        if (normalized.Length == 0)
-        {
-            return normalized;
-        }
-
-        if (allowMarkdownTable && LooksLikeTableRenderRequest(input))
-        {
-            return EnsureMarkdownTableResponseIfRequested(normalized);
-        }
-
-        normalized = RemoveWebAnswerSourceLinkArtifacts(normalized);
-        normalized = NormalizeCollapsedWebBulletRuns(normalized);
-        if (LooksLikeComparisonRequest(input))
-        {
-            return normalized;
-        }
-
-        if (LooksLikeListOutputRequest(input) || LooksLikeNumberedListResponse(normalized))
-        {
-            return NormalizeGeminiWebNumberedListResponse(normalized);
-        }
-
-        return NormalizeWebAnswerNarrativeParagraphs(normalized);
-    }
-
-    private static string NormalizeGeminiWebNumberedListResponse(string text)
-    {
-        return SearchAnswerFormatterPolicy.NormalizeNumberedListResponse(text);
-    }
-
-    private static bool LooksLikeNumberedListResponse(string text)
-    {
-        return SearchAnswerFormatterPolicy.LooksLikeNumberedListResponse(text);
-    }
-
-    private static string NormalizeCollapsedWebBulletRuns(string text)
-    {
-        return SearchAnswerFormatterPolicy.NormalizeCollapsedBulletRuns(text);
-    }
-
-    private static string RemoveWebAnswerSourceLinkArtifacts(string text)
-    {
-        return SearchAnswerFormatterPolicy.RemoveSourceLinkArtifacts(text);
-    }
-
-    private static string NormalizeWebAnswerNarrativeParagraphs(string text)
-    {
-        return SearchAnswerFormatterPolicy.NormalizeNarrativeParagraphs(text);
-    }
-
-    private static string EnsureMarkdownTableResponseIfRequested(string text)
-    {
-        return SearchAnswerFormatterPolicy.EnsureMarkdownTableResponseIfRequested(text);
-    }
-
-    private static string ConvertDelimitedPlainTextTableToMarkdown(string text)
-    {
-        return SearchAnswerFormatterPolicy.ConvertDelimitedPlainTextTableToMarkdown(text);
-    }
-
-    private static string NormalizeMarkdownTableResponseMetadata(string text)
-    {
-        return SearchAnswerFormatterPolicy.NormalizeMarkdownTableResponseMetadata(text);
-    }
-
-    private static string SanitizeTableCell(string value)
-    {
-        return SearchAnswerFormatterPolicy.SanitizeTableCell(value);
     }
 
     private string BuildGeminiUrlContextAnswerPrompt(

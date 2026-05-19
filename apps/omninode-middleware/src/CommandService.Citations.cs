@@ -562,7 +562,7 @@ public sealed partial class CommandService
             if (tableMode)
             {
                 builder.AppendLine(
-                    $"| {index + 1} | {SanitizeTableCell(title)} | {SanitizeTableCell(summary)} | {SanitizeTableCell(sourceLabel)} |"
+                    $"| {index + 1} | {SearchAnswerFormatterPolicy.SanitizeTableCell(title)} | {SearchAnswerFormatterPolicy.SanitizeTableCell(summary)} | {SearchAnswerFormatterPolicy.SanitizeTableCell(sourceLabel)} |"
                 );
             }
             else

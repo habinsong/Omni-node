@@ -63,8 +63,8 @@ git diff --check
 최근 확인 결과:
 
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 644 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 625
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 648 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 632
 - `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
 - `node scripts/check-chat-telegram-contract.mjs`: 통과
 - `node scripts/check-gateway-runtime-contract.mjs`: 통과
@@ -760,6 +760,18 @@ git diff --check
   - `CodingWorkerSelectionPolicy` 소유권과 `CommandService.Coding`/`CommandService.CodingQuality`의 사설 helper 9개 제거 계약을 추가했다 (assertions 600 → 625).
 - `scripts/check-coding-python-game-contract.mjs`
   - 기존 `HasCodingQualityFailure`/`SelectBestCodingWorkerResult`/`MergeChangedFilesForBestWorker` 직접 참조 계약을 `CodingWorkerSelectionPolicy.X` 위임 기준으로 갱신했다.
+- `apps/omninode-middleware/src/Infrastructure/Search/SearchAnswerFormatterPolicy.cs`
+  - `EnsureReadableWebAnswerResponse(text, input, allowMarkdownTable)`를 추가해 빈 입력 fallback, table 모드 분기, 출처 링크 잔재 제거, bullet 줄 정규화, 비교 요청 raw 보존, 목록 요청 시 numbered list 정규화, 일반 응답의 narrative paragraph 정규화를 한 곳에서 처리한다.
+  - 분기에서 `SearchQueryPolicy.LooksLikeTableRenderRequest`/`LooksLikeComparisonRequest`/`LooksLikeListOutputRequest`를 직접 호출해 CommandService 내부 wrapper 의존을 끊었다.
+- `apps/omninode-middleware/src/CommandService.SearchPipeline.cs`
+  - 단순 위임만 하던 사설 wrapper 9개(`EnsureReadableWebAnswerResponse`/`NormalizeGeminiWebNumberedListResponse`/`LooksLikeNumberedListResponse`/`NormalizeCollapsedWebBulletRuns`/`RemoveWebAnswerSourceLinkArtifacts`/`NormalizeWebAnswerNarrativeParagraphs`/`EnsureMarkdownTableResponseIfRequested`/`ConvertDelimitedPlainTextTableToMarkdown`/`NormalizeMarkdownTableResponseMetadata`/`SanitizeTableCell`)를 제거하고 호출부를 `SearchAnswerFormatterPolicy.X` 직접 호출로 정리했다.
+  - `CommandService.SearchPipeline.cs` 본문 크기: 1070 → 994 라인.
+- `apps/omninode-middleware/src/CommandService.Citations.cs`
+  - 표 셀 sanitization 호출을 `SearchAnswerFormatterPolicy.SanitizeTableCell` 직접 호출로 통일했다.
+- `apps/omninode-middleware-tests/SearchAnswerFormatterPolicyTests.cs`
+  - `EnsureReadableWebAnswerResponse`의 blank/numbered list/comparison passthrough/table mode 비허용 분기 4건을 추가 단위 테스트로 고정했다 (기존 5 + 신규 4 = 9 cases).
+- `scripts/check-security-boundaries.mjs`
+  - `SearchAnswerFormatterPolicy.EnsureReadableWebAnswerResponse` 소유권과 `CommandService.SearchPipeline`/`CommandService.Citations`의 위임/제거 계약을 추가했다 (assertions 625 → 632).
 
 검증 결과:
 
@@ -785,8 +797,8 @@ git diff --check
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "CodingDeterministicStructuredRepairPolicyTests|CodingExpectedOutputPolicyTests"`: 통과, 12 tests
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter TelegramPseudoCommandExecutorTests`: 통과, 7 tests
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "TelegramLlmPreferencePolicyTests|TelegramPseudoCommandExecutorTests"`: 통과, 17 tests
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 644 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 625
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 648 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 632
 - `node scripts/check-chat-telegram-contract.mjs`: 통과
 - `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
 - `node scripts/check-gateway-runtime-contract.mjs`: 통과
@@ -1014,11 +1026,11 @@ git diff --check
 | P0. 작업트리 커밋 기준점 | 완료 | 100% | — |
 | P1. 문서 불일치 정리 | 완료 | 100% | — |
 | P2. WebSocket runtime 통합 테스트 | 완료 | 100% | — |
-| P3. CommandService 도메인 분리 | 진행 중 | 99.5% | logic graph 노드별 실행기(`ExecuteLogic*Node` 30+) 및 템플릿/edge resolver 분리, Telegram `/llm` 세부 설정 핸들러 서비스화, routine 도메인 서비스 단위 추출, SearchPipeline Gemini 호출 orchestration 축소, exception/loop recovery orchestration |
+| P3. CommandService 도메인 분리 | 진행 중 | 99.7% | logic graph 노드별 실행기(`ExecuteLogic*Node` 30+) 및 템플릿/edge resolver 분리, Telegram `/llm` 세부 설정 핸들러 서비스화, routine 도메인 서비스 단위 추출, SearchPipeline의 Gemini 호출/메모리 힌트 orchestration 축소, exception/loop recovery orchestration |
 | P4. Provider adapter 구조 정리 | 완료 | 100% | — (usage capture/continuation loop는 turn-state 결합으로 추가 분리 미적용) |
 | P5. 상태 저장소 복구 정책 확대 | 완료 | 100% | — |
 
-전체 산술 평균: 99.92% (P0 100, P1 100, P2 100, P3 99.5, P4 100, P5 100 → 평균 99.92%).
+전체 산술 평균: 99.95% (P0 100, P1 100, P2 100, P3 99.7, P4 100, P5 100 → 평균 99.95%).
 
 이 수치는 책임 분량을 동등 가중치로 본 추정이다. P3는 SearchPipeline 정책/포매터/README 로더, Telegram 응답 포매터/프롬프트/후속질문/자연어 명령/pseudo command executor/LLM preference 정책, 공통 대화 맥락 정책, 코딩 언어/진행상태/프롬프트/루프 계획 파서/생성 코드 텍스트/fallback/대화 제목/대화 히스토리/chat output sanitizer/multi comparison/code candidate/코딩 실행 안전성/품질 브리프/루프 튜닝/deterministic stdout repair/UI clone scaffold/web shooter scaffold/artifact cleanup/loop action executor/fallback decision/Groq fallback 응답 판정/provider model selection/memory note selection/expected output parsing/structured repair plan 정책 추출이 진행됐지만 Telegram `/llm` 세부 설정 핸들러와 일부 exception recovery/loop recovery orchestration도 한 타입에 남아 있어, 실제 코드 양 기준으로 가중치를 다시 잡으면 90% 중반이 더 보수적이다. P4는 provider별 HTTP 호출/SSE/citation dedup이 adapter/parser/policy/accumulator로 분리된 상태이며, 잔여 항목(usage capture/continuation loop)은 turn-state 결합으로 추가 분리의 이득이 작아 마무리로 간주한다.
 

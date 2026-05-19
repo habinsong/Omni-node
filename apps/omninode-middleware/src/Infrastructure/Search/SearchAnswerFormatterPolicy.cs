@@ -1411,4 +1411,35 @@ internal static class SearchAnswerFormatterPolicy
     {
         return HttpUrlRegex.IsMatch(text ?? string.Empty);
     }
+
+    public static string EnsureReadableWebAnswerResponse(string text, string input, bool allowMarkdownTable)
+    {
+        var normalized = (text ?? string.Empty)
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace("\r", "\n", StringComparison.Ordinal)
+            .Trim();
+        if (normalized.Length == 0)
+        {
+            return normalized;
+        }
+
+        if (allowMarkdownTable && SearchQueryPolicy.LooksLikeTableRenderRequest(input))
+        {
+            return EnsureMarkdownTableResponseIfRequested(normalized);
+        }
+
+        normalized = RemoveSourceLinkArtifacts(normalized);
+        normalized = NormalizeCollapsedBulletRuns(normalized);
+        if (SearchQueryPolicy.LooksLikeComparisonRequest(input))
+        {
+            return normalized;
+        }
+
+        if (SearchQueryPolicy.LooksLikeListOutputRequest(input) || LooksLikeNumberedListResponse(normalized))
+        {
+            return NormalizeNumberedListResponse(normalized);
+        }
+
+        return NormalizeNarrativeParagraphs(normalized);
+    }
 }

@@ -158,6 +158,9 @@ const textOutputTruncator = read("apps/omninode-middleware/src/TextOutputTruncat
 const commandServiceTelegram = read("apps/omninode-middleware/src/CommandService.Telegram.cs");
 const codingWorkerSelectionPolicy = read("apps/omninode-middleware/src/CodingWorkerSelectionPolicy.cs");
 const commandServiceCodingQuality = read("apps/omninode-middleware/src/CommandService.CodingQuality.cs");
+const searchAnswerFormatterPolicy = read("apps/omninode-middleware/src/Infrastructure/Search/SearchAnswerFormatterPolicy.cs");
+const commandServiceSearchPipeline = read("apps/omninode-middleware/src/CommandService.SearchPipeline.cs");
+const commandServiceCitations = read("apps/omninode-middleware/src/CommandService.Citations.cs");
 const planningPromptPolicy = read("apps/omninode-middleware/src/PlanningPromptPolicy.cs");
 const routerIntentClassifier = read("apps/omninode-middleware/src/RouterIntentClassifier.cs");
 const chatStreamingContinuation = read("apps/omninode-middleware/src/ChatStreamingContinuation.cs");
@@ -763,5 +766,12 @@ assertNotIncludes(commandServiceCodingQuality, "private static bool HasCodingQua
 assertNotIncludes(commandServiceCodingQuality, "private static int ScoreCodingWorkerResult(", "coding quality partial no longer owns worker scorer");
 assertNotIncludes(commandServiceCodingQuality, "private static CodingWorkerResult SelectBestCodingWorkerResult(", "coding quality partial no longer owns best worker selector");
 assertNotIncludes(commandServiceCodingQuality, "private static IReadOnlyList<string> MergeChangedFilesForBestWorker(", "coding quality partial no longer owns best-worker merge");
+assertIncludes(searchAnswerFormatterPolicy, "EnsureReadableWebAnswerResponse", "search answer formatter policy owns readable web answer pipeline");
+assertIncludes(commandServiceSearchPipeline, "SearchAnswerFormatterPolicy.EnsureReadableWebAnswerResponse", "search pipeline delegates readable web answer to formatter policy");
+assertIncludes(commandServiceCitations, "SearchAnswerFormatterPolicy.SanitizeTableCell", "citations renderer delegates table cell sanitization to formatter policy");
+assertNotIncludes(commandServiceSearchPipeline, "private static string EnsureReadableWebAnswerResponse(", "search pipeline no longer owns readable web answer pipeline");
+assertNotIncludes(commandServiceSearchPipeline, "private static string NormalizeGeminiWebNumberedListResponse(", "search pipeline no longer owns numbered list wrapper");
+assertNotIncludes(commandServiceSearchPipeline, "private static string ConvertDelimitedPlainTextTableToMarkdown(", "search pipeline no longer owns dead table conversion wrapper");
+assertNotIncludes(commandServiceSearchPipeline, "private static string SanitizeTableCell(", "search pipeline no longer owns table cell wrapper");
 
 console.log(JSON.stringify({ ok: true, assertions: assertionCount }, null, 2));
