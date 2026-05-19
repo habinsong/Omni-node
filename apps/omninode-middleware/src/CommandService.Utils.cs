@@ -214,7 +214,7 @@ public sealed partial class CommandService
     )
     {
         var contextDecisionText = contextDecisionInput ?? input;
-        var suppressPriorContext = LooksLikeStandaloneFreshGreeting(contextDecisionText);
+        var suppressPriorContext = SearchQueryPolicy.LooksLikeStandaloneFreshGreeting(contextDecisionText);
         var includePriorContext = !suppressPriorContext && ShouldUsePriorConversationContext(conversationId, contextDecisionText);
         var explicitRequestNotes = NormalizeExplicitMemoryNoteNames(requestMemoryNotes);
         // linked memory notes는 압축된 대화 맥락이므로 includePriorContext와 무관하게 항상 로드.
@@ -271,7 +271,7 @@ public sealed partial class CommandService
             builder.AppendLine();
         }
 
-        if (includeLocalTimeHint && LooksLikeLocalDateTimeQuestion(contextDecisionText))
+        if (includeLocalTimeHint && SearchQueryPolicy.LooksLikeLocalDateTimeQuestion(contextDecisionText))
         {
             builder.AppendLine("[로컬 시간]");
             builder.AppendLine(BuildLocalNowText());
@@ -340,7 +340,7 @@ public sealed partial class CommandService
 
     private bool ShouldUsePriorConversationContext(string conversationId, string input)
     {
-        if (LooksLikeStandaloneFreshGreeting(input))
+        if (SearchQueryPolicy.LooksLikeStandaloneFreshGreeting(input))
         {
             return false;
         }

@@ -1580,7 +1580,7 @@ public sealed partial class CommandService
                 {
                     var requestedTarget = ResolveGatewayTargetCount(effectiveCount);
                     var partialDocs = response.Documents;
-                    var sourceFocus = ExtractSourceFocusHintFromInput(normalizedQuery);
+                    var sourceFocus = SearchQueryPolicy.ExtractSourceFocusHintFromInput(normalizedQuery);
                     if (ShouldRunSourceExpansion(sourceFocus, requestedTarget, partialDocs.Count))
                     {
                         var expandedFreshness = ResolveSourceExpansionFreshness(effectiveFreshness);

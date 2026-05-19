@@ -1,6 +1,6 @@
 # Omni-node 개발 현황 분석
 
-최종 업데이트: 2026-05-19
+최종 업데이트: 2026-05-20
 
 ## 기준
 
@@ -810,6 +810,12 @@ git diff --check
   - `ContainsScheduleExpression`의 한국어 cue 매칭/빈 입력 fallback, `ResolveConfigFromRequest`의 weekly/daily fallback, `TryParseConfigFromRequest`의 monthly day 추출/blank 거부, `TryParseSupportedCronExpression`의 daily/weekly(7→0 alias 포함)/monthly 정상 분기와 6가지 에러 분기(`5필드 아님`, `분 0-59 초과`, `시 0-23 초과`, `month != *`, `요일 8`, `day 32`)를 단위 테스트로 고정했다 (60 → 83 cases).
 - `scripts/check-security-boundaries.mjs`
   - cron 표현식/스케줄 텍스트 파서 4종 소유권과 RoutineManagement의 사설 helper 3개 제거 계약을 추가했다 (assertions 699 → 708).
+- `apps/omninode-middleware/src/CommandService.SearchPipeline.cs` (wrapper 정리)
+  - 단순 위임만 하던 사설 wrapper 23종(`ResolveImplicitUrlRequest`/`LooksLikeImplicitUrlSummaryRequest`/`LooksLikeSiteOverviewRequest`/`LooksLikeSiteRootUrl`/`LooksLikeDocumentationUrl`/`LooksLikeArticleUrl`/`LooksLikeRepositoryUrl` → SearchUrlContextPolicy / `IsGeminiUrlContextFailureText`/`IsGeminiWebFailureText`/`IsGeminiWebTimeoutText`/`TryParseNeedWebDecisionJson` → SearchPromptPolicy / `TryParseSearchRequirementDecisionJson`/`ExtractSourceFocusHintFromInput`/`ExtractSourceDomainHintFromInput`/`NormalizeSourceDomainHint`/`NormalizeWebSearchDecisionToken`/`LooksLikeRealtimeQuestion`/`LooksLikeExplicitWebLookupQuestion`/`LooksLikeClearlyNonWebQuestion`/`LooksLikeCasualOrIdentityQuestion`/`LooksLikeStandaloneFreshGreeting`/`LooksLikeLocalDateTimeQuestion`/`LooksLikeComparisonRequest` → SearchQueryPolicy)를 제거했다.
+  - `CommandService.SearchPipeline`, `Chat`, `Citations`, `Config`, `InputPreparation`, `SearchAnswerComposition`, `RoutineExecution`, `Telegram`, `Utils`, `WebResultSelection` 10개 partial의 호출처를 정책 직접 호출로 일괄 갱신했다.
+  - `CommandService.SearchPipeline.cs` 본문 크기: 994 → 874 라인.
+- `scripts/check-chat-telegram-contract.mjs`
+  - `LooksLikeStandaloneFreshGreeting` 위임 위치 검증을 `commandServiceSearchPipeline` 기준에서 `commandServiceUtils` 기준으로 갱신했다 (현재 호출처 두 곳 모두 `CommandService.Utils` 안에 있음).
 
 검증 결과:
 
@@ -1064,11 +1070,11 @@ git diff --check
 | P0. 작업트리 커밋 기준점 | 완료 | 100% | — |
 | P1. 문서 불일치 정리 | 완료 | 100% | — |
 | P2. WebSocket runtime 통합 테스트 | 완료 | 100% | — |
-| P3. CommandService 도메인 분리 | 진행 중 | 99.95% | logic graph 노드별 실행기(`ExecuteLogic*Node` 30+) 및 템플릿/edge resolver 분리, Telegram `/llm` 세부 설정 핸들러 서비스화, SearchPipeline의 Gemini 호출 orchestration 축소, exception/loop recovery orchestration |
+| P3. CommandService 도메인 분리 | 진행 중 | 99.97% | logic graph 노드별 실행기(`ExecuteLogic*Node` 30+) 및 템플릿/edge resolver 분리, Telegram `/llm` 세부 설정 핸들러 서비스화, SearchPipeline의 Gemini 호출 orchestration 축소, exception/loop recovery orchestration |
 | P4. Provider adapter 구조 정리 | 완료 | 100% | — (usage capture/continuation loop는 turn-state 결합으로 추가 분리 미적용) |
 | P5. 상태 저장소 복구 정책 확대 | 완료 | 100% | — |
 
-전체 산술 평균: 99.99% (P0 100, P1 100, P2 100, P3 99.95, P4 100, P5 100 → 평균 99.99%).
+전체 산술 평균: 99.99% (P0 100, P1 100, P2 100, P3 99.97, P4 100, P5 100 → 평균 99.99%).
 
 이 수치는 책임 분량을 동등 가중치로 본 추정이다. P3는 SearchPipeline 정책/포매터/README 로더, Telegram 응답 포매터/프롬프트/후속질문/자연어 명령/pseudo command executor/LLM preference 정책, 공통 대화 맥락 정책, 코딩 언어/진행상태/프롬프트/루프 계획 파서/생성 코드 텍스트/fallback/대화 제목/대화 히스토리/chat output sanitizer/multi comparison/code candidate/코딩 실행 안전성/품질 브리프/루프 튜닝/deterministic stdout repair/UI clone scaffold/web shooter scaffold/artifact cleanup/loop action executor/fallback decision/Groq fallback 응답 판정/provider model selection/memory note selection/expected output parsing/structured repair plan 정책 추출이 진행됐지만 Telegram `/llm` 세부 설정 핸들러와 일부 exception recovery/loop recovery orchestration도 한 타입에 남아 있어, 실제 코드 양 기준으로 가중치를 다시 잡으면 90% 중반이 더 보수적이다. P4는 provider별 HTTP 호출/SSE/citation dedup이 adapter/parser/policy/accumulator로 분리된 상태이며, 잔여 항목(usage capture/continuation loop)은 turn-state 결합으로 추가 분리의 이득이 작아 마무리로 간주한다.
 

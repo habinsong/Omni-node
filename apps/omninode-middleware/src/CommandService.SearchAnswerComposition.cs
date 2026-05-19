@@ -124,7 +124,7 @@ public sealed partial class CommandService
             return true;
         }
 
-        return IsGeminiWebFailureText(normalized)
+        return SearchPromptPolicy.IsGeminiWebFailureText(normalized)
             || normalized.StartsWith("요청하신 최신 정보를 생성하지 못했습니다.", StringComparison.Ordinal)
             || normalized.StartsWith("요청하신 목록을 생성하지 못했습니다.", StringComparison.Ordinal)
             || normalized.StartsWith("검색 실패:", StringComparison.Ordinal);

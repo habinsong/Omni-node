@@ -71,7 +71,7 @@ public sealed partial class CommandService
 
             if (CountProbableSourceMatches(candidatePool, normalizedFocus) < targetCount)
             {
-                var normalizedDomain = NormalizeSourceDomainHint(sourceDomain);
+                var normalizedDomain = SearchQueryPolicy.NormalizeSourceDomainHint(sourceDomain);
                 if (normalizedDomain.Length == 0)
                 {
                     normalizedDomain = ResolveSourceDomainFromQueryOrFocus(query, normalizedFocus);
@@ -144,7 +144,7 @@ public sealed partial class CommandService
         var cappedTargetCount = Math.Clamp(targetCount, 1, 10);
         var poolLimit = Math.Clamp(cappedTargetCount * 3, cappedTargetCount, 24);
         IReadOnlyList<WebSearchResultItem> candidatePool = initialResults.Take(poolLimit).ToArray();
-        var normalizedDomain = NormalizeSourceDomainHint(sourceDomain);
+        var normalizedDomain = SearchQueryPolicy.NormalizeSourceDomainHint(sourceDomain);
         if (normalizedDomain.Length == 0)
         {
             normalizedDomain = ResolveSourceDomainFromQueryOrFocus(query, sourceFocus);
@@ -228,7 +228,7 @@ public sealed partial class CommandService
             return merged;
         }
 
-        var normalizedDomain = NormalizeSourceDomainHint(sourceDomain);
+        var normalizedDomain = SearchQueryPolicy.NormalizeSourceDomainHint(sourceDomain);
         if (normalizedDomain.Length == 0)
         {
             normalizedDomain = ResolveSourceDomainFromQueryOrFocus(query, sourceFocus);
@@ -347,7 +347,7 @@ public sealed partial class CommandService
     {
         var normalizedQuery = (query ?? string.Empty).Trim();
         var normalizedFocus = (sourceFocus ?? string.Empty).Trim();
-        var normalizedDomain = NormalizeSourceDomainHint(sourceDomain);
+        var normalizedDomain = SearchQueryPolicy.NormalizeSourceDomainHint(sourceDomain);
         if (normalizedDomain.Length > 0)
         {
             if (normalizedFocus.Length > 0)
@@ -435,7 +435,7 @@ public sealed partial class CommandService
         }
 
         var focus = (sourceFocus ?? string.Empty).Trim();
-        var domain = NormalizeSourceDomainHint(sourceDomain);
+        var domain = SearchQueryPolicy.NormalizeSourceDomainHint(sourceDomain);
         if (domain.Length == 0)
         {
             domain = ResolveSourceDomainFromQueryOrFocus(query, focus);

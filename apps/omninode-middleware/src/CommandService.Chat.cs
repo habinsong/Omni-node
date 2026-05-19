@@ -286,17 +286,17 @@ public sealed partial class CommandService
             var shouldUseGeminiWeb = false;
             var selfDecideNeedWeb = false;
 
-            if (LooksLikeExplicitWebLookupQuestion(webLookupInput))
+            if (SearchQueryPolicy.LooksLikeExplicitWebLookupQuestion(webLookupInput))
             {
                 decisionPath = "heuristic_explicit_web";
                 shouldUseGeminiWeb = true;
             }
-            else if (LooksLikeRealtimeQuestion(webLookupInput))
+            else if (SearchQueryPolicy.LooksLikeRealtimeQuestion(webLookupInput))
             {
                 decisionPath = "heuristic_web";
                 shouldUseGeminiWeb = true;
             }
-            else if (LooksLikeClearlyNonWebQuestion(webLookupInput))
+            else if (SearchQueryPolicy.LooksLikeClearlyNonWebQuestion(webLookupInput))
             {
                 decisionPath = "heuristic_no_web";
             }
@@ -308,7 +308,7 @@ public sealed partial class CommandService
                     resolvedModel,
                     cancellationToken
                 );
-                var shouldFallbackToGeminiWeb = !webDecision.DecisionSucceeded && LooksLikeRealtimeQuestion(webLookupInput);
+                var shouldFallbackToGeminiWeb = !webDecision.DecisionSucceeded && SearchQueryPolicy.LooksLikeRealtimeQuestion(webLookupInput);
                 shouldUseGeminiWeb = webDecision.NeedWeb || shouldFallbackToGeminiWeb;
                 selfDecideNeedWeb = shouldFallbackToGeminiWeb;
             }

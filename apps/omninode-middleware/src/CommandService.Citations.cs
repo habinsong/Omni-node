@@ -466,7 +466,7 @@ public sealed partial class CommandService
         }
         validCitations = DeduplicateCitationsForList(validCitations);
 
-        var sourceFocus = ExtractSourceFocusHintFromInput(input);
+        var sourceFocus = SearchQueryPolicy.ExtractSourceFocusHintFromInput(input);
         var focusMatchedCitations = FilterCitationsBySourceFocus(validCitations, sourceFocus);
         if (focusMatchedCitations.Length > 0)
         {

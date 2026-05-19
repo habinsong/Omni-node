@@ -365,8 +365,8 @@ public sealed partial class CommandService
                    "현재",
                    "지금"
                )
-               || LooksLikeExplicitWebLookupQuestion(normalized)
-               || LooksLikeRealtimeQuestion(normalized);
+               || SearchQueryPolicy.LooksLikeExplicitWebLookupQuestion(normalized)
+               || SearchQueryPolicy.LooksLikeRealtimeQuestion(normalized);
     }
 
     private static bool LooksLikeRoutineLocalSystemRequest(string input)
@@ -656,7 +656,7 @@ public sealed partial class CommandService
                 cancellationToken
             );
             var output = (urlResult.Response.Text ?? string.Empty).Trim();
-            var failed = IsGeminiUrlContextFailureText(output)
+            var failed = SearchPromptPolicy.IsGeminiUrlContextFailureText(output)
                 || output.StartsWith("요청하신 URL 참조 답변을 생성하지 못했습니다.", StringComparison.Ordinal);
             return (output, failed ? "error" : "ok", failed ? output : null);
         }

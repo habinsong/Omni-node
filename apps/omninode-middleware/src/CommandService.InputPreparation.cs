@@ -597,7 +597,7 @@ public sealed partial class CommandService
         MemoryGetToolResult? memoryGet = null;
         var forceMemoryContext = ShouldUseForcedMemoryContext(query);
 
-        if (LooksLikeCasualOrIdentityQuestion(query))
+        if (SearchQueryPolicy.LooksLikeCasualOrIdentityQuestion(query))
         {
             memorySearchTrace = CreateForcedToolTrace("skip", skipReason: "casual_query");
             memoryGetTrace = CreateForcedToolTrace("skip", skipReason: "casual_query");
@@ -1774,7 +1774,7 @@ public sealed partial class CommandService
                 includeGoogleSearch: false,
                 cancellationToken
             );
-            if (!IsGeminiUrlContextFailureText(summaryResponse.Text))
+            if (!SearchPromptPolicy.IsGeminiUrlContextFailureText(summaryResponse.Text))
             {
                 var summary = SanitizeChatOutput(summaryResponse.Text);
                 if (!string.IsNullOrWhiteSpace(summary))
@@ -1806,7 +1806,7 @@ public sealed partial class CommandService
 
     private string BuildGeminiUrlContextSummaryPrompt(string input, IReadOnlyList<string> urls)
     {
-        var normalizedInput = ResolveImplicitUrlRequest((input ?? string.Empty).Trim(), urls);
+        var normalizedInput = SearchUrlContextPolicy.ResolveImplicitUrlRequest((input ?? string.Empty).Trim(), urls);
         var builder = new StringBuilder();
         builder.AppendLine("너는 URL 컨텍스트 전처리 요약기다.");
         builder.AppendLine("- 제공된 URL 내용만 사용해 후속 LLM이 참고할 요약 블록을 만들어라.");

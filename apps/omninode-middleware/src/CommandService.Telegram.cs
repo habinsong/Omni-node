@@ -1179,17 +1179,17 @@ public sealed partial class CommandService
             var shouldUseGeminiWeb = false;
             var shouldFallbackToGeminiWeb = false;
 
-            if (LooksLikeExplicitWebLookupQuestion(requestText))
+            if (SearchQueryPolicy.LooksLikeExplicitWebLookupQuestion(requestText))
             {
                 decisionPath = "heuristic_explicit_web";
                 shouldUseGeminiWeb = true;
             }
-            else if (LooksLikeRealtimeQuestion(effectiveTopicInput))
+            else if (SearchQueryPolicy.LooksLikeRealtimeQuestion(effectiveTopicInput))
             {
                 decisionPath = "heuristic_web";
                 shouldUseGeminiWeb = true;
             }
-            else if (!LooksLikeClearlyNonWebQuestion(effectiveTopicInput))
+            else if (!SearchQueryPolicy.LooksLikeClearlyNonWebQuestion(effectiveTopicInput))
             {
                 var webDecision = await DecideNeedWebBySelectedProviderAsync(
                     effectiveTopicInput,
@@ -1197,7 +1197,7 @@ public sealed partial class CommandService
                     snapshotSingleModel,
                     cancellationToken
                 );
-                shouldFallbackToGeminiWeb = !webDecision.DecisionSucceeded && LooksLikeRealtimeQuestion(effectiveTopicInput);
+                shouldFallbackToGeminiWeb = !webDecision.DecisionSucceeded && SearchQueryPolicy.LooksLikeRealtimeQuestion(effectiveTopicInput);
                 shouldUseGeminiWeb = webDecision.NeedWeb || shouldFallbackToGeminiWeb;
                 decisionPath = webDecision.DecisionSucceeded ? "llm" : "heuristic_fallback";
             }
@@ -1244,7 +1244,7 @@ public sealed partial class CommandService
         }
 
         var effectiveWebSearchEnabled = snapshot.Mode == "single"
-            ? webSearchEnabled && (thinkPlusActiveForTelegram || isSkillContextQuery || LooksLikeExplicitWebLookupQuestion(effectiveTopicInput) || LooksLikeRealtimeQuestion(effectiveTopicInput))
+            ? webSearchEnabled && (thinkPlusActiveForTelegram || isSkillContextQuery || SearchQueryPolicy.LooksLikeExplicitWebLookupQuestion(effectiveTopicInput) || SearchQueryPolicy.LooksLikeRealtimeQuestion(effectiveTopicInput))
             : webSearchEnabled;
         var normalizedAttachments = NormalizeAttachments(attachments);
         var sharedPrepared = await PrepareSharedInputAsync(

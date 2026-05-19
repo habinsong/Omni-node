@@ -65,7 +65,7 @@ public sealed partial class CommandService
             return new WebNeedDecisionResult(false, false, $"decision_error:{ex.Message}", normalizedProvider, resolvedModel);
         }
 
-        if (TryParseNeedWebDecisionJson(decision.Text, out var needWeb, out var reason))
+        if (SearchPromptPolicy.TryParseNeedWebDecisionJson(decision.Text, out var needWeb, out var reason))
         {
             return new WebNeedDecisionResult(
                 needWeb,
@@ -76,7 +76,7 @@ public sealed partial class CommandService
             );
         }
 
-        var normalizedDecisionToken = NormalizeWebSearchDecisionToken(decision.Text);
+        var normalizedDecisionToken = SearchQueryPolicy.NormalizeWebSearchDecisionToken(decision.Text);
         if (normalizedDecisionToken == "yes")
         {
             return new WebNeedDecisionResult(true, true, "token_yes", decision.Provider, decision.Model);
@@ -215,7 +215,7 @@ public sealed partial class CommandService
 
         var sanitizeStopwatch = Stopwatch.StartNew();
         string outputText;
-        if (IsGeminiUrlContextFailureText(response.Text))
+        if (SearchPromptPolicy.IsGeminiUrlContextFailureText(response.Text))
         {
             outputText = BuildGeminiUrlContextFailureNotice(input, response.Text);
         }
@@ -317,7 +317,7 @@ public sealed partial class CommandService
             deltaCallback,
             cancellationToken
         );
-        if (IsGeminiWebTimeoutText(response.Text))
+        if (SearchPromptPolicy.IsGeminiWebTimeoutText(response.Text))
         {
             Console.Error.WriteLine($"[gemini] grounded chat timeout retry (model={model})");
             var retryResponse = await _llmRouter.GenerateGeminiGroundedChatStreamingAsync(
@@ -339,7 +339,7 @@ public sealed partial class CommandService
 
         var sanitizeStopwatch = Stopwatch.StartNew();
         string outputText;
-        if (IsGeminiWebFailureText(response.Text))
+        if (SearchPromptPolicy.IsGeminiWebFailureText(response.Text))
         {
             outputText = BuildGeminiWebFailureNotice(input, response.Text);
         }
@@ -409,41 +409,6 @@ public sealed partial class CommandService
         return await loader.TryLoadAsync(input, urls, cancellationToken);
     }
 
-    private static string ResolveImplicitUrlRequest(string input, IReadOnlyList<string> urls)
-    {
-        return SearchUrlContextPolicy.ResolveImplicitUrlRequest(input, urls);
-    }
-
-    private static bool LooksLikeImplicitUrlSummaryRequest(string input, IReadOnlyList<string> urls)
-    {
-        return SearchUrlContextPolicy.LooksLikeImplicitUrlSummaryRequest(input, urls);
-    }
-
-    private static bool LooksLikeSiteOverviewRequest(string input)
-    {
-        return SearchUrlContextPolicy.LooksLikeSiteOverviewRequest(input);
-    }
-
-    private static bool LooksLikeSiteRootUrl(string url)
-    {
-        return SearchUrlContextPolicy.LooksLikeSiteRootUrl(url);
-    }
-
-    private static bool LooksLikeDocumentationUrl(string url)
-    {
-        return SearchUrlContextPolicy.LooksLikeDocumentationUrl(url);
-    }
-
-    private static bool LooksLikeArticleUrl(string url)
-    {
-        return SearchUrlContextPolicy.LooksLikeArticleUrl(url);
-    }
-
-    private static bool LooksLikeRepositoryUrl(string url)
-    {
-        return SearchUrlContextPolicy.LooksLikeRepositoryUrl(url);
-    }
-
     private string BuildGeminiWebAnswerPrompt(
         string input,
         string memoryHint,
@@ -481,7 +446,7 @@ public sealed partial class CommandService
             return string.Empty;
         }
 
-        var sourceFocus = ExtractSourceFocusHintFromInput(normalizedInput);
+        var sourceFocus = SearchQueryPolicy.ExtractSourceFocusHintFromInput(normalizedInput);
         var sourceDomain = ResolveSourceDomainFromQueryOrFocus(normalizedInput, sourceFocus);
         var hasSourceOverride = sourceFocus.Length > 0
             || sourceDomain.Length > 0
@@ -647,34 +612,14 @@ public sealed partial class CommandService
         );
     }
 
-    private static bool IsGeminiUrlContextFailureText(string text)
-    {
-        return SearchPromptPolicy.IsGeminiUrlContextFailureText(text);
-    }
-
     private string BuildGeminiUrlContextFailureNotice(string input, string failureText)
     {
         return SearchPromptPolicy.BuildGeminiUrlContextFailureNotice(input, failureText);
     }
 
-    private static bool IsGeminiWebFailureText(string text)
-    {
-        return SearchPromptPolicy.IsGeminiWebFailureText(text);
-    }
-
-    private static bool IsGeminiWebTimeoutText(string text)
-    {
-        return SearchPromptPolicy.IsGeminiWebTimeoutText(text);
-    }
-
     private string BuildGeminiWebFailureNotice(string input, string failureText)
     {
         return SearchPromptPolicy.BuildGeminiWebFailureNotice(input, failureText);
-    }
-
-    private static bool TryParseNeedWebDecisionJson(string? rawText, out bool needWeb, out string reason)
-    {
-        return SearchPromptPolicy.TryParseNeedWebDecisionJson(rawText, out needWeb, out reason);
     }
 
     private async Task<SearchRequirementDecision> DecideWebSearchRequirementAsync(
@@ -688,7 +633,7 @@ public sealed partial class CommandService
             return new SearchRequirementDecision(false, "llm:false:empty_input", string.Empty, string.Empty);
         }
 
-        if (LooksLikeClearlyNonWebQuestion(normalized))
+        if (SearchQueryPolicy.LooksLikeClearlyNonWebQuestion(normalized))
         {
             return new SearchRequirementDecision(false, "heuristic:false:non_web", string.Empty, string.Empty);
         }
@@ -707,12 +652,12 @@ public sealed partial class CommandService
         );
         if (provider.Length == 0 || provider == "none")
         {
-            var fallbackDecision = LooksLikeExplicitWebLookupQuestion(normalized) || LooksLikeRealtimeQuestion(normalized);
+            var fallbackDecision = SearchQueryPolicy.LooksLikeExplicitWebLookupQuestion(normalized) || SearchQueryPolicy.LooksLikeRealtimeQuestion(normalized);
             return new SearchRequirementDecision(
                 fallbackDecision,
                 fallbackDecision ? "fallback:true:no_llm_key" : "fallback:false:no_llm_key",
-                ExtractSourceFocusHintFromInput(normalized),
-                ExtractSourceDomainHintFromInput(normalized)
+                SearchQueryPolicy.ExtractSourceFocusHintFromInput(normalized),
+                SearchQueryPolicy.ExtractSourceDomainHintFromInput(normalized)
             );
         }
 
@@ -743,7 +688,7 @@ public sealed partial class CommandService
             cancellationToken,
             maxOutputTokens: 96
         );
-        if (TryParseSearchRequirementDecisionJson(
+        if (SearchQueryPolicy.TryParseSearchRequirementDecisionJson(
                 decision.Text,
                 out var parsedNeedWeb,
                 out var parsedSourceFocus,
@@ -757,14 +702,14 @@ public sealed partial class CommandService
             );
         }
 
-        var decisionToken = NormalizeWebSearchDecisionToken(decision.Text);
+        var decisionToken = SearchQueryPolicy.NormalizeWebSearchDecisionToken(decision.Text);
         if (decisionToken == "no")
         {
             return new SearchRequirementDecision(
                 false,
                 $"llm:false:{provider}:{decision.Model}",
-                ExtractSourceFocusHintFromInput(normalized),
-                ExtractSourceDomainHintFromInput(normalized)
+                SearchQueryPolicy.ExtractSourceFocusHintFromInput(normalized),
+                SearchQueryPolicy.ExtractSourceDomainHintFromInput(normalized)
             );
         }
 
@@ -773,19 +718,19 @@ public sealed partial class CommandService
             return new SearchRequirementDecision(
                 true,
                 $"llm:true:{provider}:{decision.Model}",
-                ExtractSourceFocusHintFromInput(normalized),
-                ExtractSourceDomainHintFromInput(normalized)
+                SearchQueryPolicy.ExtractSourceFocusHintFromInput(normalized),
+                SearchQueryPolicy.ExtractSourceDomainHintFromInput(normalized)
             );
         }
 
-        var fallback = LooksLikeExplicitWebLookupQuestion(normalized) || LooksLikeRealtimeQuestion(normalized);
+        var fallback = SearchQueryPolicy.LooksLikeExplicitWebLookupQuestion(normalized) || SearchQueryPolicy.LooksLikeRealtimeQuestion(normalized);
         return new SearchRequirementDecision(
             fallback,
             fallback
                 ? $"fallback:true:unparsed:{provider}:{decision.Model}"
                 : $"fallback:false:unparsed:{provider}:{decision.Model}",
-            ExtractSourceFocusHintFromInput(normalized),
-            ExtractSourceDomainHintFromInput(normalized)
+            SearchQueryPolicy.ExtractSourceFocusHintFromInput(normalized),
+            SearchQueryPolicy.ExtractSourceDomainHintFromInput(normalized)
         );
     }
 
@@ -835,16 +780,6 @@ public sealed partial class CommandService
         return LooksLikeListOutputRequest(input);
     }
 
-    private static bool TryParseSearchRequirementDecisionJson(
-        string? rawText,
-        out bool needWeb,
-        out string sourceFocus,
-        out string sourceDomain
-    )
-    {
-        return SearchQueryPolicy.TryParseSearchRequirementDecisionJson(rawText, out needWeb, out sourceFocus, out sourceDomain);
-    }
-
     private static bool TryGetPropertyIgnoreCase(JsonElement element, string propertyName, out JsonElement value)
     {
         if (element.ValueKind != JsonValueKind.Object)
@@ -866,64 +801,9 @@ public sealed partial class CommandService
         return false;
     }
 
-    private static string ExtractSourceFocusHintFromInput(string input)
-    {
-        return SearchQueryPolicy.ExtractSourceFocusHintFromInput(input);
-    }
-
-    private static string ExtractSourceDomainHintFromInput(string input)
-    {
-        return SearchQueryPolicy.ExtractSourceDomainHintFromInput(input);
-    }
-
-    private static string NormalizeSourceDomainHint(string? domain)
-    {
-        return SearchQueryPolicy.NormalizeSourceDomainHint(domain);
-    }
-
     private static string BuildEffectiveSearchQuery(string query, SearchRequirementDecision decision)
     {
         return SearchQueryPolicy.BuildEffectiveSearchQuery(query, decision, ResolveSourceDomainFromQueryOrFocus);
-    }
-
-    private static string NormalizeWebSearchDecisionToken(string? decisionText)
-    {
-        return SearchQueryPolicy.NormalizeWebSearchDecisionToken(decisionText);
-    }
-
-    private static bool LooksLikeRealtimeQuestion(string input)
-    {
-        return SearchQueryPolicy.LooksLikeRealtimeQuestion(input);
-    }
-
-    private static bool LooksLikeExplicitWebLookupQuestion(string input)
-    {
-        return SearchQueryPolicy.LooksLikeExplicitWebLookupQuestion(input);
-    }
-
-    private static bool LooksLikeClearlyNonWebQuestion(string input)
-    {
-        return SearchQueryPolicy.LooksLikeClearlyNonWebQuestion(input);
-    }
-
-    private static bool LooksLikeCasualOrIdentityQuestion(string input)
-    {
-        return SearchQueryPolicy.LooksLikeCasualOrIdentityQuestion(input);
-    }
-
-    private static bool LooksLikeStandaloneFreshGreeting(string input)
-    {
-        return SearchQueryPolicy.LooksLikeStandaloneFreshGreeting(input);
-    }
-
-    private static bool LooksLikeLocalDateTimeQuestion(string input)
-    {
-        return SearchQueryPolicy.LooksLikeLocalDateTimeQuestion(input);
-    }
-
-    private static bool LooksLikeComparisonRequest(string input)
-    {
-        return SearchQueryPolicy.LooksLikeComparisonRequest(input);
     }
 
     private static double ResolveForcedMemoryMinScore(string input)

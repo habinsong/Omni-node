@@ -105,7 +105,7 @@ assert(
   "대화탭은 후속 질문, 독립 질문, 독립 인사를 구분하는 공통 맥락 판단 규칙을 가져야 합니다."
 );
 assert(
-  searchPipeline.includes("SearchQueryPolicy.LooksLikeStandaloneFreshGreeting") &&
+  utils.includes("SearchQueryPolicy.LooksLikeStandaloneFreshGreeting") &&
     searchQueryPolicy.includes("\"ㅎㅇ\"") &&
     searchQueryPolicy.includes("\"hello\""),
   "대화탭은 'ㅎㅇ' 같은 독립 인사를 최근 대화 맥락 주입에서 제외해야 합니다."
