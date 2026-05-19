@@ -150,6 +150,7 @@ const geminiCitationParser = read("apps/omninode-middleware/src/GeminiCitationPa
 const citationAccumulator = read("apps/omninode-middleware/src/CitationAccumulator.cs");
 const logicGraphValidationPolicy = read("apps/omninode-middleware/src/LogicGraphValidationPolicy.cs");
 const logicValueParsingPolicy = read("apps/omninode-middleware/src/LogicValueParsingPolicy.cs");
+const logicNodeRuntimePolicy = read("apps/omninode-middleware/src/LogicNodeRuntimePolicy.cs");
 const commandServiceLogicGraphs = read("apps/omninode-middleware/src/CommandService.LogicGraphs.cs");
 const planningPromptPolicy = read("apps/omninode-middleware/src/PlanningPromptPolicy.cs");
 const routerIntentClassifier = read("apps/omninode-middleware/src/RouterIntentClassifier.cs");
@@ -682,5 +683,28 @@ assertNotIncludes(commandServiceLogicGraphs, "private static int? ParseOptionalL
 assertNotIncludes(commandServiceLogicGraphs, "private static double ParseLogicDouble(", "command service no longer owns double parser");
 assertNotIncludes(commandServiceLogicGraphs, "private static bool ParseLogicBool(", "command service no longer owns bool parser");
 assertNotIncludes(commandServiceLogicGraphs, "private static bool? ParseOptionalLogicBool(", "command service no longer owns optional bool parser");
+assertIncludes(logicNodeRuntimePolicy, "TemplateRegex", "logic node runtime policy owns template regex");
+assertIncludes(logicNodeRuntimePolicy, "IsSuccessfulExecutionStatus", "logic node runtime policy owns success status check");
+assertIncludes(logicNodeRuntimePolicy, "IsTerminalStatus", "logic node runtime policy owns terminal status check");
+assertIncludes(logicNodeRuntimePolicy, "LooksLikeAiFailure", "logic node runtime policy owns AI failure heuristic");
+assertIncludes(logicNodeRuntimePolicy, "IsRunInputTemplate", "logic node runtime policy owns run-input template detector");
+assertIncludes(logicNodeRuntimePolicy, "ShouldApplyImplicitMainInput", "logic node runtime policy owns implicit main input rule");
+assertIncludes(logicNodeRuntimePolicy, "RequiresAllIncomingEdges", "logic node runtime policy owns require-all-incoming rule");
+assertIncludes(logicNodeRuntimePolicy, "IsNodeReadyToRun", "logic node runtime policy owns node readiness check");
+assertIncludes(logicNodeRuntimePolicy, "BuildConversationTitle", "logic node runtime policy owns conversation title builder");
+assertIncludes(commandServiceLogicGraphs, "LogicNodeRuntimePolicy.IsSuccessfulExecutionStatus", "command service uses runtime policy success status check");
+assertIncludes(commandServiceLogicGraphs, "LogicNodeRuntimePolicy.IsTerminalStatus", "command service uses runtime policy terminal status check");
+assertIncludes(commandServiceLogicGraphs, "LogicNodeRuntimePolicy.IsNodeReadyToRun", "command service uses runtime policy node readiness check");
+assertIncludes(commandServiceLogicGraphs, "LogicNodeRuntimePolicy.BuildConversationTitle", "command service uses runtime policy conversation title builder");
+assertIncludes(commandServiceLogicGraphs, "LogicNodeRuntimePolicy.TemplateRegex", "command service uses runtime policy template regex");
+assertNotIncludes(commandServiceLogicGraphs, "private static bool IsSuccessfulLogicExecutionStatus(", "command service no longer owns success status check");
+assertNotIncludes(commandServiceLogicGraphs, "private static bool IsTerminalLogicStatus(", "command service no longer owns terminal status check");
+assertNotIncludes(commandServiceLogicGraphs, "private static bool LooksLikeLogicAiFailure(", "command service no longer owns AI failure heuristic");
+assertNotIncludes(commandServiceLogicGraphs, "private static bool IsLogicRunInputTemplate(", "command service no longer owns run-input template detector");
+assertNotIncludes(commandServiceLogicGraphs, "private static bool ShouldApplyImplicitMainInput(", "command service no longer owns implicit main input rule");
+assertNotIncludes(commandServiceLogicGraphs, "private static bool RequiresAllLogicIncomingEdges(", "command service no longer owns require-all-incoming rule");
+assertNotIncludes(commandServiceLogicGraphs, "private static bool IsLogicNodeReadyToRun(", "command service no longer owns node readiness check");
+assertNotIncludes(commandServiceLogicGraphs, "private static string BuildLogicConversationTitle(", "command service no longer owns conversation title builder");
+assertNotIncludes(commandServiceLogicGraphs, "private static readonly Regex LogicTemplateRegex", "command service no longer owns template regex");
 
 console.log(JSON.stringify({ ok: true, assertions: assertionCount }, null, 2));

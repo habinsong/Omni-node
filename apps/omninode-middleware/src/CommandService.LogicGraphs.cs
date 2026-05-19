@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace OmniNode.Middleware;
 
@@ -11,7 +10,6 @@ public sealed partial class CommandService
     private const string LogicRunEventsFileName = "events.log";
     private const string LogicResolvedMainInputKey = "__main_input";
     private const int LogicRunMaxLogs = 512;
-    private static readonly Regex LogicTemplateRegex = new(@"\{\{\s*(?<expr>[^{}]+?)\s*\}\}", RegexOptions.Compiled);
     private static readonly IReadOnlyDictionary<string, string> LogicImplicitMainInputPortByType =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -305,7 +303,7 @@ public sealed partial class CommandService
             if (routine.Running)
             {
                 var active = _logicRuntimeCoordinator.GetSnapshotByGraphId(normalizedGraphId);
-                if (active == null || IsTerminalLogicStatus(active.Status))
+                if (active == null || LogicNodeRuntimePolicy.IsTerminalStatus(active.Status))
                 {
                     routine.Running = false;
                 }
@@ -355,7 +353,7 @@ public sealed partial class CommandService
         }
 
         var result = _logicRuntimeCoordinator.CancelRun(runId);
-        if (result.Snapshot != null && IsTerminalLogicStatus(result.Snapshot.Status))
+        if (result.Snapshot != null && LogicNodeRuntimePolicy.IsTerminalStatus(result.Snapshot.Status))
         {
             ClearLogicGraphRunningState(result.Snapshot.GraphId);
         }
@@ -582,7 +580,7 @@ public sealed partial class CommandService
                     continue;
                 }
 
-                if (!IsLogicNodeReadyToRun(node, arrivals, incomingEdges))
+                if (!LogicNodeRuntimePolicy.IsNodeReadyToRun(node, arrivals, incomingEdges))
                 {
                     continue;
                 }
@@ -740,7 +738,7 @@ public sealed partial class CommandService
                         continue;
                     }
 
-                    if (IsLogicNodeReadyToRun(targetNode, arrivals, incomingEdges))
+                    if (LogicNodeRuntimePolicy.IsNodeReadyToRun(targetNode, arrivals, incomingEdges))
                     {
                         queue.Enqueue(edge.TargetNodeId);
                         queued.Add(edge.TargetNodeId);
@@ -1165,7 +1163,7 @@ public sealed partial class CommandService
         }
 
         var scope = "chat";
-        var title = BuildLogicConversationTitle(graph, node, mode);
+        var title = LogicNodeRuntimePolicy.BuildConversationTitle(graph, node, mode);
         if (string.Equals(mode, "single", StringComparison.Ordinal))
         {
             var request = new ChatRequest(
@@ -1275,7 +1273,7 @@ public sealed partial class CommandService
             "chat",
             "multi",
             null,
-            BuildLogicConversationTitle(graph, node, "multi"),
+            LogicNodeRuntimePolicy.BuildConversationTitle(graph, node, "multi"),
             "logic_graph",
             graph.GraphId,
             new[] { "logic_graph", node.Type },
@@ -1338,7 +1336,7 @@ public sealed partial class CommandService
             "coding",
             mode,
             null,
-            BuildLogicConversationTitle(graph, node, mode),
+            LogicNodeRuntimePolicy.BuildConversationTitle(graph, node, mode),
             "logic_graph",
             graph.GraphId,
             new[] { "logic_graph", node.Type },
@@ -1414,7 +1412,7 @@ public sealed partial class CommandService
 
     private LogicNodeExecutionOutcome NormalizeLogicAiOutcome(LogicNodeExecutionOutcome outcome)
     {
-        if (!outcome.Envelope.Ok || !LooksLikeLogicAiFailure(outcome.Envelope.Text))
+        if (!outcome.Envelope.Ok || !LogicNodeRuntimePolicy.LooksLikeAiFailure(outcome.Envelope.Text))
         {
             return outcome;
         }
@@ -1439,7 +1437,7 @@ public sealed partial class CommandService
         var executionStatus = outcome.Envelope.Data.TryGetValue("executionStatus", out var status)
             ? status
             : string.Empty;
-        if (IsSuccessfulLogicExecutionStatus(executionStatus))
+        if (LogicNodeRuntimePolicy.IsSuccessfulExecutionStatus(executionStatus))
         {
             return outcome;
         }
@@ -1467,29 +1465,6 @@ public sealed partial class CommandService
         var next = new Dictionary<string, string>(source ?? new Dictionary<string, string>(), StringComparer.Ordinal);
         next[key] = value;
         return next;
-    }
-
-    private static bool IsSuccessfulLogicExecutionStatus(string? status)
-    {
-        var normalized = (status ?? string.Empty).Trim();
-        return normalized.Equals("ok", StringComparison.OrdinalIgnoreCase)
-            || normalized.Equals("success", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool LooksLikeLogicAiFailure(string? text)
-    {
-        var normalized = (text ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return true;
-        }
-
-        return normalized.StartsWith("error:", StringComparison.OrdinalIgnoreCase)
-            || normalized.Contains("API 키가 설정되지 않았습니다", StringComparison.OrdinalIgnoreCase)
-            || normalized.Contains("인증이 필요합니다", StringComparison.OrdinalIgnoreCase)
-            || normalized.Contains("호출 오류", StringComparison.OrdinalIgnoreCase)
-            || normalized.Contains("요청 실패", StringComparison.OrdinalIgnoreCase)
-            || normalized.Contains("응답 시간이 초과", StringComparison.OrdinalIgnoreCase);
     }
 
     private LogicNodeExecutionOutcome ExecuteLogicMemorySearchNode(
@@ -2076,7 +2051,7 @@ public sealed partial class CommandService
         {
             resolved[LogicResolvedMainInputKey] = mainInputValue;
             if (LogicImplicitMainInputPortByType.TryGetValue(node.Type, out var implicitTargetPort)
-                && ShouldApplyImplicitMainInput(node, implicitTargetPort))
+                && LogicNodeRuntimePolicy.ShouldApplyImplicitMainInput(node, implicitTargetPort))
             {
                 resolved[implicitTargetPort] = mainInputValue;
             }
@@ -2118,51 +2093,6 @@ public sealed partial class CommandService
             1 => values[0],
             _ => string.Join("\n\n", values)
         };
-    }
-
-    private static bool ShouldApplyImplicitMainInput(
-        LogicNodeDefinition node,
-        string targetPort
-    )
-    {
-        if (node.Config.TryGetValue($"__mode__{targetPort}", out var rawMode))
-        {
-            var mode = (rawMode ?? string.Empty).Trim().ToLowerInvariant();
-            if (mode is "reference" or "edge")
-            {
-                return false;
-            }
-        }
-
-        if (!node.Config.TryGetValue(targetPort, out var rawValue))
-        {
-            return true;
-        }
-
-        if (string.IsNullOrWhiteSpace(rawValue))
-        {
-            return true;
-        }
-
-        return IsLogicRunInputTemplate(rawValue);
-    }
-
-    private static bool IsLogicRunInputTemplate(string? value)
-    {
-        var text = (value ?? string.Empty).Trim();
-        if (text.Length == 0)
-        {
-            return false;
-        }
-
-        var match = LogicTemplateRegex.Match(text);
-        if (!match.Success || match.Length != text.Length)
-        {
-            return false;
-        }
-
-        var expression = match.Groups["expr"].Value.Trim();
-        return string.Equals(expression, "run.input", StringComparison.OrdinalIgnoreCase);
     }
 
     private string ResolveLogicEdgeValue(
@@ -2252,42 +2182,6 @@ public sealed partial class CommandService
         return selected;
     }
 
-    private static bool IsLogicNodeReadyToRun(
-        LogicNodeDefinition node,
-        IReadOnlyDictionary<string, HashSet<string>> arrivals,
-        IReadOnlyDictionary<string, LogicEdgeDefinition[]> incomingEdges
-    )
-    {
-        if (node.Type == "start")
-        {
-            return true;
-        }
-
-        if (!arrivals.TryGetValue(node.NodeId, out var sources) || sources.Count == 0)
-        {
-            return false;
-        }
-
-        if (!incomingEdges.TryGetValue(node.NodeId, out var edges) || edges.Length == 0)
-        {
-            return true;
-        }
-
-        if (node.Type == "parallel_join" || RequiresAllLogicIncomingEdges(edges))
-        {
-            return sources.Count >= edges.Length;
-        }
-
-        return true;
-    }
-
-    private static bool RequiresAllLogicIncomingEdges(
-        IReadOnlyList<LogicEdgeDefinition> edges
-    )
-    {
-        return edges.Any(edge => !string.Equals(LogicGraphValidationPolicy.NormalizePort(edge.TargetPort), "main", StringComparison.Ordinal));
-    }
-
     private static LogicEdgeCondition ResolveLogicCondition(
         LogicNodeDefinition node,
         IReadOnlyDictionary<string, string> config
@@ -2321,7 +2215,7 @@ public sealed partial class CommandService
             return string.Empty;
         }
 
-        return LogicTemplateRegex.Replace(raw, match =>
+        return LogicNodeRuntimePolicy.TemplateRegex.Replace(raw, match =>
         {
             var expr = match.Groups["expr"].Value;
             return ResolveLogicReference(expr, context);
@@ -2402,15 +2296,6 @@ public sealed partial class CommandService
         return raw;
     }
 
-    private static string BuildLogicConversationTitle(
-        LogicGraphDefinition graph,
-        LogicNodeDefinition node,
-        string mode
-    )
-    {
-        return $"{graph.Title} · {node.Title} · {mode}";
-    }
-
     private LogicRunSnapshot? TryReadLogicRunSnapshotFromDisk(string? runId)
     {
         var normalizedRunId = (runId ?? string.Empty).Trim();
@@ -2470,7 +2355,7 @@ public sealed partial class CommandService
         if (routine.Running && _logicRuntimeCoordinator != null)
         {
             var active = _logicRuntimeCoordinator.GetSnapshotByGraphId(routine.Id);
-            if (active == null || IsTerminalLogicStatus(active.Status))
+            if (active == null || LogicNodeRuntimePolicy.IsTerminalStatus(active.Status))
             {
                 routine.Running = false;
             }
@@ -2531,18 +2416,6 @@ public sealed partial class CommandService
 
             return (Result: false, Changed: false);
         });
-    }
-
-    private static bool IsTerminalLogicStatus(string? status)
-    {
-        var normalized = (status ?? string.Empty).Trim();
-        return normalized.Equals("completed", StringComparison.OrdinalIgnoreCase)
-            || normalized.Equals("error", StringComparison.OrdinalIgnoreCase)
-            || normalized.Equals("failed", StringComparison.OrdinalIgnoreCase)
-            || normalized.Equals("canceled", StringComparison.OrdinalIgnoreCase)
-            || normalized.Equals("cancelled", StringComparison.OrdinalIgnoreCase)
-            || normalized.Equals("timeout", StringComparison.OrdinalIgnoreCase)
-            || normalized.Equals("killed", StringComparison.OrdinalIgnoreCase);
     }
 
     private static LogicGraphDefinition NormalizeLogicGraphDefinition(
