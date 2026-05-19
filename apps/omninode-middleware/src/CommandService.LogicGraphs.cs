@@ -2386,7 +2386,7 @@ public sealed partial class CommandService
             graph.Description,
             graph.Version,
             graph.Enabled,
-            NormalizeRoutineScheduleKind(graph.Schedule.ScheduleKind),
+            RoutineSchedulePolicy.NormalizeScheduleKind(graph.Schedule.ScheduleKind),
             graph.Schedule.ScheduleTime,
             graph.Schedule.TimezoneId,
             nextRunLocal,
@@ -2444,11 +2444,11 @@ public sealed partial class CommandService
             Schedule = new LogicGraphSchedule
             {
                 ScheduleSourceMode = NormalizeRoutineScheduleSourceMode(schedule.ScheduleSourceMode, input.Description),
-                ScheduleKind = NormalizeRoutineScheduleKind(schedule.ScheduleKind),
+                ScheduleKind = RoutineSchedulePolicy.NormalizeScheduleKind(schedule.ScheduleKind),
                 ScheduleTime = LogicValueParsingPolicy.FirstNonEmpty(schedule.ScheduleTime, "08:00"),
-                TimezoneId = ResolveTimeZone(schedule.TimezoneId).Id,
+                TimezoneId = RoutineSchedulePolicy.ResolveTimeZone(schedule.TimezoneId).Id,
                 DayOfMonth = schedule.DayOfMonth,
-                Weekdays = NormalizeRoutineWeekdays(schedule.Weekdays).ToList(),
+                Weekdays = RoutineSchedulePolicy.NormalizeWeekdays(schedule.Weekdays).ToList(),
                 Enabled = schedule.Enabled
             },
             Enabled = input.Enabled,
@@ -2531,7 +2531,7 @@ public sealed partial class CommandService
                 StringComparison.Ordinal
             ))
         {
-            return TryBuildRoutineScheduleConfig(
+            return RoutineSchedulePolicy.TryBuildConfig(
                 graph.Schedule.ScheduleKind,
                 graph.Schedule.ScheduleTime,
                 graph.Schedule.Weekdays,

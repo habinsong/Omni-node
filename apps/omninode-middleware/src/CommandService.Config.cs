@@ -3927,7 +3927,7 @@ public sealed partial class CommandService
             return ComputeNextDailyRunUtc(fallbackHour, fallbackMinute, timezoneId, nowUtc);
         }
 
-        var tz = ResolveTimeZone(timezoneId);
+        var tz = RoutineSchedulePolicy.ResolveTimeZone(timezoneId);
         var nowLocal = TimeZoneInfo.ConvertTime(nowUtc, tz);
         var startDate = nowLocal.Date;
         for (var offsetDays = 0; offsetDays <= 800; offsetDays += 1)

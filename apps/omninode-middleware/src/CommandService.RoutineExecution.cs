@@ -1495,8 +1495,8 @@ public sealed partial class CommandService
         }
 
         var normalizedSource = (source ?? string.Empty).Trim().ToLowerInvariant();
-        var normalizedPolicy = NormalizeRoutineNotifyPolicy(routine.NotifyPolicy);
-        var fingerprint = ComputeRoutineOutputFingerprint(output);
+        var normalizedPolicy = RoutineSchedulePolicy.NormalizeNotifyPolicy(routine.NotifyPolicy);
+        var fingerprint = RoutineSchedulePolicy.ComputeOutputFingerprint(output);
         var bypassPolicy = normalizedSource is "telegram_test" or "telegram_resend";
         if (!bypassPolicy)
         {

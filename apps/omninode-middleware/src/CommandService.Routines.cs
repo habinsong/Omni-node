@@ -103,7 +103,7 @@ public sealed partial class CommandService
             ))
         {
             warnings.Add(scheduleError);
-            scheduleConfig = BuildDailyRoutineScheduleConfig(8, 0, timezoneId ?? TimeZoneInfo.Local.Id);
+            scheduleConfig = RoutineSchedulePolicy.BuildDailyConfig(8, 0, timezoneId ?? TimeZoneInfo.Local.Id);
         }
 
         var taskRequest = ResolveRoutineExecutionRequestText(input, BuildRoutineTitle(input), resolvedScheduleSourceMode);
@@ -157,9 +157,9 @@ public sealed partial class CommandService
             null,
             null,
             NormalizeRoutineScheduleSourceMode("auto", input),
-            NormalizeRoutineRetryCount(null),
-            NormalizeRoutineRetryDelaySeconds(null),
-            NormalizeRoutineNotifyPolicy(null),
+            RoutineSchedulePolicy.NormalizeRetryCount(null),
+            RoutineSchedulePolicy.NormalizeRetryDelaySeconds(null),
+            RoutineSchedulePolicy.NormalizeNotifyPolicy(null),
             NormalizeRoutineNotifyTelegram(null),
             scheduleConfig,
             true,
@@ -231,9 +231,9 @@ public sealed partial class CommandService
             agentToolProfile,
             agentUsePlaywright,
             resolvedScheduleSourceMode,
-            NormalizeRoutineRetryCount(maxRetries),
-            NormalizeRoutineRetryDelaySeconds(retryDelaySeconds),
-            NormalizeRoutineNotifyPolicy(notifyPolicy),
+            RoutineSchedulePolicy.NormalizeRetryCount(maxRetries),
+            RoutineSchedulePolicy.NormalizeRetryDelaySeconds(retryDelaySeconds),
+            RoutineSchedulePolicy.NormalizeNotifyPolicy(notifyPolicy),
             NormalizeRoutineNotifyTelegram(notifyTelegram),
             scheduleConfig,
             runImmediately,
@@ -363,11 +363,11 @@ public sealed partial class CommandService
             resolvedScheduleSourceMode,
             StringComparison.Ordinal
         );
-        var retryCountChanged = existing.MaxRetries != NormalizeRoutineRetryCount(maxRetries);
-        var retryDelayChanged = existing.RetryDelaySeconds != NormalizeRoutineRetryDelaySeconds(retryDelaySeconds);
+        var retryCountChanged = existing.MaxRetries != RoutineSchedulePolicy.NormalizeRetryCount(maxRetries);
+        var retryDelayChanged = existing.RetryDelaySeconds != RoutineSchedulePolicy.NormalizeRetryDelaySeconds(retryDelaySeconds);
         var notifyPolicyChanged = !string.Equals(
-            NormalizeRoutineNotifyPolicy(existing.NotifyPolicy),
-            NormalizeRoutineNotifyPolicy(notifyPolicy),
+            RoutineSchedulePolicy.NormalizeNotifyPolicy(existing.NotifyPolicy),
+            RoutineSchedulePolicy.NormalizeNotifyPolicy(notifyPolicy),
             StringComparison.Ordinal
         );
         var normalizedNotifyTelegram = NormalizeRoutineNotifyTelegram(notifyTelegram, existing.NotifyTelegram);
@@ -448,9 +448,9 @@ public sealed partial class CommandService
             update.AgentUsePlaywright = normalizedAgentUsePlaywright;
             update.ScheduleText = scheduleConfig.Display;
             update.ScheduleSourceMode = resolvedScheduleSourceMode;
-            update.MaxRetries = NormalizeRoutineRetryCount(maxRetries);
-            update.RetryDelaySeconds = NormalizeRoutineRetryDelaySeconds(retryDelaySeconds);
-            update.NotifyPolicy = NormalizeRoutineNotifyPolicy(notifyPolicy);
+            update.MaxRetries = RoutineSchedulePolicy.NormalizeRetryCount(maxRetries);
+            update.RetryDelaySeconds = RoutineSchedulePolicy.NormalizeRetryDelaySeconds(retryDelaySeconds);
+            update.NotifyPolicy = RoutineSchedulePolicy.NormalizeNotifyPolicy(notifyPolicy);
             update.NotifyTelegram = normalizedNotifyTelegram;
             update.TimezoneId = scheduleConfig.TimezoneId;
             update.Hour = scheduleConfig.Hour;
@@ -639,8 +639,8 @@ public sealed partial class CommandService
             );
         }
 
-        var maxAttempts = NormalizeRoutineRetryCount(routine.MaxRetries) + 1;
-        var retryDelaySeconds = NormalizeRoutineRetryDelaySeconds(routine.RetryDelaySeconds);
+        var maxAttempts = RoutineSchedulePolicy.NormalizeRetryCount(routine.MaxRetries) + 1;
+        var retryDelaySeconds = RoutineSchedulePolicy.NormalizeRetryDelaySeconds(routine.RetryDelaySeconds);
         var attemptCount = 0;
         string output = string.Empty;
         string lastStatus = "error";
@@ -798,7 +798,7 @@ public sealed partial class CommandService
                     runError = BuildCronRunEntryError(exec, output, runStatus);
                 }
 
-                if (!IsRoutineRetryableStatus(runStatus) || attemptCount >= maxAttempts)
+                if (!RoutineSchedulePolicy.IsRetryableStatus(runStatus) || attemptCount >= maxAttempts)
                 {
                     break;
                 }
@@ -955,7 +955,7 @@ public sealed partial class CommandService
         });
 
         return new RoutineActionResult(
-            resultOk && !IsRoutineRetryableStatus(runStatus),
+            resultOk && !RoutineSchedulePolicy.IsRetryableStatus(runStatus),
             output,
             routine == null ? null : ToRoutineSummary(routine)
         );
