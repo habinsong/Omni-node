@@ -148,6 +148,8 @@ const geminiGenerateContentAdapter = read("apps/omninode-middleware/src/GeminiGe
 const geminiStreamingAdapter = read("apps/omninode-middleware/src/GeminiStreamingAdapter.cs");
 const geminiCitationParser = read("apps/omninode-middleware/src/GeminiCitationParser.cs");
 const citationAccumulator = read("apps/omninode-middleware/src/CitationAccumulator.cs");
+const logicGraphValidationPolicy = read("apps/omninode-middleware/src/LogicGraphValidationPolicy.cs");
+const commandServiceLogicGraphs = read("apps/omninode-middleware/src/CommandService.LogicGraphs.cs");
 const planningPromptPolicy = read("apps/omninode-middleware/src/PlanningPromptPolicy.cs");
 const routerIntentClassifier = read("apps/omninode-middleware/src/RouterIntentClassifier.cs");
 const chatStreamingContinuation = read("apps/omninode-middleware/src/ChatStreamingContinuation.cs");
@@ -633,5 +635,29 @@ assertIncludes(stateDoc, "## 상태 저장소 인벤토리", "state doc contains
 assertIncludes(stateDoc, "`~/.omninode/routing-policy.json`", "state inventory documents routing policy state");
 assertIncludes(stateDoc, "`~/.omninode/guard_retry_timeline.json`", "state inventory documents guard retry timeline state");
 assertIncludes(stateDoc, "원자 쓰기 + 백업 복구", "state inventory documents recovery status");
+assertIncludes(logicGraphValidationPolicy, "SchemaVersion", "logic graph validation policy owns schema version");
+assertIncludes(logicGraphValidationPolicy, "SupportedNodeTypes", "logic graph validation policy owns supported node type set");
+assertIncludes(logicGraphValidationPolicy, "SupportedOperators", "logic graph validation policy owns supported operator set");
+assertIncludes(logicGraphValidationPolicy, "BindableTargetPortsByType", "logic graph validation policy owns bindable target ports map");
+assertIncludes(logicGraphValidationPolicy, "NormalizePort", "logic graph validation policy owns port normalizer");
+assertIncludes(logicGraphValidationPolicy, "NormalizeOperator", "logic graph validation policy owns operator normalizer");
+assertIncludes(logicGraphValidationPolicy, "IsSourcePortValid", "logic graph validation policy owns source port check");
+assertIncludes(logicGraphValidationPolicy, "IsTargetPortValid", "logic graph validation policy owns target port check");
+assertIncludes(logicGraphValidationPolicy, "HasCycle", "logic graph validation policy owns cycle detection");
+assertIncludes(logicGraphValidationPolicy, "public static LogicGraphValidationResult Validate(", "logic graph validation policy owns graph validation entrypoint");
+assertIncludes(commandServiceLogicGraphs, "LogicGraphValidationPolicy.Validate(", "command service delegates graph validation to policy");
+assertIncludes(commandServiceLogicGraphs, "LogicGraphValidationPolicy.SchemaVersion", "command service uses policy schema version");
+assertIncludes(commandServiceLogicGraphs, "LogicGraphValidationPolicy.NormalizePort", "command service uses policy port normalizer");
+assertIncludes(commandServiceLogicGraphs, "LogicGraphValidationPolicy.NormalizeOperator", "command service uses policy operator normalizer");
+assertNotIncludes(commandServiceLogicGraphs, "private LogicGraphValidationResult ValidateLogicGraph(", "command service no longer owns graph validation");
+assertNotIncludes(commandServiceLogicGraphs, "private static bool HasLogicCycle(", "command service no longer owns cycle detection");
+assertNotIncludes(commandServiceLogicGraphs, "private static string NormalizeLogicPort(", "command service no longer owns port normalizer");
+assertNotIncludes(commandServiceLogicGraphs, "private static string NormalizeLogicOperator(", "command service no longer owns operator normalizer");
+assertNotIncludes(commandServiceLogicGraphs, "private static bool IsLogicSourcePortValid(", "command service no longer owns source port check");
+assertNotIncludes(commandServiceLogicGraphs, "private static bool IsLogicTargetPortValid(", "command service no longer owns target port check");
+assertNotIncludes(commandServiceLogicGraphs, "private static readonly IReadOnlySet<string> LogicSupportedNodeTypes", "command service no longer owns supported node set");
+assertNotIncludes(commandServiceLogicGraphs, "private static readonly IReadOnlySet<string> LogicSupportedOperators", "command service no longer owns supported operator set");
+assertNotIncludes(commandServiceLogicGraphs, "private static readonly IReadOnlyDictionary<string, IReadOnlySet<string>> LogicBindableTargetPortsByType", "command service no longer owns bindable target ports map");
+assertNotIncludes(commandServiceLogicGraphs, "private const string LogicGraphSchemaVersion", "command service no longer owns schema version constant");
 
 console.log(JSON.stringify({ ok: true, assertions: assertionCount }, null, 2));

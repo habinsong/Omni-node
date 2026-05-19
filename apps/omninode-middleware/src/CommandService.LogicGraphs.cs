@@ -7,83 +7,11 @@ namespace OmniNode.Middleware;
 public sealed partial class CommandService
 {
     private const string LogicGraphExecutionMode = "logic_graph";
-    private const string LogicGraphSchemaVersion = "logic.graph.v1";
     private const string LogicRunSnapshotFileName = "snapshot.json";
     private const string LogicRunEventsFileName = "events.log";
     private const string LogicResolvedMainInputKey = "__main_input";
     private const int LogicRunMaxLogs = 512;
     private static readonly Regex LogicTemplateRegex = new(@"\{\{\s*(?<expr>[^{}]+?)\s*\}\}", RegexOptions.Compiled);
-    private static readonly IReadOnlySet<string> LogicSupportedNodeTypes = new HashSet<string>(StringComparer.Ordinal)
-    {
-        "start",
-        "end",
-        "output",
-        "if",
-        "delay",
-        "parallel_split",
-        "parallel_join",
-        "set_var",
-        "template",
-        "chat_single",
-        "chat_orchestration",
-        "chat_multi",
-        "coding_single",
-        "coding_orchestration",
-        "coding_multi",
-        "routine_run",
-        "memory_search",
-        "memory_get",
-        "web_search",
-        "web_fetch",
-        "file_read",
-        "file_write",
-        "session_list",
-        "session_spawn",
-        "session_send",
-        "cron_status",
-        "cron_run",
-        "browser_execute",
-        "canvas_execute",
-        "nodes_pending",
-        "nodes_invoke",
-        "telegram_stub"
-    };
-    private static readonly IReadOnlySet<string> LogicSupportedOperators = new HashSet<string>(StringComparer.Ordinal)
-    {
-        "equals",
-        "not_equals",
-        "contains",
-        "not_contains",
-        "starts_with",
-        "ends_with",
-        "gt",
-        "gte",
-        "lt",
-        "lte",
-        "is_truthy",
-        "is_falsy"
-    };
-    private static readonly IReadOnlyDictionary<string, IReadOnlySet<string>> LogicBindableTargetPortsByType =
-        new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
-        {
-            ["end"] = new HashSet<string>(StringComparer.Ordinal) { "result" },
-            ["output"] = new HashSet<string>(StringComparer.Ordinal) { "result" },
-            ["if"] = new HashSet<string>(StringComparer.Ordinal) { "leftref" },
-            ["set_var"] = new HashSet<string>(StringComparer.Ordinal) { "value" },
-            ["template"] = new HashSet<string>(StringComparer.Ordinal) { "template" },
-            ["chat_single"] = new HashSet<string>(StringComparer.Ordinal) { "input" },
-            ["chat_orchestration"] = new HashSet<string>(StringComparer.Ordinal) { "input" },
-            ["chat_multi"] = new HashSet<string>(StringComparer.Ordinal) { "input" },
-            ["coding_single"] = new HashSet<string>(StringComparer.Ordinal) { "input" },
-            ["coding_orchestration"] = new HashSet<string>(StringComparer.Ordinal) { "input" },
-            ["coding_multi"] = new HashSet<string>(StringComparer.Ordinal) { "input" },
-            ["routine_run"] = new HashSet<string>(StringComparer.Ordinal) { "task" },
-            ["memory_search"] = new HashSet<string>(StringComparer.Ordinal) { "query" },
-            ["web_search"] = new HashSet<string>(StringComparer.Ordinal) { "query" },
-            ["file_write"] = new HashSet<string>(StringComparer.Ordinal) { "content" },
-            ["session_send"] = new HashSet<string>(StringComparer.Ordinal) { "message" },
-            ["telegram_stub"] = new HashSet<string>(StringComparer.Ordinal) { "text" }
-        };
     private static readonly IReadOnlyDictionary<string, string> LogicImplicitMainInputPortByType =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -225,7 +153,7 @@ public sealed partial class CommandService
         {
             return new LogicGraphActionResult(false, $"작업 흐름 형식을 정리하는 중 오류가 났습니다: {ex.Message}", null, parsedGraph);
         }
-        var validation = ValidateLogicGraph(normalizedGraph);
+        var validation = LogicGraphValidationPolicy.Validate(normalizedGraph);
         if (!validation.Ok)
         {
             return new LogicGraphActionResult(false, validation.Message, null, normalizedGraph);
@@ -278,8 +206,8 @@ public sealed partial class CommandService
             routine.Language = LogicGraphExecutionMode;
             routine.Code = string.Empty;
             routine.Planner = "logic_graph";
-            routine.PlannerModel = LogicGraphSchemaVersion;
-            routine.CoderModel = LogicGraphSchemaVersion;
+            routine.PlannerModel = LogicGraphValidationPolicy.SchemaVersion;
+            routine.CoderModel = LogicGraphValidationPolicy.SchemaVersion;
             routine.NotifyTelegram = false;
             routine.NotifyPolicy = "never";
             routine.MaxRetries = 0;
@@ -581,7 +509,7 @@ public sealed partial class CommandService
                 new UTF8Encoding(false)
             );
 
-            var validation = ValidateLogicGraph(graph);
+            var validation = LogicGraphValidationPolicy.Validate(graph);
             if (!validation.Ok)
             {
                 status = "error";
@@ -2156,7 +2084,7 @@ public sealed partial class CommandService
 
         foreach (var edge in incomingEdges ?? Array.Empty<LogicEdgeDefinition>())
         {
-            var targetPort = NormalizeLogicPort(edge.TargetPort);
+            var targetPort = LogicGraphValidationPolicy.NormalizePort(edge.TargetPort);
             if (string.Equals(targetPort, "main", StringComparison.Ordinal))
             {
                 continue;
@@ -2179,7 +2107,7 @@ public sealed partial class CommandService
         }
 
         var values = incomingEdges
-            .Where(edge => string.Equals(NormalizeLogicPort(edge.TargetPort), "main", StringComparison.Ordinal))
+            .Where(edge => string.Equals(LogicGraphValidationPolicy.NormalizePort(edge.TargetPort), "main", StringComparison.Ordinal))
             .Select(edge => ResolveLogicEdgeValue(edge, context))
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .ToArray();
@@ -2247,7 +2175,7 @@ public sealed partial class CommandService
             return string.Empty;
         }
 
-        var sourcePort = NormalizeLogicPort(edge.SourcePort);
+        var sourcePort = LogicGraphValidationPolicy.NormalizePort(edge.SourcePort);
         if (string.Equals(sourcePort, "main", StringComparison.Ordinal)
             || string.Equals(sourcePort, "text", StringComparison.Ordinal)
             || string.Equals(sourcePort, "true", StringComparison.Ordinal)
@@ -2298,13 +2226,13 @@ public sealed partial class CommandService
             if (node.Type == "if")
             {
                 var branch = outcome.Branch ?? "false";
-                if (!string.Equals(NormalizeLogicPort(edge.SourcePort), branch, StringComparison.Ordinal))
+                if (!string.Equals(LogicGraphValidationPolicy.NormalizePort(edge.SourcePort), branch, StringComparison.Ordinal))
                 {
                     continue;
                 }
             }
             else if (node.Type != "parallel_split"
-                     && !string.Equals(NormalizeLogicPort(edge.SourcePort), "main", StringComparison.Ordinal))
+                     && !string.Equals(LogicGraphValidationPolicy.NormalizePort(edge.SourcePort), "main", StringComparison.Ordinal))
             {
                 continue;
             }
@@ -2357,13 +2285,7 @@ public sealed partial class CommandService
         IReadOnlyList<LogicEdgeDefinition> edges
     )
     {
-        return edges.Any(edge => !string.Equals(NormalizeLogicPort(edge.TargetPort), "main", StringComparison.Ordinal));
-    }
-
-    private static string NormalizeLogicPort(string? value)
-    {
-        var normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
-        return string.IsNullOrWhiteSpace(normalized) ? "main" : normalized;
+        return edges.Any(edge => !string.Equals(LogicGraphValidationPolicy.NormalizePort(edge.TargetPort), "main", StringComparison.Ordinal));
     }
 
     private static LogicEdgeCondition ResolveLogicCondition(
@@ -2380,7 +2302,7 @@ public sealed partial class CommandService
                 config.TryGetValue("leftRef", out var fallbackLeft) ? fallbackLeft : originalLeft,
                 string.Empty
             ),
-            Operator = NormalizeLogicOperator(FirstNonEmpty(
+            Operator = LogicGraphValidationPolicy.NormalizeOperator(FirstNonEmpty(
                 config.TryGetValue("operator", out var fallbackOperator) ? fallbackOperator : originalOperator,
                 "equals"
             )),
@@ -2482,7 +2404,7 @@ public sealed partial class CommandService
 
     private static bool EvaluateLogicCondition(string left, string? op, string? rightValue)
     {
-        var normalizedOperator = NormalizeLogicOperator(op);
+        var normalizedOperator = LogicGraphValidationPolicy.NormalizeOperator(op);
         var right = rightValue ?? string.Empty;
         return normalizedOperator switch
         {
@@ -2515,28 +2437,6 @@ public sealed partial class CommandService
         }
 
         return leftValue.CompareTo(rightValue);
-    }
-
-    private static string NormalizeLogicOperator(string? value)
-    {
-        var normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
-        return normalized switch
-        {
-            "=" or "==" => "equals",
-            "!=" or "<>" => "not_equals",
-            ">=" => "gte",
-            "<=" => "lte",
-            ">" => "gt",
-            "<" => "lt",
-            "truthy" => "is_truthy",
-            "falsy" => "is_falsy",
-            "notequals" => "not_equals",
-            "startswith" => "starts_with",
-            "endswith" => "ends_with",
-            "notcontains" => "not_contains",
-            _ when LogicSupportedOperators.Contains(normalized) => normalized,
-            _ => "equals"
-        };
     }
 
     private static string BuildLogicConversationTitle(
@@ -2698,7 +2598,7 @@ public sealed partial class CommandService
             GraphId = graphId,
             Title = FirstNonEmpty(input.Title?.Trim(), $"작업 흐름 {DateTimeOffset.UtcNow:MM-dd HH:mm}"),
             Description = (input.Description ?? string.Empty).Trim(),
-            Version = LogicGraphSchemaVersion,
+            Version = LogicGraphValidationPolicy.SchemaVersion,
             Viewport = new LogicViewport
             {
                 X = input.Viewport?.X ?? 0,
@@ -2743,15 +2643,15 @@ public sealed partial class CommandService
                 {
                     EdgeId = FirstNonEmpty(edge.EdgeId?.Trim(), $"edge-{Guid.NewGuid().ToString("N")[..8]}"),
                     SourceNodeId = (edge.SourceNodeId ?? string.Empty).Trim(),
-                    SourcePort = NormalizeLogicPort(edge.SourcePort),
+                    SourcePort = LogicGraphValidationPolicy.NormalizePort(edge.SourcePort),
                     TargetNodeId = (edge.TargetNodeId ?? string.Empty).Trim(),
-                    TargetPort = NormalizeLogicPort(edge.TargetPort),
+                    TargetPort = LogicGraphValidationPolicy.NormalizePort(edge.TargetPort),
                     Condition = edge.Condition == null
                         ? null
                         : new LogicEdgeCondition
                         {
                             LeftRef = (edge.Condition.LeftRef ?? string.Empty).Trim(),
-                            Operator = NormalizeLogicOperator(edge.Condition.Operator),
+                            Operator = LogicGraphValidationPolicy.NormalizeOperator(edge.Condition.Operator),
                             RightValue = edge.Condition.RightValue ?? string.Empty
                         }
                 })
@@ -2781,196 +2681,6 @@ public sealed partial class CommandService
         }
 
         return normalized;
-    }
-
-    private LogicGraphValidationResult ValidateLogicGraph(LogicGraphDefinition graph)
-    {
-        if (!string.Equals(graph.Version, LogicGraphSchemaVersion, StringComparison.Ordinal))
-        {
-            return new LogicGraphValidationResult(false, $"지원하지 않는 그래프 포맷입니다: {graph.Version}");
-        }
-
-        if (graph.Nodes.Count == 0)
-        {
-            return new LogicGraphValidationResult(false, "노드가 비어 있습니다.");
-        }
-
-        var enabledNodes = graph.Nodes.Where(node => node.Enabled).ToArray();
-        if (enabledNodes.Length == 0)
-        {
-            return new LogicGraphValidationResult(false, "활성 노드가 하나 이상 필요합니다.");
-        }
-
-        var duplicatedNodeId = enabledNodes
-            .GroupBy(node => node.NodeId, StringComparer.Ordinal)
-            .FirstOrDefault(group => group.Count() > 1);
-        if (duplicatedNodeId != null)
-        {
-            return new LogicGraphValidationResult(false, $"중복 nodeId가 있습니다: {duplicatedNodeId.Key}");
-        }
-
-        foreach (var node in enabledNodes)
-        {
-            if (!LogicSupportedNodeTypes.Contains(node.Type))
-            {
-                return new LogicGraphValidationResult(false, $"지원하지 않는 노드 타입입니다: {node.Type}");
-            }
-        }
-
-        var startCount = enabledNodes.Count(node => node.Type == "start");
-        if (startCount != 1)
-        {
-            return new LogicGraphValidationResult(false, "start 노드는 정확히 1개여야 합니다.");
-        }
-
-        var endCount = enabledNodes.Count(node => node.Type == "end" || node.Type == "output");
-        if (endCount < 1)
-        {
-            return new LogicGraphValidationResult(false, "end 또는 output 노드가 하나 이상 필요합니다.");
-        }
-
-        var enabledNodeMap = enabledNodes.ToDictionary(node => node.NodeId, node => node, StringComparer.Ordinal);
-        var duplicatedEdgeId = graph.Edges
-            .GroupBy(edge => edge.EdgeId, StringComparer.Ordinal)
-            .FirstOrDefault(group => group.Count() > 1);
-        if (duplicatedEdgeId != null)
-        {
-            return new LogicGraphValidationResult(false, $"중복 edgeId가 있습니다: {duplicatedEdgeId.Key}");
-        }
-
-        var duplicatedInputPort = graph.Edges
-            .GroupBy(edge => $"{edge.TargetNodeId}:{NormalizeLogicPort(edge.TargetPort)}", StringComparer.Ordinal)
-            .FirstOrDefault(group =>
-            {
-                if (group.Count() < 2)
-                {
-                    return false;
-                }
-
-                var sample = group.FirstOrDefault();
-                return sample != null
-                    && enabledNodeMap.TryGetValue(sample.TargetNodeId, out var node)
-                    && node.Type != "parallel_join";
-            });
-        if (duplicatedInputPort != null)
-        {
-            return new LogicGraphValidationResult(false, $"같은 입력 칸에는 연결을 하나만 둘 수 있습니다: {duplicatedInputPort.Key}");
-        }
-
-        foreach (var edge in graph.Edges)
-        {
-            if (!enabledNodeMap.TryGetValue(edge.SourceNodeId, out var sourceNode)
-                || !enabledNodeMap.TryGetValue(edge.TargetNodeId, out var targetNode))
-            {
-                return new LogicGraphValidationResult(false, $"연결이 끊긴 edge가 있습니다: {edge.EdgeId}");
-            }
-
-            if (sourceNode.Type == "end")
-            {
-                return new LogicGraphValidationResult(false, $"end 노드는 outgoing edge를 가질 수 없습니다: {edge.EdgeId}");
-            }
-
-            if (targetNode.Type == "start")
-            {
-                return new LogicGraphValidationResult(false, $"start 노드는 incoming edge를 가질 수 없습니다: {edge.EdgeId}");
-            }
-
-            if (!IsLogicSourcePortValid(sourceNode.Type, edge.SourcePort))
-            {
-                return new LogicGraphValidationResult(false, $"포트 타입이 맞지 않습니다: {edge.EdgeId}");
-            }
-
-            if (!IsLogicTargetPortValid(targetNode.Type, edge.TargetPort))
-            {
-                return new LogicGraphValidationResult(false, $"포트 타입이 맞지 않습니다: {edge.EdgeId}");
-            }
-
-            if (edge.Condition != null)
-            {
-                if (string.IsNullOrWhiteSpace(edge.Condition.LeftRef))
-                {
-                    return new LogicGraphValidationResult(false, $"edge condition leftRef가 필요합니다: {edge.EdgeId}");
-                }
-
-                if (!LogicSupportedOperators.Contains(NormalizeLogicOperator(edge.Condition.Operator)))
-                {
-                    return new LogicGraphValidationResult(false, $"지원하지 않는 edge operator입니다: {edge.EdgeId}");
-                }
-            }
-        }
-
-        foreach (var joinNode in enabledNodes.Where(node => node.Type == "parallel_join"))
-        {
-            var incomingCount = graph.Edges.Count(edge => edge.TargetNodeId == joinNode.NodeId);
-            if (incomingCount < 2)
-            {
-                return new LogicGraphValidationResult(false, $"parallel_join 노드는 선행 노드가 2개 이상이어야 합니다: {joinNode.NodeId}");
-            }
-        }
-
-        if (HasLogicCycle(enabledNodes, graph.Edges.Where(edge =>
-            enabledNodeMap.ContainsKey(edge.SourceNodeId) && enabledNodeMap.ContainsKey(edge.TargetNodeId)).ToArray()))
-        {
-            return new LogicGraphValidationResult(false, "작업 흐름은 순환 없이 이어져야 합니다. 되돌아가는 연결이 있습니다.");
-        }
-
-        return new LogicGraphValidationResult(true, string.Empty);
-    }
-
-    private static bool HasLogicCycle(
-        IReadOnlyList<LogicNodeDefinition> nodes,
-        IReadOnlyList<LogicEdgeDefinition> edges
-    )
-    {
-        var indegree = nodes.ToDictionary(node => node.NodeId, _ => 0, StringComparer.Ordinal);
-        var outgoing = nodes.ToDictionary(node => node.NodeId, _ => new List<string>(), StringComparer.Ordinal);
-        foreach (var edge in edges)
-        {
-            indegree[edge.TargetNodeId] += 1;
-            outgoing[edge.SourceNodeId].Add(edge.TargetNodeId);
-        }
-
-        var queue = new Queue<string>(indegree.Where(pair => pair.Value == 0).Select(pair => pair.Key));
-        var visited = 0;
-        while (queue.Count > 0)
-        {
-            var nodeId = queue.Dequeue();
-            visited += 1;
-            foreach (var targetNodeId in outgoing[nodeId])
-            {
-                indegree[targetNodeId] -= 1;
-                if (indegree[targetNodeId] == 0)
-                {
-                    queue.Enqueue(targetNodeId);
-                }
-            }
-        }
-
-        return visited != nodes.Count;
-    }
-
-    private static bool IsLogicSourcePortValid(string nodeType, string? sourcePort)
-    {
-        var port = NormalizeLogicPort(sourcePort);
-        return nodeType switch
-        {
-            "if" => port is "true" or "false",
-            "parallel_split" => !string.IsNullOrWhiteSpace(port),
-            _ => port == "main"
-        };
-    }
-
-    private static bool IsLogicTargetPortValid(string nodeType, string? targetPort)
-    {
-        var port = NormalizeLogicPort(targetPort);
-        return nodeType switch
-        {
-            "parallel_join" => !string.IsNullOrWhiteSpace(port),
-            "start" => false,
-            _ => port == "main"
-                || (LogicBindableTargetPortsByType.TryGetValue(nodeType, out var allowedPorts)
-                    && allowedPorts.Contains(port))
-        };
     }
 
     private static bool TryBuildLogicScheduleConfig(
