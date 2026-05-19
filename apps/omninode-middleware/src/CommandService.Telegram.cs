@@ -1512,9 +1512,9 @@ public sealed partial class CommandService
                 streamCallback,
                 cancellationToken
             );
-            if (!shouldSkipDriftRecovery && !_context.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(requestText, singleGroq.Text))
+            if (!shouldSkipDriftRecovery && !_context.EnableFastWebPipeline && ChatRetryGuardPolicy.ShouldRetryWithoutHistory(requestText, singleGroq.Text))
             {
-                var historyBypassInput = BuildHistoryBypassInput(providerPrepared.Text);
+                var historyBypassInput = ChatRetryGuardPolicy.BuildHistoryBypassInput(providerPrepared.Text);
                 var recovered = await ExecuteTelegramGroqSingleAsync(
                     requestText,
                     historyBypassInput,
@@ -1524,13 +1524,13 @@ public sealed partial class CommandService
                     cancellationToken
                 );
                 if (!string.IsNullOrWhiteSpace(recovered.Text)
-                    && !ShouldRetrySingleChatWithoutHistory(requestText, recovered.Text))
+                    && !ChatRetryGuardPolicy.ShouldRetryWithoutHistory(requestText, recovered.Text))
                 {
                     singleGroq = recovered;
                 }
                 else
                 {
-                    var originalRequestInput = BuildOriginalRequestRetryInput(requestText);
+                    var originalRequestInput = ChatRetryGuardPolicy.BuildOriginalRequestRetryInput(requestText);
                     var originalRecovered = await ExecuteTelegramGroqSingleAsync(
                         requestText,
                         originalRequestInput,
@@ -1540,9 +1540,9 @@ public sealed partial class CommandService
                         cancellationToken
                     );
                     singleGroq = !string.IsNullOrWhiteSpace(originalRecovered.Text)
-                                 && !ShouldRetrySingleChatWithoutHistory(requestText, originalRecovered.Text)
+                                 && !ChatRetryGuardPolicy.ShouldRetryWithoutHistory(requestText, originalRecovered.Text)
                         ? originalRecovered
-                        : new LlmSingleChatResult(singleGroq.Provider, singleGroq.Model, BuildOffTopicGuardMessage(requestText));
+                        : new LlmSingleChatResult(singleGroq.Provider, singleGroq.Model, ChatRetryGuardPolicy.BuildOffTopicGuardMessage(requestText));
                 }
             }
             var citationBundle = BuildAndLogCitationMappings(
@@ -1610,42 +1610,42 @@ public sealed partial class CommandService
             snapshot.SingleModel,
             "telegram",
             cancellationToken,
-            ResolveSingleChatMaxOutputTokens(requestText),
+            ChatRetryGuardPolicy.ResolveSingleChatMaxOutputTokens(requestText),
             streamCallback
         );
-        if (!shouldSkipDriftRecovery && !_context.EnableFastWebPipeline && ShouldRetrySingleChatWithoutHistory(requestText, single.Text))
+        if (!shouldSkipDriftRecovery && !_context.EnableFastWebPipeline && ChatRetryGuardPolicy.ShouldRetryWithoutHistory(requestText, single.Text))
         {
-            var historyBypassInput = BuildHistoryBypassInput(providerInput.Text);
+            var historyBypassInput = ChatRetryGuardPolicy.BuildHistoryBypassInput(providerInput.Text);
             var recovered = await ChatSingleAsync(
                 historyBypassInput,
                 snapshot.SingleProvider,
                 snapshot.SingleModel,
                 "telegram",
                 cancellationToken,
-                ResolveSingleChatMaxOutputTokens(requestText),
+                ChatRetryGuardPolicy.ResolveSingleChatMaxOutputTokens(requestText),
                 streamCallback
             );
             if (!string.IsNullOrWhiteSpace(recovered.Text)
-                && !ShouldRetrySingleChatWithoutHistory(requestText, recovered.Text))
+                && !ChatRetryGuardPolicy.ShouldRetryWithoutHistory(requestText, recovered.Text))
             {
                 single = recovered;
             }
             else
             {
-                var originalRequestInput = BuildOriginalRequestRetryInput(requestText);
+                var originalRequestInput = ChatRetryGuardPolicy.BuildOriginalRequestRetryInput(requestText);
                 var originalRecovered = await ChatSingleAsync(
                     originalRequestInput,
                     snapshot.SingleProvider,
                     snapshot.SingleModel,
                     "telegram",
                     cancellationToken,
-                    ResolveSingleChatMaxOutputTokens(requestText),
+                    ChatRetryGuardPolicy.ResolveSingleChatMaxOutputTokens(requestText),
                     streamCallback
                 );
                 single = !string.IsNullOrWhiteSpace(originalRecovered.Text)
-                         && !ShouldRetrySingleChatWithoutHistory(requestText, originalRecovered.Text)
+                         && !ChatRetryGuardPolicy.ShouldRetryWithoutHistory(requestText, originalRecovered.Text)
                     ? originalRecovered
-                    : new LlmSingleChatResult(single.Provider, single.Model, BuildOffTopicGuardMessage(requestText));
+                    : new LlmSingleChatResult(single.Provider, single.Model, ChatRetryGuardPolicy.BuildOffTopicGuardMessage(requestText));
             }
         }
         var singleCitationBundle = BuildAndLogCitationMappings(

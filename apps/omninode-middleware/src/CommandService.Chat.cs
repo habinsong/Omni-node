@@ -444,7 +444,7 @@ public sealed partial class CommandService
             );
         }
 
-        var singleMaxOutputTokens = ResolveSingleChatMaxOutputTokens(rawInput);
+        var singleMaxOutputTokens = ChatRetryGuardPolicy.ResolveSingleChatMaxOutputTokens(rawInput);
         var effectiveSingleToken = singleRequestToken;
         var singleGenerationProvider = requestedProvider;
         var singleGenerationModel = resolvedModel;
@@ -538,13 +538,13 @@ public sealed partial class CommandService
         // 모델이 history 기반으로 정상 follow-up 답변했는데도 off-topic으로 오인해
         // history 없이 재시도하는 악순환 방지.
         var hadHistoryContext = contextualInput.Contains("[최근 대화]");
-        if (!hadHistoryContext && ShouldRetrySingleChatWithoutHistory(rawInput, generated.Text))
+        if (!hadHistoryContext && ChatRetryGuardPolicy.ShouldRetryWithoutHistory(rawInput, generated.Text))
         {
-            var historyBypassInput = BuildHistoryBypassInput(preparedInput.Text);
+            var historyBypassInput = ChatRetryGuardPolicy.BuildHistoryBypassInput(preparedInput.Text);
             var recovered = await GenerateSingleAsync(historyBypassInput, effectiveSingleToken);
             if (!string.IsNullOrWhiteSpace(recovered.Text))
             {
-                var recoveredStillDrift = ShouldRetrySingleChatWithoutHistory(rawInput, recovered.Text);
+                var recoveredStillDrift = ChatRetryGuardPolicy.ShouldRetryWithoutHistory(rawInput, recovered.Text);
                 _auditLogger.Log(
                     request.Source,
                     "chat_single_history_recovery",
@@ -557,10 +557,10 @@ public sealed partial class CommandService
                 }
                 else
                 {
-                    var originalRequestInput = BuildOriginalRequestRetryInput(rawInput);
+                    var originalRequestInput = ChatRetryGuardPolicy.BuildOriginalRequestRetryInput(rawInput);
                     var originalRecovered = await GenerateSingleAsync(originalRequestInput, effectiveSingleToken);
                     if (!string.IsNullOrWhiteSpace(originalRecovered.Text)
-                        && !ShouldRetrySingleChatWithoutHistory(rawInput, originalRecovered.Text))
+                        && !ChatRetryGuardPolicy.ShouldRetryWithoutHistory(rawInput, originalRecovered.Text))
                     {
                         _auditLogger.Log(
                             request.Source,
@@ -572,7 +572,7 @@ public sealed partial class CommandService
                     }
                     else
                     {
-                        var guardText = BuildOffTopicGuardMessage(rawInput);
+                        var guardText = ChatRetryGuardPolicy.BuildOffTopicGuardMessage(rawInput);
                         generated = new LlmSingleChatResult(
                             generated.Provider,
                             generated.Model,
@@ -590,10 +590,10 @@ public sealed partial class CommandService
                     "skip",
                     $"provider={requestedProvider} model={resolvedModel} empty_recovered_text=true"
                 );
-                var originalRequestInput = BuildOriginalRequestRetryInput(rawInput);
+                var originalRequestInput = ChatRetryGuardPolicy.BuildOriginalRequestRetryInput(rawInput);
                 var originalRecovered = await GenerateSingleAsync(originalRequestInput, effectiveSingleToken);
                 if (!string.IsNullOrWhiteSpace(originalRecovered.Text)
-                    && !ShouldRetrySingleChatWithoutHistory(rawInput, originalRecovered.Text))
+                    && !ChatRetryGuardPolicy.ShouldRetryWithoutHistory(rawInput, originalRecovered.Text))
                 {
                     _auditLogger.Log(
                         request.Source,
@@ -605,7 +605,7 @@ public sealed partial class CommandService
                 }
                 else
                 {
-                    var guardText = BuildOffTopicGuardMessage(rawInput);
+                    var guardText = ChatRetryGuardPolicy.BuildOffTopicGuardMessage(rawInput);
                     generated = new LlmSingleChatResult(
                         generated.Provider,
                         generated.Model,
@@ -657,114 +657,12 @@ public sealed partial class CommandService
         );
     }
 
-    private static bool ShouldRetrySingleChatWithoutHistory(string input, string output)
-    {
-        var normalizedInput = (input ?? string.Empty).Trim().ToLowerInvariant();
-        var normalizedOutput = (output ?? string.Empty).Trim().ToLowerInvariant();
-        if (normalizedInput.Length == 0 || normalizedOutput.Length == 0)
-        {
-            return false;
-        }
-
-        var isNewsRequest = ContainsAny(normalizedInput, "뉴스", "news", "헤드라인", "속보", "브리핑");
-        if (isNewsRequest)
-        {
-            return false;
-        }
-
-        var looksLikeNewsAnswer = ContainsAny(
-            normalizedOutput,
-            "요청하신 소식",
-            "주요 뉴스",
-            "뉴스 10건",
-            "뉴스 5건",
-            "오늘 주요 뉴스",
-            "no.1 제목"
-        );
-        if (!looksLikeNewsAnswer)
-        {
-            return LooksLikeOffTopicModelExplanation(normalizedInput, normalizedOutput)
-                || LooksLikeUnrequestedP2SAnswer(normalizedInput, normalizedOutput);
-        }
-
-        var asksLlmPricing = ContainsAny(
-            normalizedInput,
-            "llm",
-            "large language model",
-            "언어 모델",
-            "컨텍스트",
-            "context window",
-            "토큰",
-            "api",
-            "비용",
-            "가격",
-            "요금"
-        );
-        var hasLlmPricingSignalsInOutput = ContainsAny(
-            normalizedOutput,
-            "llm",
-            "언어 모델",
-            "컨텍스트",
-            "context window",
-            "토큰",
-            "api",
-            "비용",
-            "가격",
-            "요금"
-        );
-        if (asksLlmPricing && !hasLlmPricingSignalsInOutput)
-        {
-            return true;
-        }
-
-        return true;
-    }
-
-    private static bool LooksLikeOffTopicModelExplanation(string normalizedInput, string normalizedOutput)
-    {
-        if (!ContainsAny(normalizedInput, "gpt-oss", "gpt oss", "gpt_oss", "gptoss"))
-        {
-            return false;
-        }
-
-        return !ContainsAny(
-            normalizedOutput,
-            "gpt-oss",
-            "gpt oss",
-            "openai",
-            "llm",
-            "언어 모델",
-            "오픈 웨이트",
-            "open weight",
-            "moe",
-            "mixture-of-experts",
-            "120b");
-    }
-
-    private static bool LooksLikeUnrequestedP2SAnswer(string normalizedInput, string normalizedOutput)
-    {
-        if (ContainsAny(normalizedInput, "p2s", "print-to-shape", "3d 프린팅", "3d printing"))
-        {
-            return false;
-        }
-
-        return ContainsAny(normalizedOutput, "p2s", "print-to-shape", "3d 프린팅", "3d printing");
-    }
-
-    private static string BuildOffTopicGuardMessage(string input)
-    {
-        var normalized = (input ?? string.Empty).Trim();
-        return string.IsNullOrWhiteSpace(normalized)
-            ? "모델 응답이 요청과 맞지 않아 답변을 중단했습니다. 다시 질문해 주세요."
-            : $"모델 응답이 새 요청과 맞지 않아 답변을 중단했습니다. 원문 요청: {normalized}";
-    }
-
     private string ResolveContextualWebLookupInput(string conversationId, string input)
     {
         var normalized = (input ?? string.Empty).Trim();
         // 모호한 lookup ("찾아봐") 외에도 짧은 follow-up 입력에는 직전 user/assistant turn 을 함께 묶어 보낸다.
         // 그래야 grounded web 모델이 "잘 돌아가나?" "이 환경에서?" 같은 anaphoric 질문의 대상을 알 수 있다.
-        var needsContextEnrichment = LooksLikeVagueWebLookupRequest(normalized)
+        var needsContextEnrichment = ChatRetryGuardPolicy.LooksLikeVagueWebLookupRequest(normalized)
                                      || (normalized.Length <= 60);
         if (!needsContextEnrichment)
         {
@@ -826,104 +724,6 @@ public sealed partial class CommandService
         return sb.ToString();
     }
 
-    private static bool LooksLikeVagueWebLookupRequest(string input)
-    {
-        var normalized = Regex.Replace((input ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
-        if (normalized.Length == 0 || normalized.Length > 40)
-        {
-            return false;
-        }
-
-        return ContainsAny(
-            normalized,
-            "웹검색해서 찾아",
-            "웹 검색해서 찾아",
-            "웹검색해",
-            "웹 검색해",
-            "검색해서 찾아",
-            "찾아봐",
-            "찾아 줘",
-            "찾아줘",
-            "검색해봐",
-            "검색해 줘",
-            "검색해줘",
-            "look it up",
-            "search it");
-    }
-
-    private static int ResolveSingleChatMaxOutputTokens(string input)
-    {
-        var normalized = (input ?? string.Empty).Trim().ToLowerInvariant();
-        if (normalized.Length == 0)
-        {
-            return 4096;
-        }
-
-        if (ContainsAny(
-                normalized,
-                "자세",
-                "상세",
-                "깊게",
-                "설명",
-                "가이드",
-                "분석",
-                "원리",
-                "기술",
-                "비전공자",
-                "non-expert",
-                "explain"))
-        {
-            return 4096;
-        }
-
-        if (LooksLikeListOutputRequest(normalized))
-        {
-            return 3072;
-        }
-
-        if (ContainsAny(normalized, "요약", "정리", "summary", "compare", "비교"))
-        {
-            return 2048;
-        }
-
-        return 3072;
-    }
-
-    private static string BuildHistoryBypassInput(string preparedInput)
-    {
-        var normalized = (preparedInput ?? string.Empty).Trim();
-        if (normalized.Length == 0)
-        {
-            return string.Empty;
-        }
-
-        return $"""
-                [중요]
-                아래 새 요청을 최우선으로 처리하세요.
-                이전 대화의 형식을 관성으로 따라가지 말고, 새 요청 주제에만 답변하세요.
-
-                [새 요청]
-                {normalized}
-                """;
-    }
-
-    private static string BuildOriginalRequestRetryInput(string rawInput)
-    {
-        var normalized = (rawInput ?? string.Empty).Trim();
-        if (normalized.Length == 0)
-        {
-            return string.Empty;
-        }
-
-        return $"""
-                [중요]
-                아래 원문 요청만 다시 처리하세요.
-                이전 대화의 형식을 관성으로 따라가지 말고, 새 요청 주제에만 답변하세요.
-
-                [원문 요청]
-                {normalized}
-                """;
-    }
 
     // 이번 턴에 실제로 적용될 스킬 이름. UI/인라인 지정이 있으면 그것, 아니면 thread sticky.
     // Think+ 컨텍스트가 활성 스킬 톤을 인지하도록 활용된다.

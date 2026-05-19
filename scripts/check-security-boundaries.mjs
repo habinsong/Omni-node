@@ -161,6 +161,8 @@ const commandServiceCodingQuality = read("apps/omninode-middleware/src/CommandSe
 const searchAnswerFormatterPolicy = read("apps/omninode-middleware/src/Infrastructure/Search/SearchAnswerFormatterPolicy.cs");
 const commandServiceSearchPipeline = read("apps/omninode-middleware/src/CommandService.SearchPipeline.cs");
 const commandServiceCitations = read("apps/omninode-middleware/src/CommandService.Citations.cs");
+const chatRetryGuardPolicy = read("apps/omninode-middleware/src/ChatRetryGuardPolicy.cs");
+const commandServiceChat = read("apps/omninode-middleware/src/CommandService.Chat.cs");
 const planningPromptPolicy = read("apps/omninode-middleware/src/PlanningPromptPolicy.cs");
 const routerIntentClassifier = read("apps/omninode-middleware/src/RouterIntentClassifier.cs");
 const chatStreamingContinuation = read("apps/omninode-middleware/src/ChatStreamingContinuation.cs");
@@ -773,5 +775,24 @@ assertNotIncludes(commandServiceSearchPipeline, "private static string EnsureRea
 assertNotIncludes(commandServiceSearchPipeline, "private static string NormalizeGeminiWebNumberedListResponse(", "search pipeline no longer owns numbered list wrapper");
 assertNotIncludes(commandServiceSearchPipeline, "private static string ConvertDelimitedPlainTextTableToMarkdown(", "search pipeline no longer owns dead table conversion wrapper");
 assertNotIncludes(commandServiceSearchPipeline, "private static string SanitizeTableCell(", "search pipeline no longer owns table cell wrapper");
+assertIncludes(chatRetryGuardPolicy, "ShouldRetryWithoutHistory", "chat retry guard policy owns retry decision");
+assertIncludes(chatRetryGuardPolicy, "LooksLikeOffTopicModelExplanation", "chat retry guard policy owns off-topic explanation heuristic");
+assertIncludes(chatRetryGuardPolicy, "LooksLikeUnrequestedP2SAnswer", "chat retry guard policy owns unrequested P2S heuristic");
+assertIncludes(chatRetryGuardPolicy, "BuildOffTopicGuardMessage", "chat retry guard policy owns guard message builder");
+assertIncludes(chatRetryGuardPolicy, "LooksLikeVagueWebLookupRequest", "chat retry guard policy owns vague lookup heuristic");
+assertIncludes(chatRetryGuardPolicy, "ResolveSingleChatMaxOutputTokens", "chat retry guard policy owns single chat max output resolver");
+assertIncludes(chatRetryGuardPolicy, "BuildHistoryBypassInput", "chat retry guard policy owns history bypass builder");
+assertIncludes(chatRetryGuardPolicy, "BuildOriginalRequestRetryInput", "chat retry guard policy owns original request retry builder");
+assertIncludes(commandServiceChat, "ChatRetryGuardPolicy.ShouldRetryWithoutHistory", "chat partial delegates retry decision to guard policy");
+assertIncludes(commandServiceChat, "ChatRetryGuardPolicy.ResolveSingleChatMaxOutputTokens", "chat partial delegates max output resolver to guard policy");
+assertIncludes(commandServiceTelegram, "ChatRetryGuardPolicy.ShouldRetryWithoutHistory", "telegram partial delegates retry decision to guard policy");
+assertNotIncludes(commandServiceChat, "private static bool ShouldRetrySingleChatWithoutHistory(", "chat partial no longer owns retry decision");
+assertNotIncludes(commandServiceChat, "private static bool LooksLikeOffTopicModelExplanation(", "chat partial no longer owns off-topic explanation heuristic");
+assertNotIncludes(commandServiceChat, "private static bool LooksLikeUnrequestedP2SAnswer(", "chat partial no longer owns unrequested P2S heuristic");
+assertNotIncludes(commandServiceChat, "private static string BuildOffTopicGuardMessage(", "chat partial no longer owns guard message builder");
+assertNotIncludes(commandServiceChat, "private static bool LooksLikeVagueWebLookupRequest(", "chat partial no longer owns vague lookup heuristic");
+assertNotIncludes(commandServiceChat, "private static int ResolveSingleChatMaxOutputTokens(", "chat partial no longer owns single chat max output resolver");
+assertNotIncludes(commandServiceChat, "private static string BuildHistoryBypassInput(", "chat partial no longer owns history bypass builder");
+assertNotIncludes(commandServiceChat, "private static string BuildOriginalRequestRetryInput(", "chat partial no longer owns original request retry builder");
 
 console.log(JSON.stringify({ ok: true, assertions: assertionCount }, null, 2));
