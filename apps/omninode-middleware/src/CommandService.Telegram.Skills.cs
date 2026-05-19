@@ -402,7 +402,7 @@ public sealed partial class CommandService
             }
         }
 
-        if (LooksLikeLocalSkillInventoryQuestion(normalized, compact))
+        if (LocalAssistantQuestionPolicy.LooksLikeSkillInventoryQuestion(normalized, compact))
         {
             return Task.FromResult<string?>(BuildLocalSkillInventoryResponse());
         }
@@ -436,7 +436,7 @@ public sealed partial class CommandService
                다음 메시지부터 이 스킬 지침을 우선 적용합니다.
 
                - 범위: {skill.Scope}
-               - 설명: {TrimLocalAssistantInfoText(skill.Description, 120)}
+               - 설명: {LocalAssistantQuestionPolicy.TrimAssistantInfoText(skill.Description, 120)}
                - 해제: /skill off
                """;
     }
@@ -474,7 +474,7 @@ public sealed partial class CommandService
             $"""
             🎯 활성 스킬: `{skill.Name}`
             - 범위: {skill.Scope}
-            - 설명: {TrimLocalAssistantInfoText(skill.Description, 160)}
+            - 설명: {LocalAssistantQuestionPolicy.TrimAssistantInfoText(skill.Description, 160)}
             - 해제: /skill off
             - 다른 스킬로 전환: /skill use <name>
             """,
@@ -505,7 +505,7 @@ public sealed partial class CommandService
             return $"스킬 불러오기 실패: {result.Error}";
         }
 
-        var body = TrimToUtf8ByteCount((result.Body ?? string.Empty).Trim(), 2300);
+        var body = LocalAssistantQuestionPolicy.TrimToUtf8ByteCount((result.Body ?? string.Empty).Trim(), 2300);
         if (string.IsNullOrWhiteSpace(body))
         {
             body = "(본문 없음)";
@@ -515,7 +515,7 @@ public sealed partial class CommandService
                [스킬]
                - 이름: {result.Name}
                - 범위: {result.Scope}
-               - 설명: {TrimLocalAssistantInfoText(result.Description, 180)}
+               - 설명: {LocalAssistantQuestionPolicy.TrimAssistantInfoText(result.Description, 180)}
                - 경로: {RelativizeSkillPathForTelegram(result.Path)}
 
                [SKILL.md]

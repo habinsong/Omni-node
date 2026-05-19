@@ -745,51 +745,6 @@ public sealed partial class CommandService
             : null;
     }
 
-    // 단어 경계 기반으로 한 스킬 이름이 텍스트 안에 등장하는 첫 인덱스를 찾는다. 매칭은 영문/숫자/_/- 외 문자(공백·구두점·CJK)에 둘러싸여야 한다.
-    // 짧은 이름(예: "ai")이 일반 영단어("aim")의 부분 문자열로 매칭되는 false-positive를 막는다.
-    private static int IndexOfSkillNameWithBoundary(string text, string skillName)
-    {
-        if (string.IsNullOrEmpty(text) || string.IsNullOrWhiteSpace(skillName))
-        {
-            return -1;
-        }
-
-        var startSearch = 0;
-        while (startSearch <= text.Length - skillName.Length)
-        {
-            var idx = text.IndexOf(skillName, startSearch, StringComparison.OrdinalIgnoreCase);
-            if (idx < 0)
-            {
-                return -1;
-            }
-
-            var leftOk = idx == 0 || !IsSkillNameBoundaryInside(text[idx - 1]);
-            var rightIdx = idx + skillName.Length;
-            var rightOk = rightIdx >= text.Length || !IsSkillNameBoundaryInside(text[rightIdx]);
-            if (leftOk && rightOk)
-            {
-                return idx;
-            }
-
-            startSearch = idx + 1;
-        }
-
-        return -1;
-    }
-
-    private static bool IsSkillNameBoundaryInside(char c)
-    {
-        // 스킬 이름 토큰 내부 문자로 간주하는 집합. ASCII 영숫자, '-', '_'.
-        if (c == '-' || c == '_')
-        {
-            return true;
-        }
-
-        return (c >= 'a' && c <= 'z')
-               || (c >= 'A' && c <= 'Z')
-               || (c >= '0' && c <= '9');
-    }
-
     // 프롬프트 안에서 언급된 모든 스킬을 길이순으로 탐지.
     // 매칭된 부분은 마스킹해 한 스킬 이름이 다른 스킬 이름의 부분 문자열일 때 중복 카운트되지 않게 한다.
     // 단어 경계 검사로 짧은 스킬 이름이 일반 텍스트에 묻어 들어가는 false-positive를 차단.
@@ -813,7 +768,7 @@ public sealed partial class CommandService
                     continue;
                 }
 
-                var idx = IndexOfSkillNameWithBoundary(working.ToString(), skill.Name);
+                var idx = LocalAssistantQuestionPolicy.IndexOfSkillNameWithBoundary(working.ToString(), skill.Name);
                 if (idx < 0)
                 {
                     continue;
@@ -945,22 +900,22 @@ public sealed partial class CommandService
             return null;
         }
 
-        if (LooksLikeLocalSkillInventoryQuestion(normalized, compact))
+        if (LocalAssistantQuestionPolicy.LooksLikeSkillInventoryQuestion(normalized, compact))
         {
             return BuildLocalSkillInventoryResponse();
         }
 
-        if (LooksLikeLocalLimitationQuestion(normalized, compact))
+        if (LocalAssistantQuestionPolicy.LooksLikeLimitationQuestion(normalized, compact))
         {
             return BuildLocalLimitationResponse();
         }
 
-        if (LooksLikeLocalCapabilityQuestion(normalized, compact))
+        if (LocalAssistantQuestionPolicy.LooksLikeCapabilityQuestion(normalized, compact))
         {
             return BuildLocalCapabilityResponse();
         }
 
-        if (LooksLikeLocalIdentityQuestion(normalized, compact))
+        if (LocalAssistantQuestionPolicy.LooksLikeIdentityQuestion(normalized, compact))
         {
             return BuildLocalIdentityResponse();
         }
@@ -1061,7 +1016,7 @@ public sealed partial class CommandService
                 다음 메시지부터 이 스킬 지침을 계속 우선 적용합니다.
 
                 - 스킬: {matchedSkill.Name}
-                - 설명: {TrimLocalAssistantInfoText(matchedSkill.Description, 120)}
+                - 설명: {LocalAssistantQuestionPolicy.TrimAssistantInfoText(matchedSkill.Description, 120)}
                 - 해제: "스킬 해제" 또는 "스킬 중지"
                 """;
     }
@@ -1090,149 +1045,6 @@ public sealed partial class CommandService
         }
 
         return "현재 대화에 활성화된 스킬이 없습니다.";
-    }
-
-    private static bool LooksLikeLocalSkillInventoryQuestion(string normalized, string compact)
-    {
-        var hasSkillKeyword = ContainsAny(normalized, "스킬", "skill", "skills", "skill.md")
-                              || compact.Contains("스킬", StringComparison.Ordinal)
-                              || compact.Contains("skill", StringComparison.Ordinal);
-        if (!hasSkillKeyword)
-        {
-            return false;
-        }
-
-        // 인벤토리 질문은 "스킬"과 의문/목록 표지어가 가까이 붙어 있어야 한다.
-        // 예) "어떤 스킬 있어?", "스킬 목록 보여줘", "스킬이 뭐 있어"
-        // "eli5 스킬을 사용해서 디지털 카메라 원리 말해줘" 처럼 다른 단어로 분리되면 인벤토리가 아니다.
-        var inventoryMarker = @"(뭐|무엇|무슨|어떤|어떠한|어떻|종류|목록|리스트|보여|알려|available|list)";
-        var skillToken = @"(스킬|skill|skills|skill\.md)";
-        var particle = @"(을|를|이|가|은|는|에|의|에는|들|들이|들은|들을)?";
-
-        if (Regex.IsMatch(normalized, $@"(?i){skillToken}\s*{particle}\s*{inventoryMarker}"))
-        {
-            return true;
-        }
-        if (Regex.IsMatch(normalized, $@"(?i){inventoryMarker}\s*{skillToken}"))
-        {
-            return true;
-        }
-        if (Regex.IsMatch(normalized, $@"(?i){skillToken}\s*{particle}\s*(있|가지고|사용\s*가능)"))
-        {
-            return true;
-        }
-
-        // 띄어쓰기가 없는 합성형 (e.g. "스킬뭐있어", "어떤스킬")
-        var compactPatterns = new[]
-        {
-            "스킬뭐", "스킬어떤", "스킬어떠", "스킬어떻", "스킬무슨", "스킬무엇",
-            "스킬목록", "스킬리스트", "스킬종류", "스킬보여", "스킬알려",
-            "스킬있", "스킬가지고", "스킬사용가능",
-            "어떤스킬", "어떠한스킬", "어떻스킬", "무슨스킬", "무엇스킬",
-            "skill뭐", "skill어떤", "skill목록", "skill리스트",
-        };
-        foreach (var pattern in compactPatterns)
-        {
-            if (compact.Contains(pattern, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool LooksLikeLocalLimitationQuestion(string normalized, string compact)
-    {
-        var asksAssistant = ContainsAny(
-            normalized,
-            "너",
-            "넌",
-            "네가",
-            "니가",
-            "당신",
-            "어시스턴트",
-            "ai",
-            "봇",
-            "omni",
-            "옴니");
-        if (!asksAssistant)
-        {
-            return false;
-        }
-
-        return ContainsAny(
-            normalized,
-            "할 수 없는",
-            "할수 없는",
-            "못 하는",
-            "못하는",
-            "못 해",
-            "못해",
-            "한계",
-            "제한",
-            "limitations",
-            "cannot")
-            || compact.Contains("할수없는", StringComparison.Ordinal)
-            || compact.Contains("할수없", StringComparison.Ordinal);
-    }
-
-    private static bool LooksLikeLocalCapabilityQuestion(string normalized, string compact)
-    {
-        var asksAssistant = ContainsAny(
-            normalized,
-            "너",
-            "넌",
-            "네가",
-            "니가",
-            "당신",
-            "어시스턴트",
-            "ai",
-            "봇",
-            "omni",
-            "옴니");
-        if (!asksAssistant)
-        {
-            return false;
-        }
-
-        return ContainsAny(
-            normalized,
-            "할 수",
-            "할수",
-            "뭘 할",
-            "뭐 할",
-            "무엇을 할",
-            "기능",
-            "도움",
-            "가능",
-            "능력",
-            "capability",
-            "capabilities")
-            || compact.Contains("할수있는", StringComparison.Ordinal)
-            || compact.Contains("할수있", StringComparison.Ordinal);
-    }
-
-    private static bool LooksLikeLocalIdentityQuestion(string normalized, string compact)
-    {
-        return ContainsAny(
-            normalized,
-            "너는 누구",
-            "넌 누구",
-            "너 누구",
-            "너가 누구",
-            "네가 누구",
-            "니가 누구",
-            "당신은 누구",
-            "당신 누구",
-            "정체",
-            "자기소개",
-            "who are you")
-            || compact.Contains("너는누구", StringComparison.Ordinal)
-            || compact.Contains("넌누구", StringComparison.Ordinal)
-            || compact.Contains("너누구", StringComparison.Ordinal)
-            || compact.Contains("너뭐야", StringComparison.Ordinal)
-            || compact.Contains("넌뭐야", StringComparison.Ordinal);
     }
 
     private string BuildLocalIdentityResponse()
@@ -1350,7 +1162,7 @@ public sealed partial class CommandService
             builder.AppendLine($"{title}:");
             foreach (var skill in group)
             {
-                builder.AppendLine($"- {skill.Name}: {TrimLocalAssistantInfoText(skill.Description, 96)}");
+                builder.AppendLine($"- {skill.Name}: {LocalAssistantQuestionPolicy.TrimAssistantInfoText(skill.Description, 96)}");
                 emitted++;
             }
         }
@@ -1393,7 +1205,7 @@ public sealed partial class CommandService
             }
 
             var raw = File.ReadAllText(skill.Path, Encoding.UTF8);
-            var trimmedSkill = TrimToUtf8ByteCount(raw.Trim(), 12_000);
+            var trimmedSkill = LocalAssistantQuestionPolicy.TrimToUtf8ByteCount(raw.Trim(), 12_000);
             if (string.IsNullOrWhiteSpace(trimmedSkill))
             {
                 return safeInput;
@@ -1432,7 +1244,7 @@ public sealed partial class CommandService
             return snapshot.Skills
                 .OrderByDescending(skill => skill.Name.Length)
                 .FirstOrDefault(skill =>
-                    IndexOfSkillNameWithBoundary(normalized, skill.Name) >= 0
+                    LocalAssistantQuestionPolicy.IndexOfSkillNameWithBoundary(normalized, skill.Name) >= 0
                     && Regex.IsMatch(
                         normalized,
                         $@"(?i){Regex.Escape(skill.Name)}\s*(스킬|skill)?\s*(을|를)?\s*(사용|적용|활성|켜|on)"
@@ -1442,59 +1254,6 @@ public sealed partial class CommandService
         {
             return null;
         }
-    }
-
-    private static string FirstNonEmptyLocal(params string?[] values)
-    {
-        foreach (var value in values)
-        {
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                return value.Trim();
-            }
-        }
-
-        return string.Empty;
-    }
-
-    private static string TrimLocalAssistantInfoText(string text, int maxChars)
-    {
-        var normalized = Regex.Replace((text ?? string.Empty).Trim(), @"\s+", " ");
-        if (normalized.Length <= maxChars)
-        {
-            return string.IsNullOrWhiteSpace(normalized) ? "설명이 없습니다." : normalized;
-        }
-
-        return normalized[..maxChars].TrimEnd() + "...";
-    }
-
-    private static string TrimToUtf8ByteCount(string value, int maxBytes)
-    {
-        if (string.IsNullOrEmpty(value) || maxBytes <= 0)
-        {
-            return string.Empty;
-        }
-
-        if (Encoding.UTF8.GetByteCount(value) <= maxBytes)
-        {
-            return value;
-        }
-
-        var builder = new StringBuilder(value.Length);
-        var used = 0;
-        foreach (var rune in value.EnumerateRunes())
-        {
-            var bytes = rune.Utf8SequenceLength;
-            if (used + bytes > maxBytes)
-            {
-                break;
-            }
-
-            builder.Append(rune);
-            used += bytes;
-        }
-
-        return builder.ToString();
     }
 
     private async Task<ConversationChatResult> ChatOrchestrationWithStateCoreAsync(

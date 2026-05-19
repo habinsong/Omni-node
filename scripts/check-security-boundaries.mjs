@@ -163,6 +163,8 @@ const commandServiceSearchPipeline = read("apps/omninode-middleware/src/CommandS
 const commandServiceCitations = read("apps/omninode-middleware/src/CommandService.Citations.cs");
 const chatRetryGuardPolicy = read("apps/omninode-middleware/src/ChatRetryGuardPolicy.cs");
 const commandServiceChat = read("apps/omninode-middleware/src/CommandService.Chat.cs");
+const localAssistantQuestionPolicy = read("apps/omninode-middleware/src/LocalAssistantQuestionPolicy.cs");
+const commandServiceTelegramSkills = read("apps/omninode-middleware/src/CommandService.Telegram.Skills.cs");
 const planningPromptPolicy = read("apps/omninode-middleware/src/PlanningPromptPolicy.cs");
 const routerIntentClassifier = read("apps/omninode-middleware/src/RouterIntentClassifier.cs");
 const chatStreamingContinuation = read("apps/omninode-middleware/src/ChatStreamingContinuation.cs");
@@ -794,5 +796,26 @@ assertNotIncludes(commandServiceChat, "private static bool LooksLikeVagueWebLook
 assertNotIncludes(commandServiceChat, "private static int ResolveSingleChatMaxOutputTokens(", "chat partial no longer owns single chat max output resolver");
 assertNotIncludes(commandServiceChat, "private static string BuildHistoryBypassInput(", "chat partial no longer owns history bypass builder");
 assertNotIncludes(commandServiceChat, "private static string BuildOriginalRequestRetryInput(", "chat partial no longer owns original request retry builder");
+assertIncludes(localAssistantQuestionPolicy, "LooksLikeSkillInventoryQuestion", "local assistant policy owns skill inventory detector");
+assertIncludes(localAssistantQuestionPolicy, "LooksLikeLimitationQuestion", "local assistant policy owns limitation detector");
+assertIncludes(localAssistantQuestionPolicy, "LooksLikeCapabilityQuestion", "local assistant policy owns capability detector");
+assertIncludes(localAssistantQuestionPolicy, "LooksLikeIdentityQuestion", "local assistant policy owns identity detector");
+assertIncludes(localAssistantQuestionPolicy, "IndexOfSkillNameWithBoundary", "local assistant policy owns skill name boundary matcher");
+assertIncludes(localAssistantQuestionPolicy, "IsSkillNameBoundaryInside", "local assistant policy owns skill name boundary classifier");
+assertIncludes(localAssistantQuestionPolicy, "TrimAssistantInfoText", "local assistant policy owns assistant info trimmer");
+assertIncludes(localAssistantQuestionPolicy, "TrimToUtf8ByteCount", "local assistant policy owns utf8 byte trimmer");
+assertIncludes(commandServiceChat, "LocalAssistantQuestionPolicy.LooksLikeIdentityQuestion", "chat partial delegates identity detector");
+assertIncludes(commandServiceChat, "LocalAssistantQuestionPolicy.IndexOfSkillNameWithBoundary", "chat partial delegates skill name matcher");
+assertIncludes(commandServiceTelegramSkills, "LocalAssistantQuestionPolicy.LooksLikeSkillInventoryQuestion", "telegram skills delegates inventory detector");
+assertIncludes(commandServiceTelegramSkills, "LocalAssistantQuestionPolicy.TrimToUtf8ByteCount", "telegram skills delegates utf8 byte trimmer");
+assertNotIncludes(commandServiceChat, "private static bool LooksLikeLocalSkillInventoryQuestion(", "chat partial no longer owns skill inventory detector");
+assertNotIncludes(commandServiceChat, "private static bool LooksLikeLocalLimitationQuestion(", "chat partial no longer owns limitation detector");
+assertNotIncludes(commandServiceChat, "private static bool LooksLikeLocalCapabilityQuestion(", "chat partial no longer owns capability detector");
+assertNotIncludes(commandServiceChat, "private static bool LooksLikeLocalIdentityQuestion(", "chat partial no longer owns identity detector");
+assertNotIncludes(commandServiceChat, "private static int IndexOfSkillNameWithBoundary(", "chat partial no longer owns skill name boundary matcher");
+assertNotIncludes(commandServiceChat, "private static bool IsSkillNameBoundaryInside(", "chat partial no longer owns skill name boundary classifier");
+assertNotIncludes(commandServiceChat, "private static string TrimLocalAssistantInfoText(", "chat partial no longer owns assistant info trimmer");
+assertNotIncludes(commandServiceChat, "private static string TrimToUtf8ByteCount(", "chat partial no longer owns utf8 byte trimmer");
+assertNotIncludes(commandServiceChat, "private static string FirstNonEmptyLocal(", "chat partial no longer owns unused FirstNonEmptyLocal helper");
 
 console.log(JSON.stringify({ ok: true, assertions: assertionCount }, null, 2));
