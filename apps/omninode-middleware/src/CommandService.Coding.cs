@@ -801,7 +801,7 @@ public sealed partial class CommandService
         }
         else
         {
-            fixResult = BuildSkippedCodingWorkerResult(
+            fixResult = CodingWorkerSelectionPolicy.BuildSkippedWorker(
                 fixStage.Provider,
                 fixStage.Model,
                 request.Language,
@@ -812,13 +812,13 @@ public sealed partial class CommandService
         }
 
         var workerResults = new[] { planningResult, implementationResult, verificationResult, fixResult };
-        var finalWorker = SelectBestCodingWorkerResult(
+        var finalWorker = CodingWorkerSelectionPolicy.SelectBest(
             new[] { implementationResult, verificationResult, fixResult }
                 .Where(worker => worker.Execution.Command != "(planning)")
                 .ToArray(),
             fixResult.Execution.Status == "skipped" ? verificationResult : fixResult
         );
-        var orchestrationSummary = BuildOrchestrationSummary(workerResults, finalWorker);
+        var orchestrationSummary = CodingWorkerSelectionPolicy.BuildOrchestrationSummary(workerResults, finalWorker);
         var citationBundleOrchestration = BuildAndLogCitationMappings(
             request.Source,
             "coding-orchestration",
@@ -834,7 +834,7 @@ public sealed partial class CommandService
             finalWorker.Model,
             finalWorker.Language,
             finalWorker.Execution,
-            MergeChangedFilesForBestWorker(finalWorker, workerResults),
+            CodingWorkerSelectionPolicy.MergeChangedFilesForBest(finalWorker, workerResults),
             responseSummary
         );
         if (citationValidationGuardFailure is not null)
@@ -868,7 +868,7 @@ public sealed partial class CommandService
             finalWorker.Code,
             finalWorker.Execution,
             workerResults,
-            MergeChangedFilesForBestWorker(finalWorker, workerResults),
+            CodingWorkerSelectionPolicy.MergeChangedFilesForBest(finalWorker, workerResults),
             responseSummary,
             updated,
             note,
@@ -1133,7 +1133,7 @@ public sealed partial class CommandService
                 "multi-worker",
                 allowRunActions: true,
                 role: "독립 완주",
-                workspaceRootOverride: BuildMultiCodingWorkerWorkspaceRoot(codingRunRoot, provider, model)
+                workspaceRootOverride: CodingWorkerSelectionPolicy.BuildWorkerWorkspaceRoot(codingRunRoot, provider, model)
             ));
         }
         var workerTasks = workerTaskList.ToArray();
@@ -1262,7 +1262,7 @@ public sealed partial class CommandService
         var multiSummary = string.IsNullOrWhiteSpace(summarySections.CommonSummary)
             ? "공통 요약을 생성하지 못했습니다."
             : summarySections.CommonSummary;
-        var bestWorker = SelectBestCodingWorkerResult(workerResults, workerResults.FirstOrDefault() ?? BuildSkippedCodingWorkerResult(
+        var bestWorker = CodingWorkerSelectionPolicy.SelectBest(workerResults, workerResults.FirstOrDefault() ?? CodingWorkerSelectionPolicy.BuildSkippedWorker(
             aggregateProvider,
             aggregateModel,
             request.Language,
@@ -1270,7 +1270,7 @@ public sealed partial class CommandService
             codingRunRoot,
             "선택 가능한 worker 결과가 없습니다."
         ));
-        var multiExecution = BuildMultiCodingResultExecution(codingRunRoot, request.Language, workerResults, bestWorker);
+        var multiExecution = CodingWorkerSelectionPolicy.BuildMultiResultExecution(codingRunRoot, request.Language, workerResults, bestWorker);
         var comparisonAssistantText = BuildCodingMultiComparisonAssistantText(workerResults);
         var summaryAssistantText = BuildCodingMultiSummaryAssistantText(
             summarySections.CommonSummary,
@@ -1332,7 +1332,7 @@ public sealed partial class CommandService
             bestWorker.Code,
             multiExecution,
             workerResults,
-            MergeChangedFilesForBestWorker(bestWorker, workerResults),
+            CodingWorkerSelectionPolicy.MergeChangedFilesForBest(bestWorker, workerResults),
             responseSummary,
             updated,
             note,
@@ -1551,116 +1551,7 @@ public sealed partial class CommandService
             || status.Equals("timeout", StringComparison.OrdinalIgnoreCase)
             || status.Equals("cancelled", StringComparison.OrdinalIgnoreCase)
             || status.Equals("killed", StringComparison.OrdinalIgnoreCase)
-            || HasCodingQualityFailure(verificationResult);
-    }
-
-    private static CodingWorkerResult BuildSkippedCodingWorkerResult(
-        string provider,
-        string model,
-        string language,
-        string role,
-        string runDirectory,
-        string summary
-    )
-    {
-        return new CodingWorkerResult(
-            provider,
-            model,
-            language,
-            string.Empty,
-            summary,
-            new CodeExecutionResult(
-                language,
-                runDirectory,
-                "-",
-                "(skipped)",
-                0,
-                string.Empty,
-                string.Empty,
-                "skipped"
-            ),
-            Array.Empty<string>(),
-            role,
-            summary
-        );
-    }
-
-    private static string BuildOrchestrationSummary(IReadOnlyList<CodingWorkerResult> workers, CodingWorkerResult finalWorker)
-    {
-        var builder = new StringBuilder();
-        builder.AppendLine("오케스트레이션 단계 결과");
-        foreach (var worker in workers)
-        {
-            builder.AppendLine($"- {worker.Role}: {worker.Provider}:{worker.Model} · status={worker.Execution.Status} · exit={worker.Execution.ExitCode}");
-            var trimmed = TrimForOutput(RemoveCodeBlocksFromText(worker.Summary), 260);
-            if (!string.IsNullOrWhiteSpace(trimmed))
-            {
-                builder.AppendLine($"  {trimmed}");
-            }
-        }
-
-        builder.AppendLine();
-        builder.AppendLine("최종 상태");
-        builder.AppendLine($"{finalWorker.Provider}:{finalWorker.Model} · status={finalWorker.Execution.Status} · exit={finalWorker.Execution.ExitCode}");
-        builder.AppendLine(TrimForOutput(RemoveCodeBlocksFromText(finalWorker.Summary), 900));
-        return builder.ToString().Trim();
-    }
-
-    private static IReadOnlyList<string> MergeChangedFiles(IReadOnlyList<CodingWorkerResult> workers)
-    {
-        return workers
-            .SelectMany(worker => worker.ChangedFiles ?? Array.Empty<string>())
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    private static string BuildMultiCodingWorkerWorkspaceRoot(string runRoot, string provider, string model)
-    {
-        var providerSlug = Regex.Replace((provider ?? "worker").Trim().ToLowerInvariant(), @"[^a-z0-9_-]+", "-");
-        var modelSlug = Regex.Replace((model ?? "model").Trim().ToLowerInvariant(), @"[^a-z0-9_-]+", "-");
-        providerSlug = string.IsNullOrWhiteSpace(providerSlug) ? "worker" : providerSlug;
-        modelSlug = string.IsNullOrWhiteSpace(modelSlug) ? "model" : modelSlug;
-        return Path.Combine(runRoot, $"{providerSlug}-{modelSlug}");
-    }
-
-    private static CodeExecutionResult BuildMultiCodingResultExecution(
-        string runRoot,
-        string language,
-        IReadOnlyList<CodingWorkerResult> workers,
-        CodingWorkerResult? bestWorker = null
-    )
-    {
-        var hasSuccess = workers.Any(worker => (worker.Execution.Status ?? string.Empty).Equals("ok", StringComparison.OrdinalIgnoreCase));
-        var hasFailure = workers.Any(worker =>
-            (worker.Execution.Status ?? string.Empty).Equals("error", StringComparison.OrdinalIgnoreCase)
-            || (worker.Execution.Status ?? string.Empty).Equals("quality_failed", StringComparison.OrdinalIgnoreCase)
-            || (worker.Execution.Status ?? string.Empty).Equals("timeout", StringComparison.OrdinalIgnoreCase)
-            || (worker.Execution.Status ?? string.Empty).Equals("cancelled", StringComparison.OrdinalIgnoreCase)
-            || (worker.Execution.Status ?? string.Empty).Equals("killed", StringComparison.OrdinalIgnoreCase));
-        var status = hasSuccess && hasFailure
-            ? "mixed"
-            : hasFailure
-                ? "error"
-                : hasSuccess
-                    ? "ok"
-                    : "skipped";
-
-        var selected = bestWorker ?? workers
-            .OrderByDescending(ScoreCodingWorkerResult)
-            .FirstOrDefault();
-        var selectedExecution = selected?.Execution;
-        return new CodeExecutionResult(
-            selected?.Language ?? language,
-            string.IsNullOrWhiteSpace(selectedExecution?.RunDirectory) ? runRoot : selectedExecution.RunDirectory,
-            selectedExecution?.EntryFile ?? "-",
-            selectedExecution?.Command ?? "(worker-independent-runs)",
-            hasFailure && !hasSuccess ? 1 : 0,
-            selectedExecution?.StdOut ?? string.Empty,
-            selectedExecution?.StdErr ?? string.Empty,
-            status
-        );
+            || CodingWorkerSelectionPolicy.HasQualityFailure(verificationResult);
     }
 
     private static Dictionary<string, string> BuildDefaultOrchestrationRoles(IReadOnlyList<string> providers)

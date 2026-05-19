@@ -24,6 +24,7 @@ function main() {
   const execution = read("apps/omninode-middleware/src/CommandService.CodingExecution.cs");
   const verification = read("apps/omninode-middleware/src/CommandService.CodingVerification.cs");
   const quality = read("apps/omninode-middleware/src/CommandService.CodingQuality.cs");
+  const codingWorkerSelectionPolicy = read("apps/omninode-middleware/src/CodingWorkerSelectionPolicy.cs");
   const profiles = read("apps/omninode-middleware/src/CommandService.CodingProfiles.cs");
   const projectProfiles = read("apps/omninode-middleware/src/CommandService.CodingProjectProfiles.cs");
   const utils = read("apps/omninode-middleware/src/CommandService.Utils.cs");
@@ -87,7 +88,7 @@ function main() {
 
   assertIncludes(quality, "EvaluateCodingQualityGate", "quality gate evaluator");
   assertIncludes(quality, "quality_failed", "quality failed status");
-  assertIncludes(quality, "SelectBestCodingWorkerResult", "best worker selection");
+  assertIncludes(codingWorkerSelectionPolicy, "SelectBest", "best worker selection through policy");
   assertIncludes(quality, "테트리스 요구사항 누락", "tetris requirement failure");
   assertIncludes(quality, "TODO/placeholder/미구현", "dummy implementation gate");
 
@@ -139,9 +140,9 @@ function main() {
   assertIncludes(rerun, "gradlew.bat", "windows rerun gradle wrapper");
   assertIncludes(rerun, "for /r build %f in (*.exe)", "windows rerun native executable discovery");
 
-  assertIncludes(coding, "HasCodingQualityFailure", "orchestration quality failure trigger");
-  assertIncludes(coding, "SelectBestCodingWorkerResult", "multi best result selection");
-  assertIncludes(coding, "MergeChangedFilesForBestWorker", "best worker changed files promoted");
+  assertIncludes(coding, "CodingWorkerSelectionPolicy.HasQualityFailure", "orchestration quality failure trigger");
+  assertIncludes(coding, "CodingWorkerSelectionPolicy.SelectBest", "multi best result selection");
+  assertIncludes(coding, "CodingWorkerSelectionPolicy.MergeChangedFilesForBest", "best worker changed files promoted");
 
   assertIncludes(projectProfiles, "private sealed record CodingProjectProfile", "project profile record");
   assertIncludes(projectProfiles, "ResolveCodingProjectProfile", "project profile resolver");
