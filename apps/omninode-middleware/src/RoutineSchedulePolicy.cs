@@ -356,6 +356,195 @@ internal static class RoutineSchedulePolicy
         return new RoutineSchedule(hour, minute, $"매일 {hour:D2}:{minute:D2}");
     }
 
+    public static bool ContainsScheduleExpression(string? request)
+    {
+        var text = (request ?? string.Empty).Trim();
+        if (text.Length == 0)
+        {
+            return false;
+        }
+
+        return Regex.IsMatch(text, @"매(?:일|주|월)|평일|주말", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+               || Regex.IsMatch(text, @"(?:월|화|수|목|금|토|일)요일(?:마다)?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+               || Regex.IsMatch(text, @"\d{1,2}\s*:\s*\d{1,2}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+               || Regex.IsMatch(text, @"(?:아침|오전|오후|저녁|밤|새벽)?\s*\d{1,2}\s*시(?:\s*(?:\d{1,2}\s*분|반))?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
+    public static RoutineScheduleConfig ResolveConfigFromRequest(string request, string? timezoneId)
+    {
+        if (TryParseConfigFromRequest(request, timezoneId, out var parsed))
+        {
+            return parsed;
+        }
+
+        var fallback = ParseDailySchedule(request);
+        return BuildDailyConfig(fallback.Hour, fallback.Minute, timezoneId ?? TimeZoneInfo.Local.Id);
+    }
+
+    public static bool TryParseConfigFromRequest(
+        string? request,
+        string? timezoneId,
+        out RoutineScheduleConfig config
+    )
+    {
+        config = BuildDailyConfig(8, 0, timezoneId ?? TimeZoneInfo.Local.Id);
+        var text = (request ?? string.Empty).Trim();
+        if (text.Length == 0)
+        {
+            return false;
+        }
+
+        var resolvedTimezoneId = ResolveTimeZone(timezoneId).Id;
+        var hour = 8;
+        var minute = 0;
+        var hasExplicitTime = TryExtractNaturalTime(text, out hour, out minute);
+
+        if (TryExtractMonthlyDay(text, out var dayOfMonth))
+        {
+            config = new RoutineScheduleConfig(
+                "monthly",
+                hour,
+                minute,
+                BuildScheduleDisplay("monthly", hour, minute, resolvedTimezoneId, dayOfMonth, Array.Empty<int>()),
+                resolvedTimezoneId,
+                $"{minute} {hour} {dayOfMonth} * *",
+                dayOfMonth,
+                Array.Empty<int>()
+            );
+            return true;
+        }
+
+        if (TryExtractWeekdays(text, out var weekdays))
+        {
+            config = new RoutineScheduleConfig(
+                "weekly",
+                hour,
+                minute,
+                BuildScheduleDisplay("weekly", hour, minute, resolvedTimezoneId, null, weekdays),
+                resolvedTimezoneId,
+                $"{minute} {hour} * * {string.Join(",", weekdays.Select(static x => x.ToString(CultureInfo.InvariantCulture)))}",
+                null,
+                weekdays
+            );
+            return true;
+        }
+
+        if (ContainsScheduleExpression(text) || hasExplicitTime)
+        {
+            config = BuildDailyConfig(hour, minute, resolvedTimezoneId);
+            return true;
+        }
+
+        return false;
+    }
+
+    public static bool TryParseSupportedCronExpression(
+        string? expr,
+        out string kind,
+        out int hour,
+        out int minute,
+        out int? dayOfMonth,
+        out int[] weekdays,
+        out string normalizedExpr,
+        out string error
+    )
+    {
+        kind = "daily";
+        hour = 0;
+        minute = 0;
+        dayOfMonth = null;
+        weekdays = Array.Empty<int>();
+        normalizedExpr = "0 8 * * *";
+        error = "지원되지 않는 cron 식입니다.";
+
+        var tokens = (expr ?? string.Empty)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (tokens.Length != 5)
+        {
+            error = "cron 식은 5개 필드(m h dom mon dow)여야 합니다.";
+            return false;
+        }
+
+        if (!int.TryParse(tokens[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out minute)
+            || minute < 0 || minute > 59)
+        {
+            error = "cron 분은 0-59여야 합니다.";
+            return false;
+        }
+
+        if (!int.TryParse(tokens[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out hour)
+            || hour < 0 || hour > 23)
+        {
+            error = "cron 시는 0-23이어야 합니다.";
+            return false;
+        }
+
+        if (!string.Equals(tokens[3], "*", StringComparison.Ordinal))
+        {
+            error = "cron month 필드는 현재 '*'만 지원합니다.";
+            return false;
+        }
+
+        if (string.Equals(tokens[2], "*", StringComparison.Ordinal)
+            && string.Equals(tokens[4], "*", StringComparison.Ordinal))
+        {
+            kind = "daily";
+            normalizedExpr = $"{minute} {hour} * * *";
+            return true;
+        }
+
+        if (string.Equals(tokens[2], "*", StringComparison.Ordinal))
+        {
+            var parsedWeekdays = new List<int>();
+            foreach (var rawPart in tokens[4].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (!int.TryParse(rawPart, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+                {
+                    error = "주간 cron 요일은 0-6 또는 7(일요일)만 지원합니다.";
+                    return false;
+                }
+
+                if (parsed == 7)
+                {
+                    parsed = 0;
+                }
+
+                if (parsed < 0 || parsed > 6)
+                {
+                    error = "주간 cron 요일은 0-6 또는 7(일요일)만 지원합니다.";
+                    return false;
+                }
+
+                parsedWeekdays.Add(parsed);
+            }
+
+            weekdays = NormalizeWeekdays(parsedWeekdays);
+            if (weekdays.Length == 0)
+            {
+                error = "주간 cron 요일은 하나 이상 필요합니다.";
+                return false;
+            }
+
+            kind = "weekly";
+            normalizedExpr = $"{minute} {hour} * * {string.Join(",", weekdays.Select(static x => x.ToString(CultureInfo.InvariantCulture)))}";
+            return true;
+        }
+
+        if (string.Equals(tokens[4], "*", StringComparison.Ordinal)
+            && int.TryParse(tokens[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedDayOfMonth)
+            && parsedDayOfMonth >= 1
+            && parsedDayOfMonth <= 31)
+        {
+            kind = "monthly";
+            dayOfMonth = parsedDayOfMonth;
+            normalizedExpr = $"{minute} {hour} {parsedDayOfMonth} * *";
+            return true;
+        }
+
+        error = "지원되는 cron 형식은 daily/weekly/monthly 뿐입니다.";
+        return false;
+    }
+
     public static bool TryBuildConfig(
         string? scheduleKind,
         string? scheduleTime,

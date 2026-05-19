@@ -145,7 +145,7 @@ public sealed partial class CommandService
             return new RoutineActionResult(false, "루틴 요청이 비어 있습니다.", null);
         }
 
-        var scheduleConfig = ResolveRoutineScheduleConfigFromRequest(input, TimeZoneInfo.Local.Id);
+        var scheduleConfig = RoutineSchedulePolicy.ResolveConfigFromRequest(input, TimeZoneInfo.Local.Id);
         return await CreateRoutineCoreAsync(
             input,
             BuildRoutineTitle(input),

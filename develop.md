@@ -63,8 +63,8 @@ git diff --check
 최근 확인 결과:
 
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 765 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 699
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 788 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 708
 - `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
 - `node scripts/check-chat-telegram-contract.mjs`: 통과
 - `node scripts/check-gateway-runtime-contract.mjs`: 통과
@@ -801,6 +801,15 @@ git diff --check
   - 타임존 fallback(blank/UTC/garbage), 스케줄 종류/요일/retry/notify 정규화, retryable status 분류(error/timeout만), SHA-256 fingerprint 길이·hex 형식, 한국어/HH:MM 시각 파싱(`오후 3시`/`반`/`오전 12시→0`/`새벽`), 월간 day, 평일/주말/요일, ParseDailySchedule fallback, weekly/monthly/daily TryBuildConfig 조립과 검증 실패 메시지(주간 요일 없음/31일 초과/HH:MM 형식 오류)를 단위 테스트로 고정했다 (60 cases).
 - `scripts/check-security-boundaries.mjs`
   - `RoutineSchedulePolicy` 소유권과 `CommandService.RoutineManagement`의 사설 helper 5개 제거 + 정책 위임 계약을 추가했다 (assertions 672 → 699).
+- `apps/omninode-middleware/src/RoutineSchedulePolicy.cs` 확장
+  - cron 표현식 파서(`TryParseSupportedCronExpression`), 자연어 스케줄 감지(`ContainsScheduleExpression`), 요청 텍스트 기반 config 조립(`ResolveConfigFromRequest`, `TryParseConfigFromRequest`)을 추가해 정책 표면을 19종 → 23종으로 확장했다.
+  - cron daily/weekly/monthly 분기 검증, 분/시/요일/일자 범위 클램프, 한국어 자연어 cue(`매일/매주/매월/평일/주말/요일/시/분/반/오전/오후/저녁/밤/새벽`), 월간 day/주간 요일/하한 8:00 daily fallback 조립을 정책 클래스가 소유한다.
+  - `CommandService.RoutineManagement`의 `TryParseSupportedRoutineCronExpression`/`ResolveRoutineScheduleConfigFromRequest`/`TryParseRoutineScheduleConfigFromRequest` 사설 메서드 3개와 `CommandService.Config`의 `ContainsRoutineScheduleExpression` 사설 메서드를 제거했고, LogicGraphs/Routines/RoutineManagement/Config 호출처를 정책 호출로 갱신했다.
+  - `CommandService.RoutineManagement.cs` 본문 크기: 1772 → 1599 라인, `CommandService.Config.cs` 본문 크기: 4217 → 4204 라인.
+- `apps/omninode-middleware-tests/RoutineSchedulePolicyTests.cs` 확장
+  - `ContainsScheduleExpression`의 한국어 cue 매칭/빈 입력 fallback, `ResolveConfigFromRequest`의 weekly/daily fallback, `TryParseConfigFromRequest`의 monthly day 추출/blank 거부, `TryParseSupportedCronExpression`의 daily/weekly(7→0 alias 포함)/monthly 정상 분기와 6가지 에러 분기(`5필드 아님`, `분 0-59 초과`, `시 0-23 초과`, `month != *`, `요일 8`, `day 32`)를 단위 테스트로 고정했다 (60 → 83 cases).
+- `scripts/check-security-boundaries.mjs`
+  - cron 표현식/스케줄 텍스트 파서 4종 소유권과 RoutineManagement의 사설 helper 3개 제거 계약을 추가했다 (assertions 699 → 708).
 
 검증 결과:
 
@@ -826,8 +835,8 @@ git diff --check
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "CodingDeterministicStructuredRepairPolicyTests|CodingExpectedOutputPolicyTests"`: 통과, 12 tests
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter TelegramPseudoCommandExecutorTests`: 통과, 7 tests
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "TelegramLlmPreferencePolicyTests|TelegramPseudoCommandExecutorTests"`: 통과, 17 tests
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 765 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 699
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 788 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 708
 - `node scripts/check-chat-telegram-contract.mjs`: 통과
 - `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
 - `node scripts/check-gateway-runtime-contract.mjs`: 통과
@@ -1055,11 +1064,11 @@ git diff --check
 | P0. 작업트리 커밋 기준점 | 완료 | 100% | — |
 | P1. 문서 불일치 정리 | 완료 | 100% | — |
 | P2. WebSocket runtime 통합 테스트 | 완료 | 100% | — |
-| P3. CommandService 도메인 분리 | 진행 중 | 99.9% | logic graph 노드별 실행기(`ExecuteLogic*Node` 30+) 및 템플릿/edge resolver 분리, Telegram `/llm` 세부 설정 핸들러 서비스화, routine cron 표현식 파서/스케줄 schedule-source 추출, SearchPipeline의 Gemini 호출 orchestration 축소, exception/loop recovery orchestration |
+| P3. CommandService 도메인 분리 | 진행 중 | 99.95% | logic graph 노드별 실행기(`ExecuteLogic*Node` 30+) 및 템플릿/edge resolver 분리, Telegram `/llm` 세부 설정 핸들러 서비스화, SearchPipeline의 Gemini 호출 orchestration 축소, exception/loop recovery orchestration |
 | P4. Provider adapter 구조 정리 | 완료 | 100% | — (usage capture/continuation loop는 turn-state 결합으로 추가 분리 미적용) |
 | P5. 상태 저장소 복구 정책 확대 | 완료 | 100% | — |
 
-전체 산술 평균: 99.98% (P0 100, P1 100, P2 100, P3 99.9, P4 100, P5 100 → 평균 99.98%).
+전체 산술 평균: 99.99% (P0 100, P1 100, P2 100, P3 99.95, P4 100, P5 100 → 평균 99.99%).
 
 이 수치는 책임 분량을 동등 가중치로 본 추정이다. P3는 SearchPipeline 정책/포매터/README 로더, Telegram 응답 포매터/프롬프트/후속질문/자연어 명령/pseudo command executor/LLM preference 정책, 공통 대화 맥락 정책, 코딩 언어/진행상태/프롬프트/루프 계획 파서/생성 코드 텍스트/fallback/대화 제목/대화 히스토리/chat output sanitizer/multi comparison/code candidate/코딩 실행 안전성/품질 브리프/루프 튜닝/deterministic stdout repair/UI clone scaffold/web shooter scaffold/artifact cleanup/loop action executor/fallback decision/Groq fallback 응답 판정/provider model selection/memory note selection/expected output parsing/structured repair plan 정책 추출이 진행됐지만 Telegram `/llm` 세부 설정 핸들러와 일부 exception recovery/loop recovery orchestration도 한 타입에 남아 있어, 실제 코드 양 기준으로 가중치를 다시 잡으면 90% 중반이 더 보수적이다. P4는 provider별 HTTP 호출/SSE/citation dedup이 adapter/parser/policy/accumulator로 분리된 상태이며, 잔여 항목(usage capture/continuation loop)은 turn-state 결합으로 추가 분리의 이득이 작아 마무리로 간주한다.
 

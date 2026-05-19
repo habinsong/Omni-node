@@ -3913,7 +3913,7 @@ public sealed partial class CommandService
         DateTimeOffset nowUtc
     )
     {
-        if (!TryParseSupportedRoutineCronExpression(
+        if (!RoutineSchedulePolicy.TryParseSupportedCronExpression(
                 cronExpr,
                 out var kind,
                 out var hour,
@@ -4074,24 +4074,11 @@ public sealed partial class CommandService
             return normalized;
         }
 
-        return ContainsRoutineScheduleExpression(request)
+        return RoutineSchedulePolicy.ContainsScheduleExpression(request)
             ? "auto"
             : "manual";
     }
 
-    private static bool ContainsRoutineScheduleExpression(string? request)
-    {
-        var text = (request ?? string.Empty).Trim();
-        if (text.Length == 0)
-        {
-            return false;
-        }
-
-        return Regex.IsMatch(text, @"매(?:일|주|월)|평일|주말", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
-               || Regex.IsMatch(text, @"(?:월|화|수|목|금|토|일)요일(?:마다)?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
-               || Regex.IsMatch(text, @"\d{1,2}\s*:\s*\d{1,2}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
-               || Regex.IsMatch(text, @"(?:아침|오전|오후|저녁|밤|새벽)?\s*\d{1,2}\s*시(?:\s*(?:\d{1,2}\s*분|반))?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    }
 
     private static string NormalizeRoutineTaskRequest(string? request)
     {

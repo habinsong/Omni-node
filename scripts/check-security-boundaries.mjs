@@ -840,11 +840,20 @@ assertIncludes(routineSchedulePolicy, "ParseDailySchedule", "routine schedule po
 assertIncludes(routineSchedulePolicy, "TryBuildConfig", "routine schedule policy owns config builder");
 assertIncludes(commandServiceRoutineManagement, "RoutineSchedulePolicy.TryBuildConfig", "routine management delegates config build to policy");
 assertIncludes(commandServiceRoutineManagement, "RoutineSchedulePolicy.ResolveTimeZone", "routine management delegates timezone resolve to policy");
-assertIncludes(commandServiceRoutineManagement, "RoutineSchedulePolicy.NormalizeWeekdays", "routine management delegates weekdays normalize to policy");
+assertIncludes(commandServiceRoutineManagement, "RoutineSchedulePolicy.NormalizeRetryCount", "routine management delegates retry count normalize to policy");
+assertIncludes(commandServiceRoutineManagement, "RoutineSchedulePolicy.NormalizeNotifyPolicy", "routine management delegates notify policy to policy");
 assertNotIncludes(commandServiceRoutineManagement, "private static bool TryExtractRoutineNaturalTime(", "routine management no longer owns natural time extractor");
 assertNotIncludes(commandServiceRoutineManagement, "private static bool TryBuildRoutineScheduleConfig(", "routine management no longer owns schedule config builder");
 assertNotIncludes(commandServiceRoutineManagement, "private static int[] NormalizeRoutineWeekdays(", "routine management no longer owns weekdays normalizer");
 assertNotIncludes(commandServiceRoutineManagement, "private static TimeZoneInfo ResolveTimeZone(", "routine management no longer owns timezone resolver");
 assertNotIncludes(commandServiceRoutineManagement, "private static string ComputeRoutineOutputFingerprint(", "routine management no longer owns output fingerprint");
+assertIncludes(routineSchedulePolicy, "ContainsScheduleExpression", "routine schedule policy owns schedule expression detector");
+assertIncludes(routineSchedulePolicy, "ResolveConfigFromRequest", "routine schedule policy owns config resolver from request");
+assertIncludes(routineSchedulePolicy, "TryParseConfigFromRequest", "routine schedule policy owns config parser from request");
+assertIncludes(routineSchedulePolicy, "TryParseSupportedCronExpression", "routine schedule policy owns cron expression parser");
+assertIncludes(commandServiceRoutineManagement, "RoutineSchedulePolicy.TryParseSupportedCronExpression", "routine management delegates cron parser to policy");
+assertNotIncludes(commandServiceRoutineManagement, "private static bool TryParseSupportedRoutineCronExpression(", "routine management no longer owns cron parser");
+assertNotIncludes(commandServiceRoutineManagement, "private static RoutineScheduleConfig ResolveRoutineScheduleConfigFromRequest(", "routine management no longer owns resolve config from request");
+assertNotIncludes(commandServiceRoutineManagement, "private static bool TryParseRoutineScheduleConfigFromRequest(", "routine management no longer owns try parse config from request");
 
 console.log(JSON.stringify({ ok: true, assertions: assertionCount }, null, 2));

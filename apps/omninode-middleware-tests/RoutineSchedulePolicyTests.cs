@@ -318,4 +318,138 @@ public sealed class RoutineSchedulePolicyTests
         ));
         Assert.Contains("HH:MM", error);
     }
+
+    [Theory]
+    [InlineData("매일 9시 실행", true)]
+    [InlineData("평일 10시", true)]
+    [InlineData("주말 22:00", true)]
+    [InlineData("월요일마다 보고", true)]
+    [InlineData("매주 화요일 09:30", true)]
+    [InlineData("오후 3시", true)]
+    [InlineData("새벽 4시 반", true)]
+    [InlineData("그냥 일반 텍스트", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void ContainsScheduleExpressionDetectsKoreanCues(string? input, bool expected)
+    {
+        Assert.Equal(expected, RoutineSchedulePolicy.ContainsScheduleExpression(input));
+    }
+
+    [Fact]
+    public void ResolveConfigFromRequestReturnsParsedScheduleForKnownPattern()
+    {
+        var config = RoutineSchedulePolicy.ResolveConfigFromRequest("매주 월요일 9시", TimeZoneInfo.Local.Id);
+
+        Assert.Equal("weekly", config.Kind);
+        Assert.Equal(9, config.Hour);
+        Assert.Equal(new[] { 1 }, config.Weekdays);
+    }
+
+    [Fact]
+    public void ResolveConfigFromRequestFallsBackToDailyForUnknownText()
+    {
+        var config = RoutineSchedulePolicy.ResolveConfigFromRequest("아무 의미 없는 텍스트", TimeZoneInfo.Local.Id);
+
+        Assert.Equal("daily", config.Kind);
+        Assert.Equal(8, config.Hour);
+        Assert.Equal(0, config.Minute);
+    }
+
+    [Fact]
+    public void TryParseConfigFromRequestRejectsBlankAndUnstructuredInput()
+    {
+        Assert.False(RoutineSchedulePolicy.TryParseConfigFromRequest(string.Empty, TimeZoneInfo.Local.Id, out _));
+        Assert.False(RoutineSchedulePolicy.TryParseConfigFromRequest("아무 의미 없는 텍스트", TimeZoneInfo.Local.Id, out _));
+    }
+
+    [Fact]
+    public void TryParseConfigFromRequestRecognizesMonthlyDay()
+    {
+        Assert.True(RoutineSchedulePolicy.TryParseConfigFromRequest("매월 5일 오전 7시", TimeZoneInfo.Local.Id, out var config));
+        Assert.Equal("monthly", config.Kind);
+        Assert.Equal(5, config.DayOfMonth);
+        Assert.Equal(7, config.Hour);
+    }
+
+    [Fact]
+    public void TryParseSupportedCronExpressionAcceptsDailyForm()
+    {
+        Assert.True(RoutineSchedulePolicy.TryParseSupportedCronExpression(
+            "30 8 * * *",
+            out var kind,
+            out var hour,
+            out var minute,
+            out var dayOfMonth,
+            out var weekdays,
+            out var normalized,
+            out _
+        ));
+
+        Assert.Equal("daily", kind);
+        Assert.Equal(8, hour);
+        Assert.Equal(30, minute);
+        Assert.Null(dayOfMonth);
+        Assert.Empty(weekdays);
+        Assert.Equal("30 8 * * *", normalized);
+    }
+
+    [Fact]
+    public void TryParseSupportedCronExpressionAcceptsWeeklyForm()
+    {
+        Assert.True(RoutineSchedulePolicy.TryParseSupportedCronExpression(
+            "0 9 * * 1,3,7",
+            out var kind,
+            out _,
+            out _,
+            out _,
+            out var weekdays,
+            out var normalized,
+            out _
+        ));
+
+        Assert.Equal("weekly", kind);
+        Assert.Equal(new[] { 1, 3, 0 }, weekdays);
+        Assert.Equal("0 9 * * 1,3,0", normalized);
+    }
+
+    [Fact]
+    public void TryParseSupportedCronExpressionAcceptsMonthlyForm()
+    {
+        Assert.True(RoutineSchedulePolicy.TryParseSupportedCronExpression(
+            "0 8 15 * *",
+            out var kind,
+            out _,
+            out _,
+            out var dayOfMonth,
+            out _,
+            out var normalized,
+            out _
+        ));
+
+        Assert.Equal("monthly", kind);
+        Assert.Equal(15, dayOfMonth);
+        Assert.Equal("0 8 15 * *", normalized);
+    }
+
+    [Theory]
+    [InlineData("0 8", "cron 식은 5개 필드")]
+    [InlineData("99 8 * * *", "cron 분은 0-59")]
+    [InlineData("0 25 * * *", "cron 시는 0-23")]
+    [InlineData("0 8 * 2 *", "cron month")]
+    [InlineData("0 8 * * 8", "주간 cron 요일")]
+    [InlineData("0 8 32 * *", "지원되는 cron 형식")]
+    public void TryParseSupportedCronExpressionReportsErrorsForBadInput(string expr, string expectedFragment)
+    {
+        Assert.False(RoutineSchedulePolicy.TryParseSupportedCronExpression(
+            expr,
+            out _,
+            out _,
+            out _,
+            out _,
+            out _,
+            out _,
+            out var error
+        ));
+        Assert.Contains(expectedFragment, error);
+    }
 }

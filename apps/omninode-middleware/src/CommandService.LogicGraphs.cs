@@ -2542,7 +2542,7 @@ public sealed partial class CommandService
             );
         }
 
-        config = ResolveRoutineScheduleConfigFromRequest(
+        config = RoutineSchedulePolicy.ResolveConfigFromRequest(
             ResolveLogicGraphRequestText(graph),
             graph.Schedule.TimezoneId
         );
