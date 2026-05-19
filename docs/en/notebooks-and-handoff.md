@@ -2,7 +2,7 @@
 
 [한국어](../NOTEBOOKS_AND_HANDOFF.md) · [English](./notebooks-and-handoff.md)
 
-Updated: 2026-05-15
+Updated: 2026-05-19
 
 ![Notebooks tab](../assets/readme/dashboard-notebooks-tab.png)
 

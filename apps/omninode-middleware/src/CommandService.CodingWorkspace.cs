@@ -183,91 +183,12 @@ public sealed partial class CommandService
 
     private static string NormalizeGeneratedActionPath(string? path)
     {
-        var normalized = WebUtility.HtmlDecode(path ?? string.Empty)
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n')
-            .Replace('\t', ' ');
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return string.Empty;
-        }
-
-        normalized = Regex.Replace(normalized, @"\s*\n\s*", string.Empty);
-        normalized = normalized.Trim().Trim('"', '\'', '`', '“', '”', '‘', '’');
-        normalized = Regex.Replace(normalized, @" {2,}", " ");
-        normalized = normalized.Trim();
-        if (normalized.StartsWith("- ", StringComparison.Ordinal))
-        {
-            normalized = normalized[2..].Trim();
-        }
-
-        if (normalized.StartsWith("path:", StringComparison.OrdinalIgnoreCase)
-            || normalized.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
-        {
-            normalized = normalized[(normalized.IndexOf(':') + 1)..].Trim();
-        }
-
-        normalized = normalized.Trim().Trim('"', '\'', '`', '“', '”', '‘', '’');
-        return normalized;
+        return CodingFallbackPolicy.NormalizeGeneratedActionPath(path);
     }
 
     private static string NormalizeRequestedCodingPath(string? path)
     {
-        var normalized = NormalizeGeneratedActionPath(path);
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return string.Empty;
-        }
-
-        normalized = CollapseKnownCodingRootPrefixes(normalized);
-        normalized = TryRestoreUnixAbsolutePath(normalized);
-        if (Path.IsPathRooted(normalized))
-        {
-            var fileName = Path.GetFileName(normalized);
-            return string.IsNullOrWhiteSpace(fileName) ? string.Empty : fileName;
-        }
-
-        normalized = NormalizeSuspiciousIntermediateFileSegments(normalized.Replace('\\', '/').Trim('/'));
-        return IsSafeRelativeCodingPath(normalized) ? normalized : string.Empty;
-    }
-
-    private static string NormalizeSuspiciousIntermediateFileSegments(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return string.Empty;
-        }
-
-        var segments = path
-            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .ToList();
-        if (segments.Count <= 1)
-        {
-            return path;
-        }
-
-        static bool LooksLikeSourceFileSegment(string segment)
-        {
-            if (string.IsNullOrWhiteSpace(segment))
-            {
-                return false;
-            }
-
-            var extension = Path.GetExtension(segment).ToLowerInvariant();
-            return extension is ".py" or ".js" or ".mjs" or ".cjs" or ".ts" or ".tsx" or ".jsx"
-                or ".html" or ".htm" or ".css" or ".java" or ".c" or ".cc" or ".cpp" or ".cxx"
-                or ".h" or ".hh" or ".hpp" or ".cs" or ".kt" or ".sh" or ".json" or ".txt" or ".md";
-        }
-
-        for (var i = segments.Count - 2; i >= 0; i -= 1)
-        {
-            if (LooksLikeSourceFileSegment(segments[i]))
-            {
-                segments.RemoveAt(i);
-            }
-        }
-
-        return string.Join('/', segments);
+        return CodingFallbackPolicy.NormalizeRequestedCodingPath(path);
     }
 
     private static string NormalizeGeneratedActionPathForWorkspace(string? path, string workspaceRoot)
@@ -303,207 +224,22 @@ public sealed partial class CommandService
 
     private static string CollapseKnownCodingRootPrefixes(string path)
     {
-        var normalized = (path ?? string.Empty).Trim().Replace('\\', '/');
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return string.Empty;
-        }
-
-        var runTail = TryExtractRelativePathAfterRunsMarker(normalized);
-        if (!string.IsNullOrWhiteSpace(runTail))
-        {
-            return runTail;
-        }
-
-        foreach (var marker in new[] { "workspace/coding/", "coding/" })
-        {
-            var index = normalized.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-            if (index < 0)
-            {
-                continue;
-            }
-
-            var tail = normalized[(index + marker.Length)..].Trim('/');
-            if (IsSafeRelativeCodingPath(tail))
-            {
-                return tail;
-            }
-        }
-
-        return normalized;
-    }
-
-    private static string TryExtractRelativePathAfterRunsMarker(string path)
-    {
-        var normalized = (path ?? string.Empty).Trim().Replace('\\', '/');
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return string.Empty;
-        }
-
-        const string marker = "workspace/coding/runs/";
-        var index = normalized.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (index < 0)
-        {
-            return string.Empty;
-        }
-
-        var tail = normalized[(index + marker.Length)..].Trim('/');
-        if (string.IsNullOrWhiteSpace(tail))
-        {
-            return string.Empty;
-        }
-
-        var firstSlash = tail.IndexOf('/');
-        if (firstSlash < 0 || firstSlash >= tail.Length - 1)
-        {
-            return string.Empty;
-        }
-
-        var relative = tail[(firstSlash + 1)..].Trim('/');
-        return IsSafeRelativeCodingPath(relative) ? relative : string.Empty;
-    }
-
-    private static string TryRestoreUnixAbsolutePath(string path)
-    {
-        var normalized = (path ?? string.Empty).Trim().Replace('\\', '/');
-        if (string.IsNullOrWhiteSpace(normalized) || Path.IsPathRooted(normalized))
-        {
-            return normalized;
-        }
-
-        return normalized.StartsWith("Users/", StringComparison.OrdinalIgnoreCase)
-            || normalized.StartsWith("home/", StringComparison.OrdinalIgnoreCase)
-            || normalized.StartsWith("private/", StringComparison.OrdinalIgnoreCase)
-            || normalized.StartsWith("tmp/", StringComparison.OrdinalIgnoreCase)
-            || normalized.StartsWith("var/folders/", StringComparison.OrdinalIgnoreCase)
-                ? "/" + normalized
-                : normalized;
+        return CodingFallbackPolicy.CollapseKnownCodingRootPrefixes(path);
     }
 
     private static bool IsSafeRelativeCodingPath(string? path)
     {
-        var normalized = (path ?? string.Empty).Trim().Replace('\\', '/');
-        return !string.IsNullOrWhiteSpace(normalized)
-            && !Path.IsPathRooted(normalized)
-            && !normalized.Contains("..", StringComparison.Ordinal)
-            && !normalized.StartsWith("/", StringComparison.Ordinal)
-            && !normalized.StartsWith("./", StringComparison.Ordinal)
-            && !normalized.StartsWith(".\\", StringComparison.Ordinal);
+        return CodingFallbackPolicy.IsSafeRelativeCodingPath(path);
     }
 
     private static string NormalizeGeneratedRunCommand(string? command)
     {
-        var normalized = WebUtility.HtmlDecode(command ?? string.Empty)
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n')
-            .Trim();
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return string.Empty;
-        }
-
-        if (!normalized.Contains('\n'))
-        {
-            return StripTrailingDisplayCommandHints(normalized);
-        }
-
-        if (normalized.Contains("<<", StringComparison.Ordinal)
-            || normalized.Contains("EOF", StringComparison.Ordinal)
-            || normalized.Contains("then\n", StringComparison.Ordinal)
-            || normalized.Contains("do\n", StringComparison.Ordinal)
-            || normalized.Contains("case\n", StringComparison.Ordinal))
-        {
-            return normalized;
-        }
-
-        var lines = normalized
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(line => !string.IsNullOrWhiteSpace(line))
-            .ToArray();
-        return StripTrailingDisplayCommandHints(string.Join(' ', lines));
-    }
-
-    private static string StripTrailingDisplayCommandHints(string command)
-    {
-        var normalized = (command ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return string.Empty;
-        }
-
-        while (TryStripTrailingDisplayCommandHint(normalized, out var stripped))
-        {
-            normalized = stripped;
-        }
-
-        return normalized;
-    }
-
-    private static bool TryStripTrailingDisplayCommandHint(string command, out string stripped)
-    {
-        stripped = (command ?? string.Empty).TrimEnd();
-        if (stripped.Length < 4 || stripped[^1] != ']')
-        {
-            return false;
-        }
-
-        var openBracketIndex = stripped.LastIndexOf(" [", StringComparison.Ordinal);
-        if (openBracketIndex < 0)
-        {
-            return false;
-        }
-
-        var hintBody = stripped[(openBracketIndex + 2)..^1].Trim();
-        if (!hintBody.Contains(':', StringComparison.Ordinal)
-            && !hintBody.Contains('=', StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        if (!hintBody.StartsWith("stdout 포함", StringComparison.OrdinalIgnoreCase)
-            && !hintBody.StartsWith("파일 확인", StringComparison.OrdinalIgnoreCase)
-            && !hintBody.StartsWith("stdout", StringComparison.OrdinalIgnoreCase)
-            && !hintBody.StartsWith("verified file", StringComparison.OrdinalIgnoreCase)
-            && !hintBody.StartsWith("verified files", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        stripped = stripped[..openBracketIndex].TrimEnd();
-        return !string.IsNullOrWhiteSpace(stripped);
+        return CodingFallbackPolicy.NormalizeGeneratedRunCommand(command);
     }
 
     private static string InferFallbackPathForGeneratedCode(string? content)
     {
-        var lowered = (content ?? string.Empty).ToLowerInvariant();
-        if (lowered.Contains("<!doctype html", StringComparison.Ordinal)
-            || lowered.Contains("<html", StringComparison.Ordinal))
-        {
-            return "index.html";
-        }
-
-        if (lowered.Contains("using system;", StringComparison.Ordinal)
-            || lowered.Contains("namespace ", StringComparison.Ordinal))
-        {
-            return "Program.cs";
-        }
-
-        if (lowered.Contains("#!/usr/bin/env bash", StringComparison.Ordinal)
-            || lowered.Contains("set -e", StringComparison.Ordinal)
-            || lowered.Contains("echo ", StringComparison.Ordinal))
-        {
-            return "run.sh";
-        }
-
-        if (lowered.Contains("function ", StringComparison.Ordinal)
-            || lowered.Contains("console.log(", StringComparison.Ordinal)
-            || lowered.Contains("=>", StringComparison.Ordinal))
-        {
-            return "main.js";
-        }
-
-        return "main.py";
+        return CodingFallbackPolicy.InferFallbackPathForGeneratedCode(content);
     }
 
     private static string ResolveWorkspacePath(string workspaceRoot, string? relativeOrAbsolutePath)

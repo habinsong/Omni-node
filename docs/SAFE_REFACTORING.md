@@ -2,7 +2,7 @@
 
 [한국어](./SAFE_REFACTORING.md) · [English](./en/safe-refactoring.md)
 
-업데이트 기준: 2026-05-15
+업데이트 기준: 2026-05-19
 
 Safe Refactor는 파일을 바로 덮어쓰지 않는다. 먼저 preview를 만들고, apply 직전에 다시 파일 상태를 확인한다.
 

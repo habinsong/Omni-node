@@ -34,13 +34,19 @@ public sealed class LlmRouter : IDisposable
 {
     private const int ChatContinuationRounds = 6;
     private const string CerebrasFallbackModel = "gpt-oss-120b";
-    private string? _cerebrasResolvedModelCache = null;
-    private DateTime _cerebrasResolvedModelCachedAt = DateTime.MinValue;
     private readonly ProviderOptions _providers;
     private readonly PathOptions _paths;
     private readonly ContextOptions _context;
     private readonly RuntimeSettings _runtimeSettings;
     private readonly HttpClient _httpClient;
+    private readonly SttTranscriptionAdapter _sttTranscriptionAdapter;
+    private readonly NvidiaStatusPollingAdapter _nvidiaStatusPollingAdapter;
+    private readonly CerebrasModelCatalog _cerebrasModelCatalog;
+    private readonly bool _ownsCerebrasModelCatalog;
+    private readonly IProviderChatAdapter _openAiCompatibleChatAdapter;
+    private readonly IProviderStreamingChatAdapter _openAiCompatibleStreamingChatAdapter;
+    private readonly IGeminiGenerateContentAdapter _geminiGenerateContentAdapter;
+    private readonly IGeminiStreamingAdapter _geminiStreamingAdapter;
     private readonly object _groqLock = new();
     private readonly object _geminiLock = new();
     private readonly Dictionary<string, GroqUsage> _groqUsageByModel = new(StringComparer.OrdinalIgnoreCase);
@@ -50,7 +56,12 @@ public sealed class LlmRouter : IDisposable
     private string _selectedGroqModel;
     private readonly AsyncLocal<TokenUsage?> _responseTokenUsage = new();
 
-    public LlmRouter(ProviderOptions providers, PathOptions paths, ContextOptions context, RuntimeSettings runtimeSettings)
+    public LlmRouter(
+        ProviderOptions providers,
+        PathOptions paths,
+        ContextOptions context,
+        RuntimeSettings runtimeSettings,
+        CerebrasModelCatalog? cerebrasModelCatalog = null)
     {
         _providers = providers;
         _paths = paths;
@@ -62,6 +73,14 @@ public sealed class LlmRouter : IDisposable
         {
             Timeout = ProviderTimeoutPolicy.ResolveSharedHttpTimeout(_providers, _context)
         };
+        _sttTranscriptionAdapter = new SttTranscriptionAdapter(_httpClient);
+        _nvidiaStatusPollingAdapter = new NvidiaStatusPollingAdapter(_httpClient);
+        _cerebrasModelCatalog = cerebrasModelCatalog ?? new CerebrasModelCatalog(_providers, _runtimeSettings);
+        _ownsCerebrasModelCatalog = cerebrasModelCatalog == null;
+        _openAiCompatibleChatAdapter = new OpenAiCompatibleChatAdapter(_httpClient);
+        _openAiCompatibleStreamingChatAdapter = new OpenAiCompatibleStreamingChatAdapter(_httpClient);
+        _geminiGenerateContentAdapter = new GeminiGenerateContentAdapter(_httpClient);
+        _geminiStreamingAdapter = new GeminiStreamingAdapter(_httpClient);
 
         LoadUsageState();
     }
@@ -182,64 +201,13 @@ public sealed class LlmRouter : IDisposable
             return "음성 변환 설정 필요: OMNINODE_STT_BASE_URL, OMNINODE_STT_MODEL, OMNINODE_STT_API_KEY를 설정하세요.";
         }
 
-        if (attachment == null || string.IsNullOrWhiteSpace(attachment.DataBase64))
-        {
-            return "음성 파일이 비어 있습니다.";
-        }
-
-        byte[] bytes;
-        try
-        {
-            bytes = Convert.FromBase64String(attachment.DataBase64);
-        }
-        catch
-        {
-            return "음성 파일을 읽을 수 없습니다.";
-        }
-
-        if (bytes.Length == 0)
-        {
-            return "음성 파일이 비어 있습니다.";
-        }
-
-        var baseUrl = _providers.SttBaseUrl.Trim();
-        var endpoint = baseUrl.EndsWith("/audio/transcriptions", StringComparison.OrdinalIgnoreCase)
-            ? baseUrl
-            : $"{baseUrl.TrimEnd('/')}/audio/transcriptions";
-        var apiKey = _runtimeSettings.GetSttApiKey() ?? string.Empty;
-        var fileName = string.IsNullOrWhiteSpace(attachment.Name) ? "telegram-audio.ogg" : attachment.Name.Trim();
-        var mimeType = string.IsNullOrWhiteSpace(attachment.MimeType) ? "audio/ogg" : attachment.MimeType.Trim();
-
-        try
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-            using var form = new MultipartFormDataContent();
-            form.Add(new StringContent(_providers.SttModel.Trim(), Encoding.UTF8), "model");
-            var fileContent = new ByteArrayContent(bytes);
-            fileContent.Headers.ContentType = new MediaTypeHeaderValue(mimeType);
-            form.Add(fileContent, "file", fileName);
-            request.Content = form;
-
-            using var response = await _httpClient.SendAsync(request, cancellationToken);
-            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                Console.Error.WriteLine($"[stt] failed ({(int)response.StatusCode}): {responseBody}");
-                return $"음성 변환 실패: {(int)response.StatusCode}";
-            }
-
-            var text = ProviderResponseParser.ExtractSttText(responseBody).Trim();
-            return string.IsNullOrWhiteSpace(text) ? "음성 변환 결과가 비어 있습니다." : text;
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return "음성 변환 시간이 초과되었습니다.";
-        }
-        catch (Exception ex)
-        {
-            return $"음성 변환 오류: {ex.Message}";
-        }
+        return await _sttTranscriptionAdapter.TranscribeAsync(
+            attachment,
+            _providers.SttBaseUrl,
+            _providers.SttModel,
+            _runtimeSettings.GetSttApiKey() ?? string.Empty,
+            cancellationToken
+        );
     }
 
     public async Task<RouterIntent> ClassifyIntentAsync(string input, CancellationToken cancellationToken)
@@ -322,23 +290,21 @@ public sealed class LlmRouter : IDisposable
 
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-            request.Headers.Add("x-goog-api-key", geminiApiKey);
-            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-            using var response = await _httpClient.SendAsync(request, cancellationToken);
-            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            var result = await _geminiGenerateContentAdapter.SendAsync(
+                new GeminiGenerateContentRequest(endpoint, geminiApiKey, body),
+                cancellationToken
+            );
+            if (!result.IsSuccess)
             {
-                Console.Error.WriteLine($"[gemini] plan failed ({(int)response.StatusCode}): {responseBody}");
+                Console.Error.WriteLine($"[gemini] plan failed ({(int)result.StatusCode}): {result.ResponseBody}");
                 return fallback;
             }
 
-            CaptureGeminiUsage(responseBody);
-            var plan = ProviderResponseParser.ExtractGeminiChunk(responseBody).Content;
+            CaptureGeminiUsage(result.ResponseBody);
+            var plan = ProviderResponseParser.ExtractGeminiChunk(result.ResponseBody).Content;
             if (string.IsNullOrWhiteSpace(plan))
             {
-                var blockReason = ProviderResponseParser.ExtractGeminiBlockReason(responseBody);
+                var blockReason = ProviderResponseParser.ExtractGeminiBlockReason(result.ResponseBody);
                 if (!string.IsNullOrWhiteSpace(blockReason))
                 {
                     Console.Error.WriteLine($"[gemini] blocked: {blockReason}");
@@ -500,53 +466,38 @@ public sealed class LlmRouter : IDisposable
             {
                 var promptForRequest = GroqPromptPolicy.TruncatePromptForGroq(promptForTurn, promptBudgetChars);
                 var multiTurn = GroqPromptPolicy.SplitPromptToMultiTurn(promptForRequest);
-                string messagesJson;
-                if (multiTurn.Count > 1 && multiTurn[0].Role != "user")
+                var result = await _openAiCompatibleChatAdapter.SendAsync(
+                    new ProviderChatAdapterRequest(
+                        "groq",
+                        endpoint,
+                        groqApiKey,
+                        model,
+                        systemPrompt,
+                        promptForRequest,
+                        multiTurn,
+                        "max_tokens",
+                        effectiveMaxOutputTokens,
+                        OnResponseHeaders: headers => CaptureGroqRateLimitHeaders(model, headers)
+                    ),
+                    cancellationToken
+                );
+                if (!result.IsSuccess)
                 {
-                    // multi-turn 구조: system_prompt + 규칙/메모리는 user로, history는 교대 배치
-                    var mb = new StringBuilder();
-                    mb.Append($"{{\"role\":\"system\",\"content\":\"{EscapeJson(systemPrompt)}\"}}");
-                    foreach (var (role, msgContent) in multiTurn)
-                    {
-                        var apiRole = role == "assistant" ? "assistant" : "user";
-                        mb.Append($",{{\"role\":\"{apiRole}\",\"content\":\"{EscapeJson(msgContent)}\"}}");
-                    }
-                    messagesJson = mb.ToString();
-                }
-                else
-                {
-                    // fallback: 기존 단일 user 메시지
-                    messagesJson = $"{{\"role\":\"system\",\"content\":\"{EscapeJson(systemPrompt)}\"}},"
-                        + $"{{\"role\":\"user\",\"content\":\"{EscapeJson(promptForRequest)}\"}}";
-                }
-
-                var body = "{"
-                    + $"\"model\":\"{EscapeJson(model)}\","
-                    + "\"temperature\":0.3,"
-                    + $"\"max_tokens\":{effectiveMaxOutputTokens},"
-                    + "\"messages\":["
-                    + messagesJson
-                    + "]"
-                    + "}";
-
-                using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", groqApiKey);
-                request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-                using var response = await _httpClient.SendAsync(request, cancellationToken);
-                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                CaptureGroqRateLimitHeaders(model, response.Headers);
-                if (!response.IsSuccessStatusCode)
-                {
-                    if ((int)response.StatusCode == 429 && rateLimitRetries < 2)
+                    if ((int)result.StatusCode == 429 && rateLimitRetries < 2)
                     {
                         rateLimitRetries += 1;
-                        await Task.Delay(GroqPromptPolicy.GetGroqRetryDelayMs(response.Headers, rateLimitRetries == 1 ? 900 : 1800), cancellationToken);
+                        await Task.Delay(
+                            GroqPromptPolicy.GetGroqRetryDelayMs(
+                                result.ResponseHeaders,
+                                rateLimitRetries == 1 ? 900 : 1800
+                            ),
+                            cancellationToken
+                        );
                         turn -= 1;
                         continue;
                     }
 
-                    if (GroqPromptPolicy.TryExtractGroqMaxTokensLimit(responseBody, out var limit)
+                    if (GroqPromptPolicy.TryExtractGroqMaxTokensLimit(result.ResponseBody, out var limit)
                         && limit >= 128
                         && effectiveMaxOutputTokens > limit
                         && tokenLimitRetries < 2)
@@ -557,7 +508,7 @@ public sealed class LlmRouter : IDisposable
                         continue;
                     }
 
-                    if (GroqPromptPolicy.IsGroqRequestTooLarge(response.StatusCode, responseBody) && requestTooLargeRetries < 3)
+                    if (GroqPromptPolicy.IsGroqRequestTooLarge(result.StatusCode, result.ResponseBody) && requestTooLargeRetries < 3)
                     {
                         requestTooLargeRetries += 1;
                         promptBudgetChars = Math.Max(1200, promptBudgetChars / 2);
@@ -567,14 +518,13 @@ public sealed class LlmRouter : IDisposable
                         continue;
                     }
 
-                    Console.Error.WriteLine($"[groq] chat failed ({(int)response.StatusCode}): {responseBody}");
-                    return $"Groq 요청 실패: {(int)response.StatusCode}";
+                    return $"Groq 요청 실패: {(int)result.StatusCode}";
                 }
 
                 rateLimitRetries = 0;
                 requestTooLargeRetries = 0;
-                CaptureGroqUsage(model, responseBody);
-                var chunk = ProviderResponseParser.ExtractOpenAiCompatibleChunk(responseBody);
+                CaptureGroqUsage(model, result.ResponseBody);
+                var chunk = ProviderResponseParser.ExtractOpenAiCompatibleChunk(result.ResponseBody);
                 var chunkText = chunk.Content.Trim();
                 if (!string.IsNullOrWhiteSpace(chunkText))
                 {
@@ -795,20 +745,18 @@ public sealed class LlmRouter : IDisposable
                     + $"\"generationConfig\":{{\"temperature\":0.3,\"maxOutputTokens\":{effectiveMaxOutputTokens}}}"
                     + "}";
 
-                using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-                request.Headers.Add("x-goog-api-key", geminiApiKey);
-                request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-                using var response = await _httpClient.SendAsync(request, cancellationToken);
-                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                if (!response.IsSuccessStatusCode)
+                var result = await _geminiGenerateContentAdapter.SendAsync(
+                    new GeminiGenerateContentRequest(endpoint, geminiApiKey, body),
+                    cancellationToken
+                );
+                if (!result.IsSuccess)
                 {
-                    Console.Error.WriteLine($"[gemini] chat failed ({(int)response.StatusCode}): {responseBody}");
-                    return $"Gemini 요청 실패: {(int)response.StatusCode}";
+                    Console.Error.WriteLine($"[gemini] chat failed ({(int)result.StatusCode}): {result.ResponseBody}");
+                    return $"Gemini 요청 실패: {(int)result.StatusCode}";
                 }
 
-                CaptureGeminiUsage(responseBody);
-                var chunk = ProviderResponseParser.ExtractGeminiChunk(responseBody);
+                CaptureGeminiUsage(result.ResponseBody);
+                var chunk = ProviderResponseParser.ExtractGeminiChunk(result.ResponseBody);
                 var chunkText = chunk.Content.Trim();
                 if (!string.IsNullOrWhiteSpace(chunkText))
                 {
@@ -871,61 +819,25 @@ public sealed class LlmRouter : IDisposable
             + "}";
 
         var mergedBuilder = new StringBuilder();
-        var eventBuilder = new StringBuilder();
         string? usagePayload = null;
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-            request.Headers.Add("x-goog-api-key", geminiApiKey);
-            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-            using var response = await _httpClient.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
+            var result = await _geminiStreamingAdapter.StreamAsync(
+                new GeminiStreamingAdapterRequest(
+                    endpoint,
+                    geminiApiKey,
+                    body,
+                    cancellationToken,
+                    cancellationToken,
+                    () => cancellationToken,
+                    ConsumeEvent
+                ),
                 cancellationToken
             );
-            if (!response.IsSuccessStatusCode)
+            if (!result.IsSuccess)
             {
-                var failureBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                Console.Error.WriteLine($"[gemini] chat stream failed ({(int)response.StatusCode}): {failureBody}");
-                return $"Gemini 요청 실패: {(int)response.StatusCode}";
-            }
-
-            using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            using var reader = new StreamReader(responseStream, Encoding.UTF8);
-            while (true)
-            {
-                var line = await reader.ReadLineAsync(cancellationToken);
-                if (line == null)
-                {
-                    break;
-                }
-
-                if (line.Length == 0)
-                {
-                    ConsumeEvent(eventBuilder.ToString());
-                    eventBuilder.Clear();
-                    continue;
-                }
-
-                if (line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-                {
-                    var payloadLine = line[5..].TrimStart();
-                    if (payloadLine.Length > 0)
-                    {
-                        if (eventBuilder.Length > 0)
-                        {
-                            eventBuilder.Append('\n');
-                        }
-
-                        eventBuilder.Append(payloadLine);
-                    }
-                }
-            }
-
-            if (eventBuilder.Length > 0)
-            {
-                ConsumeEvent(eventBuilder.ToString());
+                Console.Error.WriteLine($"[gemini] chat stream failed ({(int)result.StatusCode}): {result.FailureBody}");
+                return $"Gemini 요청 실패: {(int)result.StatusCode}";
             }
 
             if (!string.IsNullOrWhiteSpace(usagePayload))
@@ -938,18 +850,12 @@ public sealed class LlmRouter : IDisposable
 
             void ConsumeEvent(string eventPayload)
             {
-                var trimmedPayload = (eventPayload ?? string.Empty).Trim();
-                if (trimmedPayload.Length == 0 || trimmedPayload.Equals("[DONE]", StringComparison.Ordinal))
+                if (eventPayload.Contains("\"usageMetadata\"", StringComparison.Ordinal))
                 {
-                    return;
+                    usagePayload = eventPayload;
                 }
 
-                if (trimmedPayload.Contains("\"usageMetadata\"", StringComparison.Ordinal))
-                {
-                    usagePayload = trimmedPayload;
-                }
-
-                var chunk = ProviderResponseParser.ExtractGeminiChunk(trimmedPayload);
+                var chunk = ProviderResponseParser.ExtractGeminiChunk(eventPayload);
                 var delta = GeminiRequestPolicy.NormalizeStreamDelta(chunk.Content, mergedBuilder.ToString());
                 if (delta.Length == 0)
                 {
@@ -998,20 +904,18 @@ public sealed class LlmRouter : IDisposable
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(effectiveTimeoutMs));
-            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-            request.Headers.Add("x-goog-api-key", geminiApiKey);
-            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-            using var response = await _httpClient.SendAsync(request, timeoutCts.Token);
-            var responseBody = await response.Content.ReadAsStringAsync(timeoutCts.Token);
-            if (!response.IsSuccessStatusCode)
+            var result = await _geminiGenerateContentAdapter.SendAsync(
+                new GeminiGenerateContentRequest(endpoint, geminiApiKey, body),
+                timeoutCts.Token
+            );
+            if (!result.IsSuccess)
             {
-                Console.Error.WriteLine($"[gemini] grounded chat failed ({(int)response.StatusCode}): {responseBody}");
-                return $"Gemini 웹검색 요청 실패: {(int)response.StatusCode}";
+                Console.Error.WriteLine($"[gemini] grounded chat failed ({(int)result.StatusCode}): {result.ResponseBody}");
+                return $"Gemini 웹검색 요청 실패: {(int)result.StatusCode}";
             }
 
-            CaptureGeminiUsage(responseBody);
-            var content = ProviderResponseParser.ExtractGeminiChunk(responseBody).Content.Trim();
+            CaptureGeminiUsage(result.ResponseBody);
+            var content = ProviderResponseParser.ExtractGeminiChunk(result.ResponseBody).Content.Trim();
             return string.IsNullOrWhiteSpace(content) ? "Gemini 웹검색 응답이 비어 있습니다." : content;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -1053,6 +957,7 @@ public sealed class LlmRouter : IDisposable
         var firstChunkMs = 0L;
         var streamedTextStarted = false;
         var mergedBuilder = new StringBuilder();
+        string? usagePayload = null;
 
         try
         {
@@ -1063,65 +968,26 @@ public sealed class LlmRouter : IDisposable
                 totalTimeoutCts.Token
             );
             firstChunkTimeoutCts.CancelAfter(TimeSpan.FromMilliseconds(effectiveFirstChunkTimeoutMs));
-            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-            request.Headers.Add("x-goog-api-key", geminiApiKey);
-            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-            using var response = await _httpClient.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
-                firstChunkTimeoutCts.Token
+            var result = await _geminiStreamingAdapter.StreamAsync(
+                new GeminiStreamingAdapterRequest(
+                    endpoint,
+                    geminiApiKey,
+                    body,
+                    firstChunkTimeoutCts.Token,
+                    totalTimeoutCts.Token,
+                    () => streamedTextStarted ? totalTimeoutCts.Token : firstChunkTimeoutCts.Token,
+                    ConsumeEvent
+                ),
+                totalTimeoutCts.Token
             );
-            if (!response.IsSuccessStatusCode)
+            if (!result.IsSuccess)
             {
-                var failureBody = await response.Content.ReadAsStringAsync(totalTimeoutCts.Token);
-                Console.Error.WriteLine($"[gemini] grounded chat stream failed ({(int)response.StatusCode}): {failureBody}");
+                Console.Error.WriteLine($"[gemini] grounded chat stream failed ({(int)result.StatusCode}): {result.FailureBody}");
                 return new GeminiGroundedChatResponse(
-                    $"Gemini 웹검색 요청 실패: {(int)response.StatusCode}",
+                    $"Gemini 웹검색 요청 실패: {(int)result.StatusCode}",
                     0,
                     Math.Max(0L, stopwatch.ElapsedMilliseconds)
                 );
-            }
-
-            using var responseStream = await response.Content.ReadAsStreamAsync(firstChunkTimeoutCts.Token);
-            using var reader = new StreamReader(responseStream);
-            var eventBuilder = new StringBuilder();
-            string? usagePayload = null;
-
-            while (true)
-            {
-                var activeToken = streamedTextStarted ? totalTimeoutCts.Token : firstChunkTimeoutCts.Token;
-                var line = await reader.ReadLineAsync(activeToken);
-                if (line == null)
-                {
-                    break;
-                }
-
-                if (line.Length == 0)
-                {
-                    ConsumeEvent(eventBuilder.ToString());
-                    eventBuilder.Clear();
-                    continue;
-                }
-
-                if (line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-                {
-                    var payloadLine = line[5..].TrimStart();
-                    if (payloadLine.Length > 0)
-                    {
-                        if (eventBuilder.Length > 0)
-                        {
-                            eventBuilder.Append('\n');
-                        }
-
-                        eventBuilder.Append(payloadLine);
-                    }
-                }
-            }
-
-            if (eventBuilder.Length > 0)
-            {
-                ConsumeEvent(eventBuilder.ToString());
             }
 
             if (!string.IsNullOrWhiteSpace(usagePayload))
@@ -1138,18 +1004,12 @@ public sealed class LlmRouter : IDisposable
 
             void ConsumeEvent(string eventPayload)
             {
-                var trimmedPayload = (eventPayload ?? string.Empty).Trim();
-                if (trimmedPayload.Length == 0 || trimmedPayload.Equals("[DONE]", StringComparison.Ordinal))
+                if (eventPayload.Contains("\"usageMetadata\"", StringComparison.Ordinal))
                 {
-                    return;
+                    usagePayload = eventPayload;
                 }
 
-                if (trimmedPayload.Contains("\"usageMetadata\"", StringComparison.Ordinal))
-                {
-                    usagePayload = trimmedPayload;
-                }
-
-                var chunk = ProviderResponseParser.ExtractGeminiChunk(trimmedPayload);
+                var chunk = ProviderResponseParser.ExtractGeminiChunk(eventPayload);
                 var delta = GeminiRequestPolicy.NormalizeStreamDelta(chunk.Content, mergedBuilder.ToString());
                 if (delta.Length == 0)
                 {
@@ -1245,7 +1105,7 @@ public sealed class LlmRouter : IDisposable
         var stopwatch = Stopwatch.StartNew();
         var promptForTurn = prompt;
         var mergedBuilder = new StringBuilder();
-        var citationByKey = new Dictionary<string, SearchCitationReference>(StringComparer.OrdinalIgnoreCase);
+        var citationAccumulator = new CitationAccumulator();
 
         try
         {
@@ -1254,27 +1114,24 @@ public sealed class LlmRouter : IDisposable
                 var body = GeminiRequestPolicy.BuildUrlContextBody(promptForTurn, effectiveMaxOutputTokens, includeGoogleSearch);
                 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(effectiveTimeoutMs));
-                using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-                request.Headers.Add("x-goog-api-key", geminiApiKey);
-                request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-                using var response = await _httpClient.SendAsync(request, timeoutCts.Token);
-                var responseBody = await response.Content.ReadAsStringAsync(timeoutCts.Token);
-                if (!response.IsSuccessStatusCode)
+                var result = await _geminiGenerateContentAdapter.SendAsync(
+                    new GeminiGenerateContentRequest(endpoint, geminiApiKey, body),
+                    timeoutCts.Token
+                );
+                if (!result.IsSuccess)
                 {
-                    Console.Error.WriteLine($"[gemini] url context failed ({(int)response.StatusCode}): {responseBody}");
+                    Console.Error.WriteLine($"[gemini] url context failed ({(int)result.StatusCode}): {result.ResponseBody}");
                     return new GeminiUrlContextChatResponse(
-                        $"Gemini URL 참조 요청 실패: {(int)response.StatusCode}",
+                        $"Gemini URL 참조 요청 실패: {(int)result.StatusCode}",
                         0,
                         Math.Max(0L, stopwatch.ElapsedMilliseconds),
                         Array.Empty<SearchCitationReference>()
                     );
                 }
 
-                CaptureGeminiUsage(responseBody);
-                MergeCitations(GeminiCitationParser.ExtractUrlContextCitations(responseBody));
-                MergeCitations(GeminiCitationParser.ExtractGroundingCitations(responseBody));
-                var chunk = ProviderResponseParser.ExtractGeminiChunk(responseBody);
+                CaptureGeminiUsage(result.ResponseBody);
+                citationAccumulator.MergeFromGeminiPayload(result.ResponseBody);
+                var chunk = ProviderResponseParser.ExtractGeminiChunk(result.ResponseBody);
                 var chunkText = chunk.Content.Trim();
                 if (!string.IsNullOrWhiteSpace(chunkText))
                 {
@@ -1299,22 +1156,8 @@ public sealed class LlmRouter : IDisposable
                 string.IsNullOrWhiteSpace(content) ? "Gemini URL 참조 응답이 비어 있습니다." : content,
                 0,
                 Math.Max(0L, stopwatch.ElapsedMilliseconds),
-                citationByKey.Values.ToArray()
+                citationAccumulator.ToArray()
             );
-
-            void MergeCitations(IEnumerable<SearchCitationReference> citations)
-            {
-                foreach (var citation in citations)
-                {
-                    var key = GeminiCitationParser.BuildDedupKey(citation);
-                    if (key.Length == 0)
-                    {
-                        continue;
-                    }
-
-                    citationByKey[key] = citation;
-                }
-            }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -1371,7 +1214,8 @@ public sealed class LlmRouter : IDisposable
         var firstChunkMs = 0L;
         var streamedTextStarted = false;
         var mergedBuilder = new StringBuilder();
-        var citationByUrl = new Dictionary<string, SearchCitationReference>(StringComparer.OrdinalIgnoreCase);
+        var citationAccumulator = new CitationAccumulator();
+        string? usagePayload = null;
 
         try
         {
@@ -1382,66 +1226,27 @@ public sealed class LlmRouter : IDisposable
                 totalTimeoutCts.Token
             );
             firstChunkTimeoutCts.CancelAfter(TimeSpan.FromMilliseconds(effectiveFirstChunkTimeoutMs));
-            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-            request.Headers.Add("x-goog-api-key", geminiApiKey);
-            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-            using var response = await _httpClient.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
-                firstChunkTimeoutCts.Token
+            var result = await _geminiStreamingAdapter.StreamAsync(
+                new GeminiStreamingAdapterRequest(
+                    endpoint,
+                    geminiApiKey,
+                    body,
+                    firstChunkTimeoutCts.Token,
+                    totalTimeoutCts.Token,
+                    () => streamedTextStarted ? totalTimeoutCts.Token : firstChunkTimeoutCts.Token,
+                    ConsumeEvent
+                ),
+                totalTimeoutCts.Token
             );
-            if (!response.IsSuccessStatusCode)
+            if (!result.IsSuccess)
             {
-                var failureBody = await response.Content.ReadAsStringAsync(totalTimeoutCts.Token);
-                Console.Error.WriteLine($"[gemini] url context stream failed ({(int)response.StatusCode}): {failureBody}");
+                Console.Error.WriteLine($"[gemini] url context stream failed ({(int)result.StatusCode}): {result.FailureBody}");
                 return new GeminiUrlContextChatResponse(
-                    $"Gemini URL 참조 요청 실패: {(int)response.StatusCode}",
+                    $"Gemini URL 참조 요청 실패: {(int)result.StatusCode}",
                     0,
                     Math.Max(0L, stopwatch.ElapsedMilliseconds),
                     Array.Empty<SearchCitationReference>()
                 );
-            }
-
-            using var responseStream = await response.Content.ReadAsStreamAsync(firstChunkTimeoutCts.Token);
-            using var reader = new StreamReader(responseStream);
-            var eventBuilder = new StringBuilder();
-            string? usagePayload = null;
-
-            while (true)
-            {
-                var activeToken = streamedTextStarted ? totalTimeoutCts.Token : firstChunkTimeoutCts.Token;
-                var line = await reader.ReadLineAsync(activeToken);
-                if (line == null)
-                {
-                    break;
-                }
-
-                if (line.Length == 0)
-                {
-                    ConsumeEvent(eventBuilder.ToString());
-                    eventBuilder.Clear();
-                    continue;
-                }
-
-                if (line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-                {
-                    var payloadLine = line[5..].TrimStart();
-                    if (payloadLine.Length > 0)
-                    {
-                        if (eventBuilder.Length > 0)
-                        {
-                            eventBuilder.Append('\n');
-                        }
-
-                        eventBuilder.Append(payloadLine);
-                    }
-                }
-            }
-
-            if (eventBuilder.Length > 0)
-            {
-                ConsumeEvent(eventBuilder.ToString());
             }
 
             if (!string.IsNullOrWhiteSpace(usagePayload))
@@ -1454,33 +1259,19 @@ public sealed class LlmRouter : IDisposable
                 string.IsNullOrWhiteSpace(content) ? "Gemini URL 참조 응답이 비어 있습니다." : content,
                 firstChunkMs,
                 Math.Max(0L, stopwatch.ElapsedMilliseconds),
-                citationByUrl.Values.ToArray()
+                citationAccumulator.ToArray()
             );
 
             void ConsumeEvent(string eventPayload)
             {
-                var trimmedPayload = (eventPayload ?? string.Empty).Trim();
-                if (trimmedPayload.Length == 0 || trimmedPayload.Equals("[DONE]", StringComparison.Ordinal))
+                if (eventPayload.Contains("\"usageMetadata\"", StringComparison.Ordinal))
                 {
-                    return;
+                    usagePayload = eventPayload;
                 }
 
-                if (trimmedPayload.Contains("\"usageMetadata\"", StringComparison.Ordinal))
-                {
-                    usagePayload = trimmedPayload;
-                }
+                citationAccumulator.MergeFromGeminiPayload(eventPayload);
 
-                foreach (var citation in GeminiCitationParser.ExtractUrlContextCitations(trimmedPayload))
-                {
-                    citationByUrl[GeminiCitationParser.BuildDedupKey(citation)] = citation;
-                }
-
-                foreach (var citation in GeminiCitationParser.ExtractGroundingCitations(trimmedPayload))
-                {
-                    citationByUrl[GeminiCitationParser.BuildDedupKey(citation)] = citation;
-                }
-
-                var chunk = ProviderResponseParser.ExtractGeminiChunk(trimmedPayload);
+                var chunk = ProviderResponseParser.ExtractGeminiChunk(eventPayload);
                 var delta = GeminiRequestPolicy.NormalizeStreamDelta(chunk.Content, mergedBuilder.ToString());
                 if (delta.Length == 0)
                 {
@@ -1519,7 +1310,7 @@ public sealed class LlmRouter : IDisposable
                     partialContent + "\n\n" + ChatStreamingContinuation.BuildPartialTruncationSuffix("gemini", $"timeout_{timeoutKind}"),
                     firstChunkMs,
                     Math.Max(0L, stopwatch.ElapsedMilliseconds),
-                    citationByUrl.Values.ToArray()
+                    citationAccumulator.ToArray()
                 );
             }
 
@@ -1527,7 +1318,7 @@ public sealed class LlmRouter : IDisposable
                 "Gemini URL 참조 응답 시간이 초과되었습니다.",
                 firstChunkMs,
                 Math.Max(0L, stopwatch.ElapsedMilliseconds),
-                citationByUrl.Values.ToArray()
+                citationAccumulator.ToArray()
             );
         }
         catch (Exception ex)
@@ -1540,7 +1331,7 @@ public sealed class LlmRouter : IDisposable
                     partialContent + "\n\n" + ChatStreamingContinuation.BuildPartialTruncationSuffix("gemini", ex.Message),
                     firstChunkMs,
                     Math.Max(0L, stopwatch.ElapsedMilliseconds),
-                    citationByUrl.Values.ToArray()
+                    citationAccumulator.ToArray()
                 );
             }
 
@@ -1548,7 +1339,7 @@ public sealed class LlmRouter : IDisposable
                 $"Gemini URL 참조 호출 오류: {ex.Message}",
                 0,
                 Math.Max(0L, stopwatch.ElapsedMilliseconds),
-                citationByUrl.Values.ToArray()
+                citationAccumulator.ToArray()
             );
         }
     }
@@ -1600,20 +1391,18 @@ public sealed class LlmRouter : IDisposable
             bodyBuilder.Append("}");
             var body = bodyBuilder.ToString();
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-            request.Headers.Add("x-goog-api-key", geminiApiKey);
-            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-            using var response = await _httpClient.SendAsync(request, cancellationToken);
-            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            var result = await _geminiGenerateContentAdapter.SendAsync(
+                new GeminiGenerateContentRequest(endpoint, geminiApiKey, body),
+                cancellationToken
+            );
+            if (!result.IsSuccess)
             {
-                Console.Error.WriteLine($"[gemini] multimodal chat failed ({(int)response.StatusCode}): {responseBody}");
-                return $"Gemini 요청 실패: {(int)response.StatusCode}";
+                Console.Error.WriteLine($"[gemini] multimodal chat failed ({(int)result.StatusCode}): {result.ResponseBody}");
+                return $"Gemini 요청 실패: {(int)result.StatusCode}";
             }
 
-            CaptureGeminiUsage(responseBody);
-            var text = ProviderResponseParser.ExtractGeminiChunk(responseBody).Content.Trim();
+            CaptureGeminiUsage(result.ResponseBody);
+            var text = ProviderResponseParser.ExtractGeminiChunk(result.ResponseBody).Content.Trim();
             return string.IsNullOrWhiteSpace(text) ? "Gemini 응답이 비어 있습니다." : text;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -1658,27 +1447,25 @@ public sealed class LlmRouter : IDisposable
         {
             for (var turn = 0; turn < ChatContinuationRounds; turn++)
             {
-                var body = "{"
-                    + $"\"model\":\"{EscapeJson(effectiveModel)}\","
-                    + "\"temperature\":0.3,"
-                    + $"\"max_completion_tokens\":{effectiveMaxOutputTokens},"
-                    + "\"messages\":["
-                    + $"{{\"role\":\"system\",\"content\":\"{EscapeJson(systemPrompt)}\"}},"
-                    + $"{{\"role\":\"user\",\"content\":\"{EscapeJson(promptForTurn)}\"}}"
-                    + "]"
-                    + "}";
-
-                using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cerebrasApiKey);
-                request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-                using var response = await _httpClient.SendAsync(request, cancellationToken);
-                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                if (!response.IsSuccessStatusCode)
+                var result = await _openAiCompatibleChatAdapter.SendAsync(
+                    new ProviderChatAdapterRequest(
+                        "cerebras",
+                        endpoint,
+                        cerebrasApiKey,
+                        effectiveModel,
+                        systemPrompt,
+                        promptForTurn,
+                        null,
+                        "max_completion_tokens",
+                        effectiveMaxOutputTokens
+                    ),
+                    cancellationToken
+                );
+                if (!result.IsSuccess)
                 {
                     if (!fallbackRetried
-                        && response.StatusCode == System.Net.HttpStatusCode.NotFound
-                        && CerebrasErrorPolicy.IsModelNotFound(responseBody))
+                        && result.StatusCode == System.Net.HttpStatusCode.NotFound
+                        && CerebrasErrorPolicy.IsModelNotFound(result.ResponseBody))
                     {
                         // catalog API로 사용자 키가 access 가능한 실제 모델 fetching → 첫 모델로 retry.
                         var resolved = await ResolveAvailableCerebrasModelAsync(cerebrasApiKey, cancellationToken);
@@ -1694,16 +1481,15 @@ public sealed class LlmRouter : IDisposable
                             continue;
                         }
 
-                        Console.Error.WriteLine($"[cerebras] chat failed ({(int)response.StatusCode}): {responseBody} | catalog로도 가용 모델을 찾지 못했습니다. API 키 권한을 확인하세요.");
+                        Console.Error.WriteLine($"[cerebras] chat failed ({(int)result.StatusCode}): {result.ResponseBody} | catalog로도 가용 모델을 찾지 못했습니다. API 키 권한을 확인하세요.");
                         return $"Cerebras 키가 어떤 모델에도 접근 권한이 없습니다. https://cloud.cerebras.ai 에서 키 권한과 사용 가능한 모델 목록을 확인하세요. (요청한 모델: {effectiveModel})";
                     }
 
-                    Console.Error.WriteLine($"[cerebras] chat failed ({(int)response.StatusCode}): {responseBody}");
-                    return CerebrasErrorPolicy.BuildHttpFailureText(response.StatusCode, effectiveModel);
+                    return CerebrasErrorPolicy.BuildHttpFailureText(result.StatusCode, effectiveModel);
                 }
 
-                CaptureOpenAiCompatibleTokenUsage(responseBody);
-                var chunk = ProviderResponseParser.ExtractOpenAiCompatibleChunk(responseBody);
+                CaptureOpenAiCompatibleTokenUsage(result.ResponseBody);
+                var chunk = ProviderResponseParser.ExtractOpenAiCompatibleChunk(result.ResponseBody);
                 var chunkText = chunk.Content.Trim();
                 if (!string.IsNullOrWhiteSpace(chunkText))
                 {
@@ -1748,12 +1534,13 @@ public sealed class LlmRouter : IDisposable
         }
 
         var initialModel = string.IsNullOrWhiteSpace(modelOverride) ? _providers.CerebrasModel : modelOverride.Trim();
-        // 직전 호출에서 catalog로 가용 모델을 이미 알아냈다면 그것을 우선 사용
-        if (!string.IsNullOrWhiteSpace(_cerebrasResolvedModelCache)
-            && (DateTime.UtcNow - _cerebrasResolvedModelCachedAt).TotalSeconds < 60
-            && string.IsNullOrWhiteSpace(modelOverride))
+        if (string.IsNullOrWhiteSpace(modelOverride))
         {
-            initialModel = _cerebrasResolvedModelCache!;
+            var cachedModel = _cerebrasModelCatalog.GetCachedResolvedModel();
+            if (!string.IsNullOrWhiteSpace(cachedModel))
+            {
+                initialModel = cachedModel;
+            }
         }
         var endpoint = $"{_providers.CerebrasBaseUrl.TrimEnd('/')}/chat/completions";
         var systemPrompt = "You are Omni-node assistant. Respond in Korean with concise and practical answers. "
@@ -1833,34 +1620,28 @@ public sealed class LlmRouter : IDisposable
         {
             for (var turn = 0; turn < ChatContinuationRounds; turn++)
             {
-                var body = OpenAiCompatibleProtocol.BuildChatBody(
-                    model,
-                    systemPrompt,
-                    promptForTurn,
-                    null,
-                    "max_tokens",
-                    effectiveMaxOutputTokens,
-                    stream: false
+                var result = await _openAiCompatibleChatAdapter.SendAsync(
+                    new ProviderChatAdapterRequest(
+                        "nvidia",
+                        endpoint,
+                        nvidiaApiKey,
+                        model,
+                        systemPrompt,
+                        promptForTurn,
+                        null,
+                        "max_tokens",
+                        effectiveMaxOutputTokens,
+                        AcceptedResponseResolver: (acceptedBody, token) => PollNvidiaStatusAsync(nvidiaApiKey, acceptedBody, token)
+                    ),
+                    cancellationToken
                 );
-
-                using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", nvidiaApiKey);
-                request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-                using var response = await _httpClient.SendAsync(request, cancellationToken);
-                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                if (response.StatusCode == System.Net.HttpStatusCode.Accepted)
+                if (!result.IsSuccess)
                 {
-                    responseBody = await PollNvidiaStatusAsync(nvidiaApiKey, responseBody, cancellationToken);
-                }
-                else if (!response.IsSuccessStatusCode)
-                {
-                    Console.Error.WriteLine($"[nvidia] chat failed ({(int)response.StatusCode}): {responseBody}");
-                    return $"NVIDIA NIM 요청 실패: {(int)response.StatusCode}";
+                    return result.FailureMessage;
                 }
 
-                CaptureOpenAiCompatibleTokenUsage(responseBody);
-                var chunk = ProviderResponseParser.ExtractOpenAiCompatibleChunk(responseBody);
+                CaptureOpenAiCompatibleTokenUsage(result.ResponseBody);
+                var chunk = ProviderResponseParser.ExtractOpenAiCompatibleChunk(result.ResponseBody);
                 var chunkText = chunk.Content.Trim();
                 if (!string.IsNullOrWhiteSpace(chunkText))
                 {
@@ -1932,54 +1713,7 @@ public sealed class LlmRouter : IDisposable
 
     private async Task<string?> ResolveAvailableCerebrasModelAsync(string apiKey, CancellationToken cancellationToken)
     {
-        // 60초 캐시
-        if (_cerebrasResolvedModelCache != null
-            && (DateTime.UtcNow - _cerebrasResolvedModelCachedAt).TotalSeconds < 60)
-        {
-            return _cerebrasResolvedModelCache;
-        }
-        try
-        {
-            var endpoint = $"{_providers.CerebrasBaseUrl.TrimEnd('/')}/models";
-            using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-            using var response = await _httpClient.SendAsync(request, cancellationToken);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                Console.Error.WriteLine($"[cerebras] catalog fetch failed ({(int)response.StatusCode}): {body}");
-                return null;
-            }
-            using var doc = JsonDocument.Parse(body);
-            if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
-            {
-                return null;
-            }
-            string? firstId = null;
-            foreach (var item in data.EnumerateArray())
-            {
-                if (item.ValueKind != JsonValueKind.Object) continue;
-                if (!item.TryGetProperty("id", out var idEl)) continue;
-                var id = idEl.GetString();
-                if (!string.IsNullOrWhiteSpace(id))
-                {
-                    firstId = id;
-                    break;
-                }
-            }
-            if (!string.IsNullOrWhiteSpace(firstId))
-            {
-                _cerebrasResolvedModelCache = firstId;
-                _cerebrasResolvedModelCachedAt = DateTime.UtcNow;
-                Console.Error.WriteLine($"[cerebras] resolved available model from catalog: {firstId}");
-            }
-            return firstId;
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[cerebras] catalog fetch error: {ex.Message}");
-            return null;
-        }
+        return await _cerebrasModelCatalog.ResolveFirstAvailableModelAsync(apiKey, cancellationToken);
     }
 
     private int NormalizeNvidiaMaxOutputTokens(int requested)
@@ -2022,6 +1756,10 @@ public sealed class LlmRouter : IDisposable
     public void Dispose()
     {
         _httpClient.Dispose();
+        if (_ownsCerebrasModelCatalog)
+        {
+            _cerebrasModelCatalog.Dispose();
+        }
     }
 
     private void CaptureGroqUsage(string model, string responseBody)
@@ -2201,35 +1939,43 @@ public sealed class LlmRouter : IDisposable
         {
             for (var turn = 0; turn < ChatContinuationRounds; turn++)
             {
-                var body = OpenAiCompatibleProtocol.BuildChatBody(
-                    model,
-                    systemPrompt,
-                    promptForTurn,
-                    multiTurn,
-                    maxTokensProperty,
-                    maxOutputTokens,
-                    stream: true
-                );
-                var eventBuilder = new StringBuilder();
                 var turnBuilder = new StringBuilder();
-                var turnFinishReason = string.Empty;
-
-                using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-                request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-                using var response = await _httpClient.SendAsync(
-                    request,
-                    HttpCompletionOption.ResponseHeadersRead,
+                var result = await _openAiCompatibleStreamingChatAdapter.SendTurnAsync(
+                    new ProviderStreamingAdapterRequest(
+                        provider,
+                        endpoint,
+                        apiKey,
+                        model,
+                        systemPrompt,
+                        promptForTurn,
+                        multiTurn,
+                        maxTokensProperty,
+                        maxOutputTokens,
+                        AcceptedResponseResolver: provider.Equals("nvidia", StringComparison.OrdinalIgnoreCase)
+                            ? (acceptedBody, token) => PollNvidiaStatusAsync(apiKey, acceptedBody, token)
+                            : null,
+                        OnResponseHeaders: provider.Equals("groq", StringComparison.OrdinalIgnoreCase)
+                            ? headers => CaptureGroqRateLimitHeaders(model, headers)
+                            : null,
+                        OnRawPayload: CaptureOpenAiCompatibleTokenUsage,
+                        OnDelta: delta =>
+                        {
+                            mergedBuilder.Append(delta);
+                            turnBuilder.Append(delta);
+                            ChatStreamingContinuation.SafeEmitDelta(deltaCallback, delta);
+                        }
+                    ),
                     cancellationToken
                 );
-                if (provider.Equals("nvidia", StringComparison.OrdinalIgnoreCase)
-                    && response.StatusCode == System.Net.HttpStatusCode.Accepted)
+                if (!result.IsSuccess)
                 {
-                    var acceptedBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                    var polled = await PollNvidiaStatusAsync(apiKey, acceptedBody, cancellationToken);
-                    CaptureOpenAiCompatibleTokenUsage(polled);
-                    var polledChunk = ProviderResponseParser.ExtractOpenAiCompatibleChunk(polled);
+                    return result.FailureMessage;
+                }
+
+                if (!string.IsNullOrWhiteSpace(result.AcceptedResponseBody))
+                {
+                    CaptureOpenAiCompatibleTokenUsage(result.AcceptedResponseBody);
+                    var polledChunk = ProviderResponseParser.ExtractOpenAiCompatibleChunk(result.AcceptedResponseBody);
                     var finalContent = polledChunk.Content.Trim();
                     if (!string.IsNullOrWhiteSpace(finalContent))
                     {
@@ -2247,87 +1993,12 @@ public sealed class LlmRouter : IDisposable
                     continue;
                 }
 
-                if (!response.IsSuccessStatusCode)
-                {
-                    var failureBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                    Console.Error.WriteLine($"[{provider}] chat stream failed ({(int)response.StatusCode}): {failureBody}");
-                    return OpenAiCompatibleProtocol.BuildFailureMessage(provider, response.StatusCode, failureBody);
-                }
-
-                if (provider.Equals("groq", StringComparison.OrdinalIgnoreCase))
-                {
-                    CaptureGroqRateLimitHeaders(model, response.Headers);
-                }
-
-                using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-                using var reader = new StreamReader(responseStream, Encoding.UTF8);
-                while (true)
-                {
-                    var line = await reader.ReadLineAsync(cancellationToken);
-                    if (line == null)
-                    {
-                        break;
-                    }
-
-                    if (line.Length == 0)
-                    {
-                        ConsumeOpenAiStreamEvent(eventBuilder.ToString());
-                        eventBuilder.Clear();
-                        continue;
-                    }
-
-                    if (line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var payloadLine = line[5..].TrimStart();
-                        if (payloadLine.Length > 0)
-                        {
-                            if (eventBuilder.Length > 0)
-                            {
-                                eventBuilder.Append('\n');
-                            }
-
-                            eventBuilder.Append(payloadLine);
-                        }
-                    }
-                }
-
-                if (eventBuilder.Length > 0)
-                {
-                    ConsumeOpenAiStreamEvent(eventBuilder.ToString());
-                }
-
-                if (!ProviderResponseParser.IsOpenAiCompatibleTruncated(turnFinishReason) || turnBuilder.Length == 0)
+                if (!ProviderResponseParser.IsOpenAiCompatibleTruncated(result.FinishReason) || turnBuilder.Length == 0)
                 {
                     break;
                 }
 
                 promptForTurn = ChatStreamingContinuation.BuildContinuationPrompt(userInput, mergedBuilder.ToString());
-
-                void ConsumeOpenAiStreamEvent(string eventPayload)
-                {
-                    var payload = (eventPayload ?? string.Empty).Trim();
-                    if (payload.Length == 0 || payload.Equals("[DONE]", StringComparison.Ordinal))
-                    {
-                        return;
-                    }
-
-                    CaptureOpenAiCompatibleTokenUsage(payload);
-                    var chunk = OpenAiCompatibleProtocol.ExtractStreamChunk(payload);
-                    if (!string.IsNullOrWhiteSpace(chunk.FinishReason))
-                    {
-                        turnFinishReason = chunk.FinishReason;
-                    }
-
-                    var delta = chunk.Content;
-                    if (delta.Length == 0)
-                    {
-                        return;
-                    }
-
-                    mergedBuilder.Append(delta);
-                    turnBuilder.Append(delta);
-                    ChatStreamingContinuation.SafeEmitDelta(deltaCallback, delta);
-                }
             }
 
             var content = mergedBuilder.ToString().Trim();
@@ -2364,36 +2035,13 @@ public sealed class LlmRouter : IDisposable
         CancellationToken cancellationToken
     )
     {
-        var requestId = ProviderResponseParser.ExtractNvidiaRequestId(acceptedBody);
-        if (string.IsNullOrWhiteSpace(requestId))
-        {
-            throw new InvalidOperationException("NVIDIA NIM 202 응답에 requestId가 없습니다.");
-        }
-
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(Math.Max(3, _providers.NvidiaTimeoutSec));
-        var endpoint = $"{_providers.NvidiaBaseUrl.TrimEnd('/')}/status/{Uri.EscapeDataString(requestId)}";
-        while (DateTimeOffset.UtcNow < deadline)
-        {
-            await Task.Delay(750, cancellationToken);
-            using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-            using var response = await _httpClient.SendAsync(request, cancellationToken);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (response.IsSuccessStatusCode)
-            {
-                return body;
-            }
-
-            if (response.StatusCode == System.Net.HttpStatusCode.Accepted)
-            {
-                continue;
-            }
-
-            Console.Error.WriteLine($"[nvidia] status poll failed ({(int)response.StatusCode}): {body}");
-            throw new InvalidOperationException($"NVIDIA NIM status polling failed: {(int)response.StatusCode}");
-        }
-
-        throw new TimeoutException("NVIDIA NIM status polling timed out.");
+        return await _nvidiaStatusPollingAdapter.PollAsync(
+            apiKey,
+            acceptedBody,
+            _providers.NvidiaBaseUrl,
+            _providers.NvidiaTimeoutSec,
+            cancellationToken
+        );
     }
 
     private static string EscapeJson(string value)

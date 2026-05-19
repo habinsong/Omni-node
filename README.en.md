@@ -14,7 +14,7 @@
 
 </div>
 
-Updated: 2026-05-15
+Updated: 2026-05-19
 
 Omni-node is not just another chat UI. It is a local-first AI workbench that keeps conversations, coding runs, generated files, validation logs, routines, logic graphs, notebooks, Safe Refactor previews, and Telegram control in the same operational flow.
 

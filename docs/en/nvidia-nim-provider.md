@@ -2,7 +2,7 @@
 
 [한국어](../nvidia-nim-provider.md) · [English](./nvidia-nim-provider.md)
 
-Updated: 2026-05-15
+Updated: 2026-05-19
 
 Provider key: `nvidia`. UI label: `NVIDIA NIM`. Aliases `nvidia-nim`, `nvidia_nim`, and `nim` normalize to `nvidia`.
 

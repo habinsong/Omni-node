@@ -2,7 +2,7 @@
 
 [한국어](../QUICKSTART.md) · [English](./quickstart.md)
 
-Updated: 2026-05-15
+Updated: 2026-05-19
 
 This is the shortest path from clone to dashboard.
 

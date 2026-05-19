@@ -2,7 +2,7 @@
 
 [한국어](../AGENTS_AND_SKILLS.md) · [English](./agents-and-skills.md)
 
-Updated: 2026-05-15
+Updated: 2026-05-19
 
 ![Skills tab](../assets/readme/dashboard-skills-tab.png)
 

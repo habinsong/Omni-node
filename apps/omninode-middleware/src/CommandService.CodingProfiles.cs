@@ -382,35 +382,29 @@ public sealed partial class CommandService
 
     private bool ShouldUseOneShotMode(CodingExecutionProfile profile, string objective, string languageHint)
     {
-        if (!_context.CodingEnableOneShotUiClone || !profile.AllowUiOneShot)
-        {
-            return false;
-        }
-
-        var lang = NormalizeCodingLanguageHintPreservingAuto(languageHint);
-        if (lang != "auto" && lang != "html" && lang != "javascript" && lang != "css" && lang != "python")
-        {
-            return false;
-        }
-
-        return IsFrontendLikeCodingTask(objective, languageHint) || IsGameLikeCodingTask(objective, languageHint);
+        return CodingLoopTuningPolicy.ShouldUseOneShotMode(
+            _context.CodingEnableOneShotUiClone,
+            profile.AllowUiOneShot,
+            objective,
+            languageHint,
+            IsFrontendLikeCodingTask,
+            IsGameLikeCodingTask
+        );
     }
 
     private int ResolveMaxIterations(CodingExecutionProfile profile, bool oneShotMode)
     {
-        return oneShotMode ? 1 : Math.Max(1, profile.MaxIterations);
+        return CodingLoopTuningPolicy.ResolveMaxIterations(profile.MaxIterations, oneShotMode);
     }
 
     private int ResolveMaxActions(CodingExecutionProfile profile, bool oneShotMode)
     {
-        return oneShotMode
-            ? Math.Max(1, profile.OneShotMaxActions)
-            : Math.Max(1, profile.LoopMaxActions);
+        return CodingLoopTuningPolicy.ResolveMaxActions(profile.LoopMaxActions, profile.OneShotMaxActions, oneShotMode);
     }
 
     private int GetCodingPlanMaxOutputTokens(CodingExecutionProfile profile)
     {
-        return Math.Max(1200, profile.PlanMaxOutputTokens);
+        return CodingLoopTuningPolicy.ResolvePlanMaxOutputTokens(profile.PlanMaxOutputTokens);
     }
 
     private int ResolveDirectGenerationMaxOutputTokens(CodingExecutionProfile profile, bool bundleMode)
@@ -660,18 +654,7 @@ public sealed partial class CommandService
 
     private string BuildRecentLoopLogs(IReadOnlyList<string> iterations, CodingExecutionProfile profile)
     {
-        if (iterations.Count == 0)
-        {
-            return string.Empty;
-        }
-
-        var selected = iterations.TakeLast(Math.Max(1, profile.RecentLoopHistory)).ToArray();
-        for (var i = 0; i < selected.Length; i++)
-        {
-            selected[i] = TrimForOutput(selected[i], 500);
-        }
-
-        return string.Join("\n", selected);
+        return CodingLoopTuningPolicy.BuildRecentLoopLogs(iterations, profile.RecentLoopHistory);
     }
 
     private string BuildWorkspaceSnapshot(string workspaceRoot, CodingExecutionProfile profile)
@@ -809,21 +792,16 @@ public sealed partial class CommandService
         IReadOnlyList<string>? requestedPaths
     )
     {
-        if (requestedPaths != null && requestedPaths.Count > 1)
-        {
-            return true;
-        }
-
-        if (IsExplicitSingleFileSimpleTask(objective, "auto", requestedPaths))
-        {
-            return false;
-        }
-
         var projectProfile = ResolveCodingProjectProfile(objective, "auto", requestedPaths);
-        return projectProfile.PrefersMultiFile
-            || profile.PreferBundleFallback
-            || IsFrontendLikeCodingTask(objective, "auto")
-            || IsGameLikeCodingTask(objective, "auto");
+        return CodingFallbackDecisionPolicy.ShouldPreferFileBundleFallback(
+            objective,
+            requestedPaths,
+            IsExplicitSingleFileSimpleTask(objective, "auto", requestedPaths),
+            projectProfile.PrefersMultiFile,
+            profile.PreferBundleFallback,
+            IsFrontendLikeCodingTask(objective, "auto"),
+            IsGameLikeCodingTask(objective, "auto")
+        );
     }
 
     private bool ShouldAttemptEarlyDirectRecovery(

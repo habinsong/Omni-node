@@ -4,6 +4,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using OmniNode.Middleware.Infrastructure.Telegram;
 
 namespace OmniNode.Middleware;
 
@@ -73,50 +74,34 @@ public sealed partial class CommandService
     private void ApplyTelegramTalkDefaults(string requestedThinking)
     {
         var fastModel = string.IsNullOrWhiteSpace(_providers.GroqModel) ? DefaultGroqPrimaryModel : _providers.GroqModel;
-        _telegramLlmPreferences.Profile = "talk";
-        _telegramLlmPreferences.Mode = "orchestration";
-        _telegramLlmPreferences.SingleProvider = "groq";
-        _telegramLlmPreferences.SingleModel = fastModel;
-        _telegramLlmPreferences.AutoGroqComplexUpgrade = true;
-        _telegramLlmPreferences.OrchestrationProvider = "gemini";
-        _telegramLlmPreferences.OrchestrationModel = _providers.GeminiModel;
-        _telegramLlmPreferences.MultiGroqModel = fastModel;
-        _telegramLlmPreferences.MultiGeminiModel = _providers.GeminiModel;
-        _telegramLlmPreferences.MultiCopilotModel = DefaultCopilotModel;
-        _telegramLlmPreferences.MultiCerebrasModel = _providers.CerebrasModel;
-        _telegramLlmPreferences.MultiCodexModel = _providers.CodexModel;
-        _telegramLlmPreferences.MultiSummaryProvider = "gemini";
-        _telegramLlmPreferences.TalkThinkingLevel = NormalizeThinkingLevel(requestedThinking, "low");
+        TelegramLlmPreferencePolicy.ApplyTalkDefaults(
+            _telegramLlmPreferences,
+            requestedThinking,
+            fastModel,
+            _providers.GeminiModel,
+            DefaultCopilotModel,
+            _providers.CerebrasModel,
+            _providers.CodexModel
+        );
     }
 
     private void ApplyTelegramCodeDefaults(string requestedThinking)
     {
         var fastModel = string.IsNullOrWhiteSpace(_providers.GroqModel) ? DefaultGroqPrimaryModel : _providers.GroqModel;
-        _telegramLlmPreferences.Profile = "code";
-        _telegramLlmPreferences.Mode = "orchestration";
-        _telegramLlmPreferences.SingleProvider = "copilot";
-        _telegramLlmPreferences.SingleModel = DefaultCopilotModel;
-        _telegramLlmPreferences.AutoGroqComplexUpgrade = false;
-        _telegramLlmPreferences.OrchestrationProvider = "gemini";
-        _telegramLlmPreferences.OrchestrationModel = _providers.GeminiModel;
-        _telegramLlmPreferences.MultiGroqModel = fastModel;
-        _telegramLlmPreferences.MultiGeminiModel = _providers.GeminiModel;
-        _telegramLlmPreferences.MultiCopilotModel = DefaultCopilotModel;
-        _telegramLlmPreferences.MultiCerebrasModel = _providers.CerebrasModel;
-        _telegramLlmPreferences.MultiCodexModel = _providers.CodexModel;
-        _telegramLlmPreferences.MultiSummaryProvider = "gemini";
-        _telegramLlmPreferences.CodeThinkingLevel = NormalizeThinkingLevel(requestedThinking, "high");
+        TelegramLlmPreferencePolicy.ApplyCodeDefaults(
+            _telegramLlmPreferences,
+            requestedThinking,
+            fastModel,
+            _providers.GeminiModel,
+            DefaultCopilotModel,
+            _providers.CerebrasModel,
+            _providers.CodexModel
+        );
     }
 
     private static string NormalizeThinkingLevel(string? value, string fallback)
     {
-        var normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
-        if (normalized == "low" || normalized == "high")
-        {
-            return normalized;
-        }
-
-        return fallback;
+        return TelegramLlmPreferencePolicy.NormalizeThinkingLevel(value, fallback);
     }
 
     private async Task<string?> TryHandleTelegramLlmControlCommandAsync(string text, CancellationToken cancellationToken)
@@ -374,54 +359,24 @@ public sealed partial class CommandService
         var key = tokens[1].Trim().ToLowerInvariant();
         lock (_telegramLlmLock)
         {
-            _telegramLlmPreferences.Profile = "default";
-            _telegramLlmPreferences.Mode = "single";
-            if (key == "groq")
+            var selection = TelegramLlmPreferencePolicy.ResolveQuickModelSelection(
+                key,
+                _providers.GroqModel,
+                DefaultGroqPrimaryModel,
+                _providers.GeminiModel,
+                DefaultCopilotModel,
+                _providers.CerebrasModel,
+                _providers.NvidiaModel,
+                _providers.CodexModel
+            );
+            if (selection != null)
             {
-                _telegramLlmPreferences.SingleProvider = "groq";
-                _telegramLlmPreferences.SingleModel = string.IsNullOrWhiteSpace(_providers.GroqModel) ? DefaultGroqPrimaryModel : _providers.GroqModel;
-                _telegramLlmPreferences.AutoGroqComplexUpgrade = true;
-                return Task.FromResult<string?>($"단일 제공자를 Groq로 바꿨습니다. 현재 모델: {_telegramLlmPreferences.SingleModel}");
-            }
-
-            if (key == "gemini")
-            {
-                _telegramLlmPreferences.SingleProvider = "gemini";
-                _telegramLlmPreferences.SingleModel = _providers.GeminiModel;
-                _telegramLlmPreferences.AutoGroqComplexUpgrade = false;
-                return Task.FromResult<string?>($"단일 제공자를 Gemini로 바꿨습니다. 현재 모델: {_telegramLlmPreferences.SingleModel}");
-            }
-
-            if (key == "copilot")
-            {
-                _telegramLlmPreferences.SingleProvider = "copilot";
-                _telegramLlmPreferences.SingleModel = DefaultCopilotModel;
-                _telegramLlmPreferences.AutoGroqComplexUpgrade = false;
-                return Task.FromResult<string?>($"단일 제공자를 Copilot로 바꿨습니다. 현재 모델: {_telegramLlmPreferences.SingleModel}");
-            }
-
-            if (key == "cerebras")
-            {
-                _telegramLlmPreferences.SingleProvider = "cerebras";
-                _telegramLlmPreferences.SingleModel = _providers.CerebrasModel;
-                _telegramLlmPreferences.AutoGroqComplexUpgrade = false;
-                return Task.FromResult<string?>($"단일 제공자를 Cerebras로 바꿨습니다. 현재 모델: {_telegramLlmPreferences.SingleModel}");
-            }
-
-            if (key == "nvidia" || key == "nvidia-nim" || key == "nvidia_nim" || key == "nim")
-            {
-                _telegramLlmPreferences.SingleProvider = "nvidia";
-                _telegramLlmPreferences.SingleModel = _providers.NvidiaModel;
-                _telegramLlmPreferences.AutoGroqComplexUpgrade = false;
-                return Task.FromResult<string?>($"단일 제공자를 NVIDIA NIM으로 바꿨습니다. 현재 모델: {_telegramLlmPreferences.SingleModel}");
-            }
-
-            if (key == "codex")
-            {
-                _telegramLlmPreferences.SingleProvider = "codex";
-                _telegramLlmPreferences.SingleModel = _providers.CodexModel;
-                _telegramLlmPreferences.AutoGroqComplexUpgrade = false;
-                return Task.FromResult<string?>($"단일 제공자를 Codex로 바꿨습니다. 현재 모델: {_telegramLlmPreferences.SingleModel}");
+                _telegramLlmPreferences.Profile = "default";
+                _telegramLlmPreferences.Mode = "single";
+                _telegramLlmPreferences.SingleProvider = selection.Provider;
+                _telegramLlmPreferences.SingleModel = selection.Model;
+                _telegramLlmPreferences.AutoGroqComplexUpgrade = selection.AutoGroqComplexUpgrade;
+                return Task.FromResult<string?>($"단일 제공자를 {selection.ProviderDisplayName}로 바꿨습니다. 현재 모델: {_telegramLlmPreferences.SingleModel}");
             }
         }
 
@@ -566,662 +521,66 @@ public sealed partial class CommandService
         CancellationToken cancellationToken
     )
     {
-        var command = (pseudoCommand ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(command))
+        return await TelegramPseudoCommandExecutor.ExecuteAsync(
+            new TelegramPseudoCommandRequest(pseudoCommand, attachments, webUrls, webSearchEnabled),
+            BuildTelegramPseudoCommandHandlers(),
+            cancellationToken
+        );
+    }
+
+    private TelegramPseudoCommandHandlers BuildTelegramPseudoCommandHandlers()
+    {
+        return new TelegramPseudoCommandHandlers(
+            ParseHelpTopicFromInput,
+            BuildTelegramHelpText,
+            TryHandleTelegramProfileCommandAsync,
+            TryHandleTelegramQuickModelCommandAsync,
+            TryHandleTelegramLlmControlCommandAsync,
+            TryHandleTelegramSkillCommandAsync,
+            TryHandleTelegramCodingCommandAsync,
+            TryHandleTelegramRefactorCommandAsync,
+            TryHandleTelegramMemoryCommandAsync,
+            TryHandleTelegramDoctorCommandAsync,
+            TryHandleTelegramPlanCommandAsync,
+            TryHandleTelegramTaskCommandAsync,
+            TryHandleTelegramNotebookCommandAsync,
+            (command, token) => TryHandleRoutineCommandAsync(command, "telegram", token),
+            ExecuteTelegramMetricsPseudoCommandAsync,
+            ExecuteTelegramKillPseudoCommandAsync
+        );
+    }
+
+    private async Task<string?> ExecuteTelegramMetricsPseudoCommandAsync(string command, CancellationToken cancellationToken)
+    {
+        var metrics = await _coreClient.GetMetricsAsync(cancellationToken);
+        RecordEvent($"telegram:natural:{command}");
+        _auditLogger.Log("telegram", "metrics", "ok", "natural_control");
+        return metrics;
+    }
+
+    private async Task<string?> ExecuteTelegramKillPseudoCommandAsync(string command, CancellationToken cancellationToken)
+    {
+        if (!TryParseKillCommand(command, out var pid))
         {
             return null;
         }
 
-        if (command.StartsWith("/help", StringComparison.OrdinalIgnoreCase) || command.Equals("/start", StringComparison.OrdinalIgnoreCase))
+        var guard = await ValidateKillTargetAsync(pid, "telegram", cancellationToken);
+        if (!guard.Allowed)
         {
-            return BuildTelegramHelpText(ParseHelpTopicFromInput(command));
+            _auditLogger.Log("telegram", "kill", "deny", $"pid={pid} reason={guard.Reason} natural_control");
+            return $"kill denied: {guard.Reason}";
         }
 
-        if (command.StartsWith("/talk", StringComparison.OrdinalIgnoreCase) || command.StartsWith("/code", StringComparison.OrdinalIgnoreCase))
-        {
-            return await TryHandleTelegramProfileCommandAsync(command, cancellationToken);
-        }
-
-        if (command.StartsWith("/model", StringComparison.OrdinalIgnoreCase))
-        {
-            return await TryHandleTelegramQuickModelCommandAsync(command, cancellationToken);
-        }
-
-        if (command.StartsWith("/llm", StringComparison.OrdinalIgnoreCase))
-        {
-            return await TryHandleTelegramLlmControlCommandAsync(command, cancellationToken);
-        }
-
-        if (command.StartsWith("/skill", StringComparison.OrdinalIgnoreCase)
-            || command.StartsWith("/skills", StringComparison.OrdinalIgnoreCase))
-        {
-            return await TryHandleTelegramSkillCommandAsync(command, cancellationToken);
-        }
-
-        if (command.StartsWith("/coding", StringComparison.OrdinalIgnoreCase))
-        {
-            return await TryHandleTelegramCodingCommandAsync(command, attachments, webUrls, webSearchEnabled, cancellationToken);
-        }
-
-        if (command.StartsWith("/refactor", StringComparison.OrdinalIgnoreCase))
-        {
-            return await TryHandleTelegramRefactorCommandAsync(command, cancellationToken);
-        }
-
-        if (command.StartsWith("/memory", StringComparison.OrdinalIgnoreCase))
-        {
-            return await TryHandleTelegramMemoryCommandAsync(command, cancellationToken);
-        }
-
-        if (command.StartsWith("/doctor", StringComparison.OrdinalIgnoreCase))
-        {
-            return await TryHandleTelegramDoctorCommandAsync(command, cancellationToken);
-        }
-
-        if (command.StartsWith("/plan", StringComparison.OrdinalIgnoreCase))
-        {
-            return await TryHandleTelegramPlanCommandAsync(command, cancellationToken);
-        }
-
-        if (command.StartsWith("/task", StringComparison.OrdinalIgnoreCase))
-        {
-            return await TryHandleTelegramTaskCommandAsync(command, cancellationToken);
-        }
-
-        if (command.StartsWith("/notebook", StringComparison.OrdinalIgnoreCase)
-            || command.StartsWith("/handoff", StringComparison.OrdinalIgnoreCase))
-        {
-            return await TryHandleTelegramNotebookCommandAsync(command, cancellationToken);
-        }
-
-        if (command.StartsWith("/routine", StringComparison.OrdinalIgnoreCase)
-            || command.StartsWith("/routines", StringComparison.OrdinalIgnoreCase))
-        {
-            return await TryHandleRoutineCommandAsync(command, "telegram", cancellationToken);
-        }
-
-        if (command.Equals("/metrics", StringComparison.OrdinalIgnoreCase))
-        {
-            var metrics = await _coreClient.GetMetricsAsync(cancellationToken);
-            RecordEvent($"telegram:natural:{command}");
-            _auditLogger.Log("telegram", "metrics", "ok", "natural_control");
-            return metrics;
-        }
-
-        if (TryParseKillCommand(command, out var pid))
-        {
-            var guard = await ValidateKillTargetAsync(pid, "telegram", cancellationToken);
-            if (!guard.Allowed)
-            {
-                _auditLogger.Log("telegram", "kill", "deny", $"pid={pid} reason={guard.Reason} natural_control");
-                return $"kill denied: {guard.Reason}";
-            }
-
-            var result = await _coreClient.KillAsync(pid, cancellationToken);
-            RecordEvent($"telegram:natural:{command}");
-            _auditLogger.Log("telegram", "kill", "ok", $"pid={pid} natural_control");
-            return result;
-        }
-
-        return null;
+        var result = await _coreClient.KillAsync(pid, cancellationToken);
+        RecordEvent($"telegram:natural:{command}");
+        _auditLogger.Log("telegram", "kill", "ok", $"pid={pid} natural_control");
+        return result;
     }
 
     private static string? TryBuildTelegramNaturalPseudoCommand(string normalized, string lowered)
     {
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return null;
-        }
-
-        var commandLike = Regex.Match(normalized, @"(?i)^(help|start|talk|code|model|llm|skill|skills|coding|refactor|memory|doctor|plan|task|notebook|handoff|routine|routines|metrics|kill)\b(.*)$");
-        if (commandLike.Success)
-        {
-            var head = commandLike.Groups[1].Value.ToLowerInvariant();
-            var tail = commandLike.Groups[2].Value;
-            return "/" + head + tail;
-        }
-
-        if (ContainsAny(lowered, "대화 프리셋", "대화 프로필", "talk 모드", "대화 탭 환경"))
-        {
-            var thinking = ExtractThinkingLevelFromNaturalText(lowered);
-            return thinking == null ? "/talk" : $"/talk {thinking}";
-        }
-
-        if (ContainsAny(lowered, "코딩 프리셋", "코딩 프로필", "code 모드", "코딩 탭 환경"))
-        {
-            var thinking = ExtractThinkingLevelFromNaturalText(lowered);
-            return thinking == null ? "/code" : $"/code {thinking}";
-        }
-
-        if (ContainsAny(lowered, "llm 단일 모드", "단일 모드로", "single 모드", "single mode"))
-        {
-            return "/llm mode single";
-        }
-
-        if (ContainsAny(lowered, "llm 오케스트레이션 모드", "오케스트레이션 모드로", "orchestration mode", "orchestration 모드"))
-        {
-            return "/llm mode orchestration";
-        }
-
-        if (ContainsAny(lowered, "llm 다중 모드", "다중 모드로", "멀티 모드로", "multi mode", "multi 모드"))
-        {
-            return "/llm mode multi";
-        }
-
-        if (ContainsAny(lowered, "최근 코딩 결과", "마지막 코딩 결과", "코딩 결과 보여", "coding result"))
-        {
-            return "/coding last";
-        }
-
-        if (ContainsAny(lowered, "코딩 상태", "코딩 설정", "coding status"))
-        {
-            return "/coding status";
-        }
-
-        if (ContainsAny(lowered, "코딩 파일 목록", "최근 코딩 파일", "coding files"))
-        {
-            return "/coding files";
-        }
-
-        var codingFilePreview = Regex.Match(normalized, @"(?is)(?:코딩 파일|coding file)\s*(?:보여|열어|preview)?\s*[:：]?\s*(.+)$");
-        if (codingFilePreview.Success)
-        {
-            var query = codingFilePreview.Groups[1].Value.Trim();
-            if (!string.IsNullOrWhiteSpace(query))
-            {
-                return $"/coding file {query}";
-            }
-        }
-
-        var codingSingleRun = Regex.Match(normalized, @"(?is)(?:단일|single)\s*코딩(?:으로)?\s*[:：]?\s*(.+)$");
-        if (codingSingleRun.Success)
-        {
-            var request = codingSingleRun.Groups[1].Value.Trim();
-            if (!string.IsNullOrWhiteSpace(request))
-            {
-                return $"/coding single run {request}";
-            }
-        }
-
-        var codingOrchRun = Regex.Match(normalized, @"(?is)(?:오케스트레이션|orchestration)\s*코딩(?:으로)?\s*[:：]?\s*(.*)$");
-        if (codingOrchRun.Success)
-        {
-            var request = codingOrchRun.Groups[1].Value.Trim();
-            return string.IsNullOrWhiteSpace(request)
-                ? "/coding orchestration run"
-                : $"/coding orchestration run {request}";
-        }
-
-        var codingMultiRun = Regex.Match(normalized, @"(?is)(?:다중|multi)\s*코딩(?:으로)?\s*[:：]?\s*(.+)$");
-        if (codingMultiRun.Success)
-        {
-            var request = codingMultiRun.Groups[1].Value.Trim();
-            if (!string.IsNullOrWhiteSpace(request))
-            {
-                return $"/coding multi run {request}";
-            }
-        }
-
-        var codingRun = Regex.Match(normalized, @"(?is)(?:코딩|coding)\s*(?:실행|run)\s*[:：]?\s*(.*)$");
-        if (codingRun.Success)
-        {
-            var request = codingRun.Groups[1].Value.Trim();
-            return string.IsNullOrWhiteSpace(request)
-                ? "/coding run"
-                : $"/coding run {request}";
-        }
-
-        var codingLanguage = Regex.Match(normalized, @"(?is)(?:(단일|single|오케스트레이션|orchestration|다중|multi)\s*)?(?:코딩|coding)\s*(?:언어|language)\s*(?:를)?\s*([a-zA-Z0-9#+._-]+)\s*(?:로|으로)?\s*(?:바꿔|변경|설정)");
-        if (codingLanguage.Success)
-        {
-            var mode = codingLanguage.Groups[1].Value.Trim().ToLowerInvariant() switch
-            {
-                "단일" => "single",
-                "single" => "single",
-                "오케스트레이션" => "orchestration",
-                "orchestration" => "orchestration",
-                "다중" => "multi",
-                "multi" => "multi",
-                _ => string.Empty
-            };
-            var language = codingLanguage.Groups[2].Value.Trim();
-            return string.IsNullOrWhiteSpace(mode)
-                ? $"/coding language {language}"
-                : $"/coding language {mode} {language}";
-        }
-
-        var codingMode = Regex.Match(normalized, @"(?is)(?:코딩|coding)\s*모드.*?(단일|single|오케스트레이션|orchestration|다중|multi).*(?:바꿔|변경|설정)");
-        if (codingMode.Success)
-        {
-            var mode = codingMode.Groups[1].Value.Trim().ToLowerInvariant() switch
-            {
-                "단일" => "single",
-                "single" => "single",
-                "오케스트레이션" => "orchestration",
-                "orchestration" => "orchestration",
-                "다중" => "multi",
-                "multi" => "multi",
-                _ => string.Empty
-            };
-            if (!string.IsNullOrWhiteSpace(mode))
-            {
-                return $"/coding mode {mode}";
-            }
-        }
-
-        var codingProvider = Regex.Match(
-            normalized,
-            @"(?is)(단일|single|오케스트레이션|orchestration|다중|multi)\s*코딩\s*(?:요약\s*)?(?:제공자|provider)\s*(?:를|을)?\s*(auto|자동|groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|nvidia|nvidia-nim|nim|엔비디아|codex|코덱스)\s*(?:로|으로)?\s*(?:바꿔|변경|설정)"
-        );
-        if (codingProvider.Success)
-        {
-            var mode = codingProvider.Groups[1].Value.Trim().ToLowerInvariant() switch
-            {
-                "단일" => "single",
-                "single" => "single",
-                "오케스트레이션" => "orchestration",
-                "orchestration" => "orchestration",
-                "다중" => "multi",
-                "multi" => "multi",
-                _ => string.Empty
-            };
-            var provider = ExtractProviderAliasFromNaturalText(codingProvider.Groups[2].Value, allowAuto: true);
-            if (!string.IsNullOrWhiteSpace(mode) && !string.IsNullOrWhiteSpace(provider))
-            {
-                return $"/coding {mode} provider {provider}";
-            }
-        }
-
-        var codingModel = Regex.Match(
-            normalized,
-            @"(?is)(단일|single|오케스트레이션|orchestration|다중|multi)\s*코딩\s*(?:모델|model)\s*(?:을|를)?\s*([a-zA-Z0-9._/\-]+)\s*(?:로|으로)?\s*(?:바꿔|변경|설정)"
-        );
-        if (codingModel.Success)
-        {
-            var mode = codingModel.Groups[1].Value.Trim().ToLowerInvariant() switch
-            {
-                "단일" => "single",
-                "single" => "single",
-                "오케스트레이션" => "orchestration",
-                "orchestration" => "orchestration",
-                "다중" => "multi",
-                "multi" => "multi",
-                _ => string.Empty
-            };
-            var modelId = codingModel.Groups[2].Value.Trim();
-            if (!string.IsNullOrWhiteSpace(mode) && !string.IsNullOrWhiteSpace(modelId))
-            {
-                return $"/coding {mode} model {modelId}";
-            }
-        }
-
-        var codingWorker = Regex.Match(
-            normalized,
-            @"(?is)(오케스트레이션|orchestration|다중|multi)\s*코딩\s*(?:워커|worker)\s*(groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|nvidia|nvidia-nim|nim|엔비디아|codex|코덱스)\s*(?:모델|model)?\s*(?:을|를)?\s*([a-zA-Z0-9._/\-]+|none|없음|선택안함|선택 안함)\s*(?:로|으로)?\s*(?:바꿔|변경|설정)"
-        );
-        if (codingWorker.Success)
-        {
-            var mode = codingWorker.Groups[1].Value.Trim().ToLowerInvariant() switch
-            {
-                "오케스트레이션" => "orchestration",
-                "orchestration" => "orchestration",
-                "다중" => "multi",
-                "multi" => "multi",
-                _ => string.Empty
-            };
-            var provider = ExtractProviderAliasFromNaturalText(codingWorker.Groups[2].Value, allowAuto: false);
-            var workerModel = codingWorker.Groups[3].Value.Trim();
-            if (workerModel.Equals("없음", StringComparison.OrdinalIgnoreCase)
-                || workerModel.Equals("선택안함", StringComparison.OrdinalIgnoreCase)
-                || workerModel.Equals("선택 안함", StringComparison.OrdinalIgnoreCase))
-            {
-                workerModel = "none";
-            }
-
-            if (!string.IsNullOrWhiteSpace(mode)
-                && !string.IsNullOrWhiteSpace(provider)
-                && !string.IsNullOrWhiteSpace(workerModel))
-            {
-                return $"/coding {mode} worker {provider} {workerModel}";
-            }
-        }
-
-        if (ContainsAny(lowered, "safe refactor 상태", "refactor 상태", "리팩터 상태"))
-        {
-            return "/refactor status";
-        }
-
-        if (ContainsAny(lowered, "safe refactor 적용", "refactor 적용", "리팩터 적용"))
-        {
-            return "/refactor apply";
-        }
-
-        var refactorRead = Regex.Match(normalized, @"(?is)(?:safe refactor|refactor|리팩터)\s*(?:읽기|read)\s*([^\s]+)(?:\s+([0-9]+))?(?:\s+([0-9]+))?$");
-        if (refactorRead.Success)
-        {
-            var path = refactorRead.Groups[1].Value.Trim();
-            var start = refactorRead.Groups[2].Value.Trim();
-            var end = refactorRead.Groups[3].Value.Trim();
-            if (!string.IsNullOrWhiteSpace(path))
-            {
-                var tail = string.IsNullOrWhiteSpace(start)
-                    ? path
-                    : string.IsNullOrWhiteSpace(end)
-                        ? $"{path} {start}"
-                        : $"{path} {start} {end}";
-                return $"/refactor read {tail}";
-            }
-        }
-
-        if (ContainsAny(lowered, "메모리 초기화", "메모리 비우기", "메모리 삭제", "메모리 지워"))
-        {
-            return "/memory clear";
-        }
-
-        if (ContainsAny(lowered, "메모리 노트", "메모리 저장", "메모리 생성", "메모리 만들어"))
-        {
-            return ContainsAny(lowered, "compact", "압축", "짧게")
-                ? "/memory create compact"
-                : "/memory create";
-        }
-
-        if (ContainsAny(lowered, "doctor 실행", "doctor 결과", "doctor 보여", "환경 진단", "상태 점검", "시스템 점검", "진단 실행", "최근 진단", "마지막 진단"))
-        {
-            var parts = new List<string> { "/doctor" };
-            if (ContainsAny(lowered, "last", "latest", "최근", "마지막"))
-            {
-                parts.Add("last");
-            }
-
-            if (ContainsAny(lowered, "json"))
-            {
-                parts.Add("json");
-            }
-
-            return string.Join(' ', parts);
-        }
-
-        if (ContainsAny(lowered, "단일 제공자", "single provider", "single 제공자", "단일 provider"))
-        {
-            var provider = ExtractProviderAliasFromNaturalText(lowered, allowAuto: false);
-            if (!string.IsNullOrWhiteSpace(provider))
-            {
-                return $"/llm single provider {provider}";
-            }
-        }
-
-        if (ContainsAny(lowered, "오케스트레이션 제공자", "orchestration provider", "집계 제공자", "집계 provider"))
-        {
-            var provider = ExtractProviderAliasFromNaturalText(lowered, allowAuto: true);
-            if (!string.IsNullOrWhiteSpace(provider))
-            {
-                return $"/llm orchestration provider {provider}";
-            }
-        }
-
-        if (ContainsAny(lowered, "다중 요약 제공자", "multi summary provider", "요약 제공자", "summary provider"))
-        {
-            var provider = ExtractProviderAliasFromNaturalText(lowered, allowAuto: true);
-            if (!string.IsNullOrWhiteSpace(provider))
-            {
-                return $"/llm multi summary {provider}";
-            }
-        }
-
-        var singleProviderSwitch = Regex.Match(lowered, @"(?:단일|single).*(groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|nvidia|nvidia-nim|nim|엔비디아|codex|코덱스).*(바꿔|변경|설정)");
-        if (singleProviderSwitch.Success)
-        {
-            var provider = ExtractProviderAliasFromNaturalText(singleProviderSwitch.Groups[1].Value, allowAuto: false);
-            if (!string.IsNullOrWhiteSpace(provider))
-            {
-                return $"/llm single provider {provider}";
-            }
-        }
-
-        var orchestrationProviderSwitch = Regex.Match(lowered, @"(?:오케스트레이션|orchestration|집계).*(auto|자동|groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|nvidia|nvidia-nim|nim|엔비디아|codex|코덱스).*(바꿔|변경|설정)");
-        if (orchestrationProviderSwitch.Success)
-        {
-            var provider = ExtractProviderAliasFromNaturalText(orchestrationProviderSwitch.Groups[1].Value, allowAuto: true);
-            if (!string.IsNullOrWhiteSpace(provider))
-            {
-                return $"/llm orchestration provider {provider}";
-            }
-        }
-
-        var quickProviderSwitch = Regex.Match(lowered, @"(groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|nvidia|nvidia-nim|nim|엔비디아|codex|코덱스).*(바꿔|변경|설정)");
-        if (quickProviderSwitch.Success
-            && !ContainsAny(lowered, "단일", "single", "오케스트레이션", "요약", "summary", "다중", "multi"))
-        {
-            var provider = ExtractProviderAliasFromNaturalText(quickProviderSwitch.Groups[1].Value, allowAuto: false);
-            if (!string.IsNullOrWhiteSpace(provider))
-            {
-                return $"/model {provider}";
-            }
-        }
-
-        var singleModel = Regex.Match(normalized, @"(?i)(?:단일|single)\s*(?:모델|model)\s*([a-zA-Z0-9._/\-]+)");
-        if (singleModel.Success)
-        {
-            return $"/llm single model {singleModel.Groups[1].Value}";
-        }
-
-        var orchestrationModel = Regex.Match(normalized, @"(?i)(?:오케스트레이션|orchestration)\s*(?:모델|model)\s*([a-zA-Z0-9._/\-]+)");
-        if (orchestrationModel.Success)
-        {
-            return $"/llm orchestration model {orchestrationModel.Groups[1].Value}";
-        }
-
-        var multiGroqModel = Regex.Match(normalized, @"(?i)(?:다중|multi)\s*groq\s*(?:모델|model)\s*([a-zA-Z0-9._/\-]+)");
-        if (multiGroqModel.Success)
-        {
-            return $"/llm multi groq {multiGroqModel.Groups[1].Value}";
-        }
-
-        var multiGeminiModel = Regex.Match(normalized, @"(?i)(?:다중|multi)\s*(?:gemini|제미니)\s*(?:모델|model)\s*([a-zA-Z0-9._/\-]+)");
-        if (multiGeminiModel.Success)
-        {
-            return $"/llm multi gemini {multiGeminiModel.Groups[1].Value}";
-        }
-
-        var multiCopilotModel = Regex.Match(normalized, @"(?i)(?:다중|multi)\s*(?:copilot|코파일럿)\s*(?:모델|model)\s*([a-zA-Z0-9._/\-]+)");
-        if (multiCopilotModel.Success)
-        {
-            return $"/llm multi copilot {multiCopilotModel.Groups[1].Value}";
-        }
-
-        var multiCerebrasModel = Regex.Match(normalized, @"(?i)(?:다중|multi)\s*(?:cerebras|세레브라스|세레브라)\s*(?:모델|model)\s*([a-zA-Z0-9._/\-]+)");
-        if (multiCerebrasModel.Success)
-        {
-            return $"/llm multi cerebras {multiCerebrasModel.Groups[1].Value}";
-        }
-
-        var multiNvidiaModel = Regex.Match(normalized, @"(?i)(?:다중|multi)\s*(?:nvidia|nvidia-nim|nim|엔비디아)\s*(?:모델|model)\s*([a-zA-Z0-9._/\-]+)");
-        if (multiNvidiaModel.Success)
-        {
-            return $"/llm multi nvidia {multiNvidiaModel.Groups[1].Value}";
-        }
-
-        var multiCodexModel = Regex.Match(normalized, @"(?i)(?:다중|multi)\s*(?:codex|코덱스)\s*(?:모델|model)\s*([a-zA-Z0-9._/\-]+)");
-        if (multiCodexModel.Success)
-        {
-            return $"/llm multi codex {multiCodexModel.Groups[1].Value}";
-        }
-
-        if (ContainsAny(lowered, "계획 목록", "plan 목록", "플랜 목록"))
-        {
-            return "/plan list";
-        }
-
-        var planGet = Regex.Match(normalized, @"(?i)(?:계획|plan)\s*(?:상세|보기|get)\s*([a-z0-9_\-]+)");
-        if (planGet.Success)
-        {
-            return $"/plan get {planGet.Groups[1].Value}";
-        }
-
-        var planReview = Regex.Match(normalized, @"(?i)(?:계획|plan)\s*(?:리뷰|검토|review)\s*([a-z0-9_\-]+)");
-        if (planReview.Success)
-        {
-            return $"/plan review {planReview.Groups[1].Value}";
-        }
-
-        var planApprove = Regex.Match(normalized, @"(?i)(?:계획|plan)\s*(?:승인|approve)\s*([a-z0-9_\-]+)");
-        if (planApprove.Success)
-        {
-            return $"/plan approve {planApprove.Groups[1].Value}";
-        }
-
-        var planRun = Regex.Match(normalized, @"(?i)(?:계획|plan)\s*(?:실행|run)\s*([a-z0-9_\-]+)");
-        if (planRun.Success)
-        {
-            return $"/plan run {planRun.Groups[1].Value}";
-        }
-
-        var planCreate = Regex.Match(normalized, @"(?i)(?:계획|plan)\s*(?:생성|만들|추가)\s*[:：]?\s*(.+)$");
-        if (planCreate.Success)
-        {
-            var request = planCreate.Groups[1].Value.Trim();
-            if (!string.IsNullOrWhiteSpace(request))
-            {
-                return $"/plan create {request}";
-            }
-        }
-
-        if (ContainsAny(lowered, "작업 목록", "task 목록", "태스크 목록"))
-        {
-            return "/task list";
-        }
-
-        var taskCreate = Regex.Match(normalized, @"(?i)(?:작업|task)\s*(?:생성|create)\s*([a-z0-9_\-]+)");
-        if (taskCreate.Success)
-        {
-            return $"/task create {taskCreate.Groups[1].Value}";
-        }
-
-        var taskStatus = Regex.Match(normalized, @"(?i)(?:작업|task)\s*(?:상태|status|get)\s*([a-z0-9_\-]+)");
-        if (taskStatus.Success)
-        {
-            return $"/task status {taskStatus.Groups[1].Value}";
-        }
-
-        var taskRun = Regex.Match(normalized, @"(?i)(?:작업|task)\s*(?:실행|run)\s*([a-z0-9_\-]+)");
-        if (taskRun.Success)
-        {
-            return $"/task run {taskRun.Groups[1].Value}";
-        }
-
-        var taskCancel = Regex.Match(normalized, @"(?i)(?:작업|task)\s*(?:취소|중지|cancel)\s*([a-z0-9_\-]+)\s+([a-z0-9_\-]+)");
-        if (taskCancel.Success)
-        {
-            return $"/task cancel {taskCancel.Groups[1].Value} {taskCancel.Groups[2].Value}";
-        }
-
-        var taskOutput = Regex.Match(normalized, @"(?i)(?:작업|task)\s*(?:결과|output)\s*([a-z0-9_\-]+)\s+([a-z0-9_\-]+)");
-        if (taskOutput.Success)
-        {
-            return $"/task output {taskOutput.Groups[1].Value} {taskOutput.Groups[2].Value}";
-        }
-
-        if (ContainsAny(lowered, "노트북 보여", "노트북 열어", "notebook show"))
-        {
-            return "/notebook show";
-        }
-
-        var notebookAppend = Regex.Match(normalized, @"(?i)(?:노트북|notebook)\s*(?:append|추가|기록)\s*(learning|decision|verification|학습|결정|검증)\s*[:：]?\s*(.+)$");
-        if (notebookAppend.Success)
-        {
-            var kind = notebookAppend.Groups[1].Value.ToLowerInvariant() switch
-            {
-                "학습" => "learning",
-                "결정" => "decision",
-                "검증" => "verification",
-                _ => notebookAppend.Groups[1].Value.ToLowerInvariant()
-            };
-            var content = notebookAppend.Groups[2].Value.Trim();
-            if (!string.IsNullOrWhiteSpace(content))
-            {
-                return $"/notebook append {kind} {content}";
-            }
-        }
-
-        if (ContainsAny(lowered, "handoff", "인수인계"))
-        {
-            return "/handoff";
-        }
-
-        if (ContainsAny(lowered, "루틴 목록", "루틴 리스트", "routines 목록"))
-        {
-            return "/routine list";
-        }
-
-        var routineRuns = Regex.Match(normalized, @"(?is)루틴\s*(?:실행\s*이력|이력|runs)\s*([a-z0-9\-]+)");
-        if (routineRuns.Success)
-        {
-            return $"/routine runs {routineRuns.Groups[1].Value}";
-        }
-
-        var routineDetail = Regex.Match(normalized, @"(?is)루틴\s*(?:상세|detail)\s*([a-z0-9\-]+)\s+([0-9]{6,})");
-        if (routineDetail.Success)
-        {
-            return $"/routine detail {routineDetail.Groups[1].Value} {routineDetail.Groups[2].Value}";
-        }
-
-        var routineResend = Regex.Match(normalized, @"(?is)루틴\s*(?:재전송|텔레그램\s*재전송|resend)\s*([a-z0-9\-]+)\s+([0-9]{6,})");
-        if (routineResend.Success)
-        {
-            return $"/routine resend {routineResend.Groups[1].Value} {routineResend.Groups[2].Value}";
-        }
-
-        var routineRun = Regex.Match(normalized, @"(?i)루틴\s*(?:즉시\s*)?(?:실행|run)\s*([a-z0-9\-]+)");
-        if (routineRun.Success)
-        {
-            return $"/routine run {routineRun.Groups[1].Value}";
-        }
-
-        var routineOn = Regex.Match(normalized, @"(?i)루틴\s*(?:켜|활성화|on)\s*([a-z0-9\-]+)");
-        if (routineOn.Success)
-        {
-            return $"/routine on {routineOn.Groups[1].Value}";
-        }
-
-        var routineOff = Regex.Match(normalized, @"(?i)루틴\s*(?:꺼|비활성화|off|중지)\s*([a-z0-9\-]+)");
-        if (routineOff.Success)
-        {
-            return $"/routine off {routineOff.Groups[1].Value}";
-        }
-
-        var routineDelete = Regex.Match(normalized, @"(?i)루틴\s*(?:삭제|제거|지워)\s*([a-z0-9\-]+)");
-        if (routineDelete.Success)
-        {
-            return $"/routine delete {routineDelete.Groups[1].Value}";
-        }
-
-        var routineCreate = Regex.Match(normalized, @"(?i)루틴\s*(?:생성|등록|추가)\s*[:：]?\s*(.+)$");
-        if (routineCreate.Success)
-        {
-            var request = routineCreate.Groups[1].Value.Trim();
-            if (!string.IsNullOrWhiteSpace(request))
-            {
-                return $"/routine create {request}";
-            }
-        }
-
-        var routineUpdate = Regex.Match(normalized, @"(?is)루틴\s*(?:수정|업데이트|update)\s*([a-z0-9\-]+)\s*[:：]?\s*(.+)$");
-        if (routineUpdate.Success)
-        {
-            var routineId = routineUpdate.Groups[1].Value.Trim();
-            var request = routineUpdate.Groups[2].Value.Trim();
-            if (!string.IsNullOrWhiteSpace(routineId) && !string.IsNullOrWhiteSpace(request))
-            {
-                return $"/routine update {routineId} {request}";
-            }
-        }
-
-        if (ContainsAny(lowered, "메트릭 보여", "메트릭 조회", "시스템 메트릭", "metrics 보여"))
-        {
-            return "/metrics";
-        }
-
-        return null;
+        return TelegramNaturalCommandPolicy.TryBuildNaturalPseudoCommand(normalized, lowered);
     }
 
     private async Task<string?> TryHandleTelegramMemoryCommandAsync(string text, CancellationToken cancellationToken)
@@ -1263,123 +622,17 @@ public sealed partial class CommandService
 
     private static string? ExtractProviderAliasFromNaturalText(string text, bool allowAuto)
     {
-        var lowered = (text ?? string.Empty).Trim().ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(lowered))
-        {
-            return null;
-        }
-
-        if (ContainsAny(lowered, "groq", "그록"))
-        {
-            return "groq";
-        }
-
-        if (ContainsAny(lowered, "gemini", "제미니"))
-        {
-            return "gemini";
-        }
-
-        if (ContainsAny(lowered, "copilot", "코파일럿"))
-        {
-            return "copilot";
-        }
-
-        if (ContainsAny(lowered, "cerebras", "세레브라스", "세레브라"))
-        {
-            return "cerebras";
-        }
-
-        if (ContainsAny(lowered, "nvidia", "nvidia-nim", "nim", "엔비디아"))
-        {
-            return "nvidia";
-        }
-
-        if (ContainsAny(lowered, "codex", "코덱스", "openai", "오픈ai", "오픈 ai"))
-        {
-            return "codex";
-        }
-
-        if (allowAuto && ContainsAny(lowered, "auto", "자동"))
-        {
-            return "auto";
-        }
-
-        return null;
+        return TelegramNaturalCommandPolicy.ExtractProviderAlias(text, allowAuto);
     }
 
     private static string? ExtractThinkingLevelFromNaturalText(string lowered)
     {
-        if (ContainsAny(lowered, "high", "정밀", "깊게", "신중", "정확도"))
-        {
-            return "high";
-        }
-
-        if (ContainsAny(lowered, "low", "빠르게", "간단", "짧게"))
-        {
-            return "low";
-        }
-
-        return null;
+        return TelegramNaturalCommandPolicy.ExtractThinkingLevel(lowered);
     }
 
     private static string? ExtractHelpTopicFromNaturalText(string lowered)
     {
-        if (!ContainsAny(lowered, "도움말", "help", "명령어"))
-        {
-            return null;
-        }
-
-        if (ContainsAny(lowered, "llm", "모델"))
-        {
-            return "llm";
-        }
-
-        if (ContainsAny(lowered, "루틴", "routine"))
-        {
-            return "routine";
-        }
-
-        if (ContainsAny(lowered, "doctor", "진단", "점검"))
-        {
-            return "doctor";
-        }
-
-        if (ContainsAny(lowered, "plan", "계획", "기획"))
-        {
-            return "plan";
-        }
-
-        if (ContainsAny(lowered, "coding", "코딩"))
-        {
-            return "coding";
-        }
-
-        if (ContainsAny(lowered, "refactor", "safe refactor", "리팩터"))
-        {
-            return "refactor";
-        }
-
-        if (ContainsAny(lowered, "task", "작업", "태스크"))
-        {
-            return "task";
-        }
-
-        if (ContainsAny(lowered, "notebook", "노트북", "handoff", "인수인계"))
-        {
-            return "notebook";
-        }
-
-        if (ContainsAny(lowered, "memory", "메모리"))
-        {
-            return "memory";
-        }
-
-        if (ContainsAny(lowered, "자연어", "대화", "natural"))
-        {
-            return "natural";
-        }
-
-        return string.Empty;
+        return TelegramNaturalCommandPolicy.ExtractHelpTopic(lowered);
     }
 
     private async Task<string> SetGroqModelForTelegramAsync(string modelId, CancellationToken cancellationToken)
@@ -2620,228 +1873,32 @@ public sealed partial class CommandService
 
     private string BuildTelegramFollowupAwareInput(ConversationThreadView thread, string input)
     {
-        var normalized = (input ?? string.Empty).Trim();
-        if (normalized.Length == 0)
-        {
-            return string.Empty;
-        }
-
-        var anchorTurn = FindTelegramAnchorTurn(thread, normalized);
-        if (string.IsNullOrWhiteSpace(anchorTurn.User))
-        {
-            return normalized;
-        }
-        var anchor = anchorTurn.User!;
-        var assistantContext = string.IsNullOrWhiteSpace(anchorTurn.Assistant)
-            ? string.Empty
-            : $"""
-
-              [직전 답변]
-              {anchorTurn.Assistant}
-              """;
-
-        if (LooksLikeExplicitWebLookupQuestion(normalized) && IsTelegramWeakFollowupInput(normalized))
-        {
-            return $"""
-                    [직전 주제]
-                    {anchor}{assistantContext}
-
-                    [현재 요청]
-                    위 주제에 대해 웹에서 검색해서 근거 중심으로 다시 설명해줘.
-                    사용자 추가 요청: {normalized}
-                    """;
-        }
-
-        if (IsTelegramCorrectionFollowup(normalized))
-        {
-            return $"""
-                    [직전 주제]
-                    {anchor}{assistantContext}
-
-                    [정정 요청]
-                    {normalized}
-
-                    위 정정을 반영해서, 이전에 잘못 잡은 대상이 있으면 바로잡아 다시 답해줘.
-                    """;
-        }
-
-        if (IsTelegramExhaustedFeedback(normalized))
-        {
-            var latestAssistant = thread.Messages
-                .LastOrDefault(msg => msg.Role.Equals("assistant", StringComparison.OrdinalIgnoreCase))
-                ?.Text?.Trim();
-            var assistantBlock = string.IsNullOrWhiteSpace(latestAssistant)
-                ? string.Empty
-                : $"""
-
-                  [직전 답변 요약]
-                  {latestAssistant}
-                  """;
-            return $"""
-                    [직전 주제]
-                    {anchor}{assistantBlock}
-
-                    [사용자 추가 피드백]
-                    {normalized}
-
-                    사용자는 앞서 제안한 기본 조치를 이미 시도했다고 본다.
-                    같은 해결책을 반복하지 말고, 남은 원인 후보와 확인 순서를 더 좁혀서 답해줘.
-                    """;
-        }
-
-        if (IsTelegramContextualFollowup(normalized))
-        {
-            return $"""
-                    [직전 주제]
-                    {anchor}{assistantContext}
-
-                    [현재 후속 질문]
-                    {normalized}
-
-                    위 직전 주제와 답변을 기준으로, 현재 후속 질문에만 직접 답해줘.
-                    """;
-        }
-
-        return normalized;
+        return TelegramConversationContextPolicy.BuildFollowupAwareInput(thread, input);
     }
 
     private static (string? User, string? Assistant) FindTelegramAnchorTurn(ConversationThreadView thread, string currentInput)
     {
-        if (thread.Messages.Count == 0)
-        {
-            return (null, null);
-        }
-
-        string? latestAssistant = null;
-        foreach (var message in thread.Messages.AsEnumerable().Reverse())
-        {
-            var text = (message.Text ?? string.Empty).Trim();
-            if (text.Length == 0)
-            {
-                continue;
-            }
-
-            if (message.Role.Equals("assistant", StringComparison.OrdinalIgnoreCase))
-            {
-                latestAssistant ??= text.Length > 1000 ? text[..1000] + "..." : text;
-                continue;
-            }
-
-            if (!message.Role.Equals("user", StringComparison.OrdinalIgnoreCase)
-                || text.Equals(currentInput, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (IsTelegramWeakFollowupInput(text)
-                || IsTelegramCorrectionFollowup(text)
-                || IsTelegramExhaustedFeedback(text)
-                || IsTelegramContextualFollowup(text))
-            {
-                continue;
-            }
-
-            var cappedUser = text.Length > 800 ? text[..800] + "..." : text;
-            return (cappedUser, latestAssistant);
-        }
-
-        var fallbackUser = thread.Messages
-            .Where(msg => msg.Role.Equals("user", StringComparison.OrdinalIgnoreCase))
-            .Select(msg => (msg.Text ?? string.Empty).Trim())
-            .LastOrDefault(text => text.Length > 0 && !text.Equals(currentInput, StringComparison.Ordinal));
-        return (fallbackUser, latestAssistant);
+        return TelegramConversationContextPolicy.FindAnchorTurn(thread, currentInput);
     }
 
     private static bool IsTelegramWeakFollowupInput(string input)
     {
-        var normalized = Regex.Replace((input ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
-        if (normalized.Length == 0)
-        {
-            return false;
-        }
-
-        if (normalized.Length <= 18
-            && (LooksLikeExplicitWebLookupQuestion(normalized)
-                || normalized is "그건?" or "이건?" or "왜?" or "진짜?" or "다시"))
-        {
-            return true;
-        }
-
-        return normalized is "검색해서 말해"
-            or "검색해줘"
-            or "검색해 줘"
-            or "웹에서 찾아줘"
-            or "웹에서 말해줘"
-            or "그거 검색해줘"
-            or "그거 검색해서 말해줘";
+        return TelegramConversationContextPolicy.IsWeakFollowupInput(input);
     }
 
     private static bool IsTelegramContextualFollowup(string input)
     {
-        var normalized = Regex.Replace((input ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
-        if (normalized.Length == 0)
-        {
-            return false;
-        }
-
-        return LooksLikeStrongFollowupQuestion(normalized)
-               || (normalized.Length <= 24
-                   && ContainsAny(
-                       normalized,
-                       "왜",
-                       "그럼",
-                       "그래서",
-                       "근데",
-                       "예시",
-                       "근거",
-                       "차이",
-                       "장점",
-                       "단점",
-                       "문제",
-                       "해결",
-                       "다시"));
+        return TelegramConversationContextPolicy.IsContextualFollowup(input);
     }
 
     private static bool IsTelegramCorrectionFollowup(string input)
     {
-        var normalized = Regex.Replace((input ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
-        if (normalized.Length == 0)
-        {
-            return false;
-        }
-
-        return normalized.Contains("아니라", StringComparison.Ordinal)
-               || normalized.Contains("말한게 아니라", StringComparison.Ordinal)
-               || normalized.Contains("말한 게 아니라", StringComparison.Ordinal)
-               || normalized.Contains("정정", StringComparison.Ordinal)
-               || normalized.Contains("오타", StringComparison.Ordinal)
-               || normalized.Contains("p2s 라고", StringComparison.Ordinal)
-               || normalized.Contains("h2s 가 아니라", StringComparison.Ordinal);
+        return TelegramConversationContextPolicy.IsCorrectionFollowup(input);
     }
 
     private static bool IsTelegramExhaustedFeedback(string input)
     {
-        var normalized = Regex.Replace((input ?? string.Empty).Trim().ToLowerInvariant(), @"\s+", " ");
-        if (normalized.Length == 0)
-        {
-            return false;
-        }
-
-        return ContainsAny(
-            normalized,
-            "다했다고",
-            "다 했다고",
-            "다해도",
-            "다 해도",
-            "해봤는데",
-            "해 봤는데",
-            "이미 해봤",
-            "이미 해 봤",
-            "너가 말한거 다했다고",
-            "너가 말한 거 다했다고",
-            "다 했는데도",
-            "했는데도"
-        );
+        return TelegramConversationContextPolicy.IsExhaustedFeedback(input);
     }
 
     private async Task<LlmSingleChatResult> ExecuteTelegramGroqSingleAsync(
@@ -2946,130 +2003,37 @@ public sealed partial class CommandService
 
     private static string BuildTelegramCompressionPrompt(string input)
     {
-        return $"""
-                아래 긴 입력을 핵심만 유지해 한국어로 압축 요약하세요.
-                규칙:
-                - 최대 8줄
-                - 요구사항/제약/에러/결정포인트 보존
-                - 불필요한 수식어 제거
-
-                [원문]
-                {input}
-                """;
+        return TelegramPromptPolicy.BuildCompressionPrompt(input);
     }
 
     private static string BuildTelegramProfilePrompt(string concisePrompt, string profile, string thinkingLevel)
     {
-        var modeGuide = profile switch
-        {
-            "code" => "코딩 모드: 변경 포인트, 실행/검증 명령, 실패 시 다음 조치까지 간결히 제시하세요.",
-            "talk" => "대화 모드: 핵심 결론 중심으로 정리하세요.",
-            _ => "기본 모드: 핵심만 간결하게 답하세요."
-        };
-        var thinkingGuide = thinkingLevel == "high"
-            ? "사고 강도: high (정확성, 리스크, 예외 케이스를 우선)"
-            : "사고 강도: low (빠르고 간결한 결론 우선)";
-        var localNow = BuildLocalNowText();
-
-        return $"""
-                로컬 시간 기준:
-                {localNow}
-
-                {modeGuide}
-                {thinkingGuide}
-
-                {concisePrompt}
-                """;
+        return TelegramPromptPolicy.BuildProfilePrompt(concisePrompt, profile, thinkingLevel, BuildLocalNowText());
     }
 
     private static string ResolveTelegramThinkingLevel(TelegramLlmPreferences snapshot, string userText)
     {
-        if (snapshot.Profile == "code")
-        {
-            return snapshot.CodeThinkingLevel == "high" ? "high" : "low";
-        }
-
-        if (snapshot.TalkThinkingLevel == "high")
-        {
-            return "high";
-        }
-
-        return IsDecisionOrRiskQuestion(userText) ? "high" : "low";
+        return TelegramPromptPolicy.ResolveThinkingLevel(snapshot, userText);
     }
 
     private static bool IsDecisionOrRiskQuestion(string input)
     {
-        var normalized = (input ?? string.Empty).ToLowerInvariant();
-        return ContainsAny(
-            normalized,
-            "비교",
-            "결정",
-            "결론",
-            "추천",
-            "정확",
-            "리스크",
-            "위험",
-            "근거",
-            "정책",
-            "장단점",
-            "tradeoff",
-            "risk"
-        );
+        return TelegramPromptPolicy.IsDecisionOrRiskQuestion(input);
     }
 
     private static bool UserRequiresConclusion(string input)
     {
-        var normalized = (input ?? string.Empty).ToLowerInvariant();
-        return ContainsAny(
-            normalized,
-            "결론",
-            "결정",
-            "확정",
-            "하나만",
-            "추천",
-            "최종안",
-            "choose",
-            "final answer"
-        );
+        return TelegramPromptPolicy.UserRequiresConclusion(input);
     }
 
     private static bool ModelShowsUncertainty(string answer)
     {
-        var normalized = (answer ?? string.Empty).ToLowerInvariant();
-        return ContainsAny(
-            normalized,
-            "확실하지",
-            "알 수 없",
-            "근거 부족",
-            "불확실",
-            "모르겠",
-            "추정",
-            "insufficient",
-            "uncertain",
-            "not sure"
-        );
+        return TelegramPromptPolicy.ModelShowsUncertainty(answer);
     }
 
     private static string BuildTelegramConclusionEscalationPrompt(string contextualPrompt, string priorAnswer, string thinkingLevel)
     {
-        var style = thinkingLevel == "high"
-            ? "정확성과 리스크를 우선해 단일 결론을 제시하세요."
-            : "간결하게 단일 결론을 제시하세요.";
-        return $"""
-                아래는 기존 답변입니다.
-                이 답변의 불확실성을 줄이고 반드시 결론을 한 가지로 확정하세요.
-                {style}
-                출력 규칙:
-                - 첫 줄에 결론 1문장
-                - 이후 최대 5줄로 근거
-                - 군더더기 금지
-
-                [이전 답변]
-                {priorAnswer}
-
-                [원 질문]
-                {contextualPrompt}
-                """;
+        return TelegramPromptPolicy.BuildConclusionEscalationPrompt(contextualPrompt, priorAnswer, thinkingLevel);
     }
 
     private static string BuildOrchestrationPrompt(
@@ -3078,39 +2042,7 @@ public sealed partial class CommandService
         IReadOnlyDictionary<string, string> roleByProvider
     )
     {
-        var builder = new System.Text.StringBuilder();
-        builder.AppendLine("다음은 오케스트레이션 워커들이 역할을 나눠 처리한 결과입니다.");
-        builder.AppendLine($"사용자 질문: {userText}");
-        builder.AppendLine();
-        builder.AppendLine("[역할 계획]");
-        foreach (var item in workerResults)
-        {
-            var role = roleByProvider.TryGetValue(item.Provider, out var assignedRole)
-                ? assignedRole
-                : "보조 워커";
-            builder.AppendLine($"- {item.Provider}:{item.Model} => {role}");
-        }
-
-        builder.AppendLine();
-        builder.AppendLine("[역할별 결과]");
-        foreach (var item in workerResults)
-        {
-            var role = roleByProvider.TryGetValue(item.Provider, out var assignedRole)
-                ? assignedRole
-                : "보조 워커";
-            builder.AppendLine($"[{item.Provider}:{item.Model}]");
-            builder.AppendLine($"역할: {role}");
-            builder.AppendLine(item.Text);
-            builder.AppendLine();
-        }
-
-        builder.AppendLine("요구사항:");
-        builder.AppendLine("1) 역할별 장점을 취합해 하나의 최종 답변으로 통합");
-        builder.AppendLine("2) 사실 충돌이 있으면 가장 보수적이고 검증 친화적인 결론을 선택");
-        builder.AppendLine("3) 내부 역할 분담 과정은 드러내지 말고 사용자에게 바로 쓸 답변만 출력");
-        builder.AppendLine("4) 한국어로 간결하고 실행 가능하게 답변");
-        builder.AppendLine("5) 마크다운 코드블록은 필요할 때만 사용");
-        return builder.ToString().Trim();
+        return TelegramPromptPolicy.BuildOrchestrationPrompt(userText, workerResults, roleByProvider);
     }
 
     private static bool TryParseKillCommand(string text, out int pid)
@@ -3281,49 +2213,12 @@ public sealed partial class CommandService
 
     private static string BuildTelegramConcisePrompt(string input)
     {
-        var normalized = (input ?? string.Empty).Trim().ToLowerInvariant();
-        var looksLikeListRequest = RequestedCountRegex.IsMatch(normalized)
-            || TopCountRegex.IsMatch(normalized)
-            || ContainsAny(normalized, "뉴스", "news", "헤드라인", "속보", "목록", "리스트", "top");
-        var requestedCount = ResolveRequestedResultCountFromQuery(input ?? string.Empty);
-        var lengthRule = looksLikeListRequest
-            ? $"- 목록형 요청은 항목 수를 임의로 줄이지 말고 요청 건수({requestedCount})를 유지"
-            : "- 최대 7줄";
-        var localNow = BuildLocalNowText();
-        return $"""
-                아래 질문에 한국어로 간결하게 답하세요.
-                규칙:
-                - 결론 먼저
-                - 불필요한 인삿말/군더더기 금지
-                {lengthRule}
-                - 핵심 불릿 위주
-                - 시간 관련 질문은 아래 로컬 시간을 기준으로 답변
-
-                로컬 시간:
-                {localNow}
-
-                질문:
-                {input}
-                """;
+        return TelegramPromptPolicy.BuildConcisePrompt(input, BuildLocalNowText());
     }
 
     private static string BuildTelegramFullFidelityPrompt(string input)
     {
-        var localNow = BuildLocalNowText();
-        return $"""
-                아래 요청에 한국어로 답하세요.
-                규칙:
-                - 사용자의 원 요구사항, 개수, 형식, 코드블록, 표, 첨부/검색/스킬 컨텍스트를 임의로 줄이지 마세요.
-                - 답변은 결론부터 시작하되, 필요한 설명과 근거는 충분히 포함하세요.
-                - 내부 컨텍스트 마커는 답변에 노출하지 말고, 사용자에게 필요한 내용만 자연스럽게 정리하세요.
-                - 시간 관련 질문은 아래 로컬 시간을 기준으로 답변하세요.
-
-                로컬 시간:
-                {localNow}
-
-                요청:
-                {input}
-                """;
+        return TelegramPromptPolicy.BuildFullFidelityPrompt(input, BuildLocalNowText());
     }
 
     // 응답 본문 끝에 provider·model·active skill 정보를 짧은 footer로 붙인다.
@@ -3362,1009 +2257,34 @@ public sealed partial class CommandService
         }
 
         const bool keepMarkdownTables = true;
-        var normalized = SanitizeChatOutput(text, keepMarkdownTables: keepMarkdownTables);
-        normalized = ConvertMarkdownToTelegramPlainText(normalized, keepMarkdownTables);
-        normalized = ImproveTelegramReadability(normalized, keepMarkdownTables);
-        normalized = CollapseTokenizedNumberedList(normalized);
-        if (LooksLikeNumberedListResponse(normalized))
-        {
-            normalized = NormalizeGeminiWebNumberedListResponse(normalized);
-        }
-        normalized = NormalizeStructuredLabelBlocks(normalized);
-        normalized = MergeDetachedTelegramDecimalLines(normalized);
-        normalized = MergeDetachedTelegramNumberLines(normalized);
-        normalized = AddTelegramClaimSpacing(normalized);
-        var safeMaxChars = Math.Max(0, maxChars);
-        if (safeMaxChars > 0 && normalized.Length > safeMaxChars)
-        {
-            return normalized[..safeMaxChars].TrimEnd() + "\n...(telegram_response_truncated)";
-        }
-
-        return normalized.Trim();
+        var sanitized = SanitizeChatOutput(text, keepMarkdownTables: keepMarkdownTables);
+        return TelegramResponseFormatterPolicy.FormatSanitizedResponse(
+            sanitized,
+            maxChars,
+            ChatOutputSanitizerPolicy.NormalizeStructuredLabelBlocks,
+            ChatOutputSanitizerPolicy.IsStandaloneNumberedHeadlineLine,
+            ChatOutputSanitizerPolicy.IsMarkdownTableRow
+        );
     }
 
     private static string ConvertMarkdownToTelegramPlainText(string text, bool keepMarkdownTables = false)
     {
-        var normalized = (text ?? string.Empty)
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace("\r", "\n", StringComparison.Ordinal);
-        normalized = ExpandCollapsedMarkdownForTelegram(normalized);
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return string.Empty;
-        }
-
-        var lines = normalized.Split('\n', StringSplitOptions.None);
-        var result = new List<string>(lines.Length + 12);
-        var inCodeFence = false;
-        string[]? tableHeaders = null;
-        var tableAutoIndex = 0;
-
-        foreach (var rawLine in lines)
-        {
-            var line = rawLine.TrimEnd();
-            var trimmed = line.Trim();
-
-            if (trimmed.StartsWith("```", StringComparison.Ordinal))
-            {
-                tableHeaders = null;
-                tableAutoIndex = 0;
-                if (!inCodeFence)
-                {
-                    if (result.Count > 0 && !string.IsNullOrWhiteSpace(result[^1]))
-                    {
-                        result.Add(string.Empty);
-                    }
-                    result.Add("[코드]");
-                    inCodeFence = true;
-                }
-                else
-                {
-                    inCodeFence = false;
-                    if (result.Count > 0 && !string.IsNullOrWhiteSpace(result[^1]))
-                    {
-                        result.Add(string.Empty);
-                    }
-                }
-                continue;
-            }
-
-            if (inCodeFence)
-            {
-                result.Add(line);
-                continue;
-            }
-
-            if (string.IsNullOrWhiteSpace(trimmed))
-            {
-                tableHeaders = null;
-                tableAutoIndex = 0;
-                if (result.Count > 0 && !string.IsNullOrWhiteSpace(result[^1]))
-                {
-                    result.Add(string.Empty);
-                }
-                continue;
-            }
-
-            if (Regex.IsMatch(trimmed, @"^#{1,6}\s+"))
-            {
-                tableHeaders = null;
-                tableAutoIndex = 0;
-                var heading = Regex.Replace(trimmed, @"^#{1,6}\s+", string.Empty);
-                heading = StripInlineMarkdownForTelegram(heading);
-                if (!string.IsNullOrWhiteSpace(heading))
-                {
-                    if (result.Count > 0 && !string.IsNullOrWhiteSpace(result[^1]))
-                    {
-                        result.Add(string.Empty);
-                    }
-                    result.Add(heading);
-                }
-                continue;
-            }
-
-            if (Regex.IsMatch(trimmed, @"^(-{3,}|\*{3,}|_{3,})$"))
-            {
-                tableHeaders = null;
-                tableAutoIndex = 0;
-                if (result.Count > 0 && !string.IsNullOrWhiteSpace(result[^1]))
-                {
-                    result.Add(string.Empty);
-                }
-                result.Add("-----");
-                continue;
-            }
-
-            if (trimmed.StartsWith("|", StringComparison.Ordinal) && trimmed.EndsWith("|", StringComparison.Ordinal))
-            {
-                if (keepMarkdownTables)
-                {
-                    tableHeaders = null;
-                    tableAutoIndex = 0;
-                    var preservedTableLine = NormalizeTelegramTableRowForPlainText(trimmed);
-                    if (!string.IsNullOrWhiteSpace(preservedTableLine))
-                    {
-                        result.Add(preservedTableLine);
-                    }
-                    continue;
-                }
-
-                var cells = trimmed
-                    .Trim('|')
-                    .Split('|', StringSplitOptions.TrimEntries)
-                    .Select(StripInlineMarkdownForTelegram)
-                    .ToArray();
-                if (cells.Length == 0)
-                {
-                    continue;
-                }
-
-                if (cells.All(cell => Regex.IsMatch(cell, @"^:?-{2,}:?$")))
-                {
-                    continue;
-                }
-
-                if (tableHeaders == null && IsLikelyTableHeaderRow(cells))
-                {
-                    tableHeaders = cells;
-                    tableAutoIndex = 0;
-                    continue;
-                }
-
-                tableAutoIndex += 1;
-                var itemNo = tableAutoIndex;
-                var firstCell = cells[0];
-                if (TryExtractLeadingNumber(firstCell, out var parsedNo, out var firstCellRemainder))
-                {
-                    itemNo = parsedNo;
-                    firstCell = firstCellRemainder;
-                }
-
-                var details = new List<string>(4);
-                if (tableHeaders != null && tableHeaders.Length >= 2)
-                {
-                    for (var ci = 0; ci < Math.Min(cells.Length, tableHeaders.Length); ci += 1)
-                    {
-                        var key = StripInlineMarkdownForTelegram(tableHeaders[ci]);
-                        var value = ci == 0 ? firstCell : cells[ci];
-                        if (string.IsNullOrWhiteSpace(value))
-                        {
-                            continue;
-                        }
-
-                        if (string.IsNullOrWhiteSpace(key))
-                        {
-                            details.Add(value);
-                            continue;
-                        }
-
-                        details.Add($"{key}: {value}");
-                    }
-                }
-                else
-                {
-                    if (!string.IsNullOrWhiteSpace(firstCell))
-                    {
-                        details.Add(firstCell);
-                    }
-
-                    foreach (var extra in cells.Skip(1))
-                    {
-                        if (!string.IsNullOrWhiteSpace(extra))
-                        {
-                            details.Add(extra);
-                        }
-                    }
-                }
-
-                if (details.Count > 0)
-                {
-                    result.Add($"{itemNo}. {details[0]}");
-                    foreach (var detail in details.Skip(1))
-                    {
-                        result.Add($"- {detail}");
-                    }
-                    result.Add(string.Empty);
-                }
-                continue;
-            }
-
-            if (trimmed.StartsWith(">", StringComparison.Ordinal))
-            {
-                tableHeaders = null;
-                tableAutoIndex = 0;
-                var quote = StripInlineMarkdownForTelegram(trimmed.TrimStart('>', ' '));
-                if (!string.IsNullOrWhiteSpace(quote))
-                {
-                    result.Add($"인용: {quote}");
-                }
-                continue;
-            }
-
-            if (Regex.IsMatch(trimmed, @"^\d+[.)]\s+"))
-            {
-                tableHeaders = null;
-                tableAutoIndex = 0;
-                var orderedLine = Regex.Replace(trimmed, @"^(\d+)[.)]\s+", "$1. ");
-                orderedLine = StripInlineMarkdownForTelegram(orderedLine);
-                if (!string.IsNullOrWhiteSpace(orderedLine))
-                {
-                    result.Add(orderedLine);
-                }
-                continue;
-            }
-
-            if (Regex.IsMatch(trimmed, @"^[-*+]\s+"))
-            {
-                tableHeaders = null;
-                tableAutoIndex = 0;
-                var bulletContent = Regex.Replace(trimmed, @"^[-*+]\s+", string.Empty);
-                bulletContent = StripInlineMarkdownForTelegram(bulletContent);
-                if (!string.IsNullOrWhiteSpace(bulletContent))
-                {
-                    result.Add($"- {bulletContent}");
-                }
-                continue;
-            }
-
-            tableHeaders = null;
-            tableAutoIndex = 0;
-            var plainLine = StripInlineMarkdownForTelegram(trimmed);
-            if (!string.IsNullOrWhiteSpace(plainLine))
-            {
-                result.Add(plainLine);
-            }
-        }
-
-        var merged = string.Join('\n', result).Trim();
-        return Regex.Replace(merged, @"\n{3,}", "\n\n");
+        return TelegramResponseFormatterPolicy.ConvertMarkdownToPlainText(text, keepMarkdownTables);
     }
 
     private static string NormalizeTelegramTableRowForPlainText(string tableRow)
     {
-        var trimmed = (tableRow ?? string.Empty).Trim();
-        if (!trimmed.StartsWith("|", StringComparison.Ordinal)
-            || !trimmed.EndsWith("|", StringComparison.Ordinal))
-        {
-            return trimmed;
-        }
-
-        var cells = trimmed
-            .Trim('|')
-            .Split('|', StringSplitOptions.TrimEntries)
-            .Select(StripInlineMarkdownForTelegram)
-            .ToArray();
-        if (cells.Length == 0)
-        {
-            return string.Empty;
-        }
-
-        if (cells.All(cell => Regex.IsMatch(cell, @"^:?-{2,}:?$")))
-        {
-            var normalizedSeparator = cells.Select(cell =>
-            {
-                var compact = cell.Trim();
-                var leadingColon = compact.StartsWith(':');
-                var trailingColon = compact.EndsWith(':');
-                var dashCount = Math.Max(3, compact.Count(ch => ch == '-'));
-                return string.Concat(
-                    leadingColon ? ":" : string.Empty,
-                    new string('-', dashCount),
-                    trailingColon ? ":" : string.Empty
-                );
-            });
-            return "| " + string.Join(" | ", normalizedSeparator) + " |";
-        }
-
-        return "| " + string.Join(" | ", cells.Select(cell => cell.Trim())) + " |";
+        return TelegramResponseFormatterPolicy.NormalizeTableRowForPlainText(tableRow);
     }
 
     private static string ExpandCollapsedMarkdownForTelegram(string text)
     {
-        var normalized = text ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return string.Empty;
-        }
-
-        normalized = Regex.Replace(normalized, @"\s+\|\s+\|", " |\n|");
-        normalized = Regex.Replace(normalized, @"\n{3,}", "\n\n");
-        return normalized.Trim();
-    }
-
-    private static bool IsLikelyTableHeaderRow(string[] cells)
-    {
-        if (cells == null || cells.Length < 2)
-        {
-            return false;
-        }
-
-        if (cells.All(cell => Regex.IsMatch(cell, @"^:?-{2,}:?$")))
-        {
-            return false;
-        }
-
-        if (cells.Any(cell => Regex.IsMatch(cell, @"^\d+[.)]?\s*")))
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    private static bool TryExtractLeadingNumber(string value, out int number, out string remainder)
-    {
-        number = 0;
-        remainder = (value ?? string.Empty).Trim();
-        var match = Regex.Match(remainder, @"^(?<num>\d+)[.)]?\s*(?<rest>.*)$");
-        if (!match.Success)
-        {
-            return false;
-        }
-
-        if (!int.TryParse(match.Groups["num"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out number))
-        {
-            number = 0;
-            return false;
-        }
-
-        var rest = match.Groups["rest"].Value.Trim();
-        remainder = string.IsNullOrWhiteSpace(rest) ? remainder : rest;
-        return true;
+        return TelegramResponseFormatterPolicy.ExpandCollapsedMarkdown(text);
     }
 
     private static string StripInlineMarkdownForTelegram(string text)
     {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return string.Empty;
-        }
-
-        var value = text;
-        value = Regex.Replace(value, @"!\[(?<alt>[^\]]*)\]\((?<url>[^)]+)\)", "[이미지] ${alt} (${url})");
-        value = Regex.Replace(value, @"\[(?<title>[^\]]+)\]\((?<url>[^)]+)\)", "${title} (${url})");
-        value = Regex.Replace(value, @"\[(?<title>[^\]]+)\]\[[^\]]*\]", "${title}");
-        value = Regex.Replace(value, @"`{1,3}([^`]+)`{1,3}", "$1");
-        value = Regex.Replace(value, @"(\*\*|__)(?<inner>.+?)\1", "${inner}");
-        value = Regex.Replace(value, @"(\*|_)(?<inner>.+?)\1", "${inner}");
-        value = Regex.Replace(value, @"~~(?<inner>.+?)~~", "${inner}");
-        value = Regex.Replace(value, @"<[^>]+>", string.Empty);
-        value = value
-            .Replace("\\n", "\n", StringComparison.Ordinal)
-            .Replace("\\t", " ", StringComparison.Ordinal)
-            .Replace("\\*", "*", StringComparison.Ordinal)
-            .Replace("\\_", "_", StringComparison.Ordinal)
-            .Replace("\\`", "`", StringComparison.Ordinal);
-        value = Regex.Replace(value, @"[ \t]{2,}", " ");
-        return value.Trim();
-    }
-
-    private static string ImproveTelegramReadability(string text, bool keepMarkdownTables = false)
-    {
-        var normalized = (text ?? string.Empty)
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace("\r", "\n", StringComparison.Ordinal)
-            .Replace("\\n", "\n", StringComparison.Ordinal)
-            .Replace("\t", " ", StringComparison.Ordinal);
-        var tightWrap = ShouldUseTightTelegramWrap(normalized);
-        var wrapWidth = tightWrap ? 200 : 4000;
-
-        var sourceLines = normalized.Split('\n', StringSplitOptions.None);
-        var lines = new List<string>(sourceLines.Length + 8);
-        foreach (var rawLine in sourceLines)
-        {
-            var line = rawLine.TrimEnd();
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                if (lines.Count > 0 && !string.IsNullOrWhiteSpace(lines[^1]))
-                {
-                    lines.Add(string.Empty);
-                }
-                continue;
-            }
-
-            if (keepMarkdownTables && IsMarkdownTableRow(line))
-            {
-                lines.Add(line.Trim());
-                continue;
-            }
-
-            if (TrySplitAsHeadlineList(line, out var headlineLines))
-            {
-                foreach (var headlineLine in headlineLines)
-                {
-                    lines.Add(headlineLine);
-                }
-                continue;
-            }
-
-            if (tightWrap && line.Length > 120)
-            {
-                line = Regex.Replace(
-                    line,
-                    @"([.!?])\s+(?!(?:md|js|cs|ts|jsx|tsx|txt|py|json|html|css|xml|yml|yaml|sh|ps1|bat|cmd|log|csv|exe|dll|zip|tar|gz)\b)(?=(?:[""'“‘(\[])?[가-힣A-Z])",
-                    "$1\n",
-                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
-                );
-                line = Regex.Replace(
-                    line,
-                    @"(다\.|요\.)\s+(?!(?:md|js|cs|ts|jsx|tsx|txt|py|json|html|css|xml|yml|yaml|sh|ps1|bat|cmd|log|csv|exe|dll|zip|tar|gz)\b)(?=(?:[""'“‘(\[])?[가-힣A-Z])",
-                    "$1\n",
-                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
-                );
-                line = Regex.Replace(line, @"(…+)\s+", "$1\n");
-                line = Regex.Replace(line, @"\s+\|\s+\|", " |\n|");
-                var splitLines = line.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                foreach (var splitLine in splitLines)
-                {
-                    AddWrappedTelegramLines(lines, splitLine, wrapWidth);
-                }
-                continue;
-            }
-
-            AddWrappedTelegramLines(lines, line, wrapWidth);
-        }
-
-        var merged = string.Join('\n', lines).Trim();
-        merged = Regex.Replace(merged, @"\n{3,}", "\n\n");
-        return merged;
-    }
-
-    private static bool ShouldUseTightTelegramWrap(string text)
-    {
-        var normalized = (text ?? string.Empty)
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace("\r", "\n", StringComparison.Ordinal)
-            .Trim();
-        if (normalized.Length == 0)
-        {
-            return false;
-        }
-
-        var hasStructuredTitle = Regex.IsMatch(
-            normalized,
-            @"(?mi)^\s*(?:[-•▪]\s*)?(?:(?:No\.\d+|\d+[.)])\s*)?제목\s*[:：]",
-            RegexOptions.CultureInvariant
-        );
-        var hasStructuredContent = Regex.IsMatch(
-            normalized,
-            @"(?mi)^\s*(?:[-•▪]\s*)?(?:(?:No\.\d+|\d+[.)])\s*)?내용\s*[:：]",
-            RegexOptions.CultureInvariant
-        );
-        return hasStructuredTitle || hasStructuredContent;
-    }
-
-    private static void AddWrappedTelegramLines(List<string> output, string line, int maxWidth)
-    {
-        var normalizedLine = (line ?? string.Empty).Trim();
-        if (normalizedLine.Length == 0)
-        {
-            return;
-        }
-
-        if (IsTelegramTitleLine(normalizedLine) || IsTelegramSourceLine(normalizedLine) || IsTelegramCategoryLine(normalizedLine))
-        {
-            output.Add(normalizedLine);
-            return;
-        }
-
-        var wrapped = WrapLongLineForTelegram(normalizedLine, maxWidth).ToArray();
-        if (wrapped.Length == 0)
-        {
-            return;
-        }
-
-        var claimLine = IsTelegramClaimLine(normalizedLine);
-        for (var i = 0; i < wrapped.Length; i += 1)
-        {
-            output.Add(wrapped[i]);
-        }
-    }
-
-    private static string CollapseTokenizedNumberedList(string text)
-    {
-        var normalized = (text ?? string.Empty)
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace("\r", "\n", StringComparison.Ordinal);
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return string.Empty;
-        }
-
-        var lines = normalized.Split('\n', StringSplitOptions.None);
-        var output = new List<string>(lines.Length);
-        var index = 0;
-        while (index < lines.Length)
-        {
-            var line = (lines[index] ?? string.Empty).Trim();
-            if (!TryParseShortNumberedToken(line, out var token))
-            {
-                output.Add(lines[index]);
-                index += 1;
-                continue;
-            }
-
-            var runTokens = new List<string> { token };
-            var runStart = index;
-            var expectedNumber = 2;
-            var cursor = index + 1;
-            while (cursor < lines.Length)
-            {
-                var next = (lines[cursor] ?? string.Empty).Trim();
-                if (!TryParseShortNumberedToken(next, out var nextToken, out var parsedNumber)
-                    || parsedNumber != expectedNumber)
-                {
-                    break;
-                }
-
-                runTokens.Add(nextToken);
-                expectedNumber += 1;
-                cursor += 1;
-            }
-
-            if (runTokens.Count >= 6)
-            {
-                output.Add(string.Join(' ', runTokens));
-                index = cursor;
-                continue;
-            }
-
-            // run이 짧으면 원본 보존
-            for (var i = runStart; i < cursor; i += 1)
-            {
-                output.Add(lines[i]);
-            }
-            index = cursor;
-        }
-
-        var merged = string.Join('\n', output).Trim();
-        return Regex.Replace(merged, @"\n{3,}", "\n\n");
-    }
-
-    private static string MergeDetachedTelegramNumberLines(string text)
-    {
-        var normalized = (text ?? string.Empty)
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace("\r", "\n", StringComparison.Ordinal);
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return string.Empty;
-        }
-
-        var lines = normalized.Split('\n', StringSplitOptions.None);
-        var output = new List<string>(lines.Length);
-        for (var i = 0; i < lines.Length; i += 1)
-        {
-            var current = (lines[i] ?? string.Empty).Trim();
-            if (!Regex.IsMatch(current, @"^\d+\.$", RegexOptions.CultureInvariant))
-            {
-                output.Add(lines[i]);
-                continue;
-            }
-
-            if (i + 1 >= lines.Length)
-            {
-                output.Add(lines[i]);
-                continue;
-            }
-
-            var nextIndex = i + 1;
-            while (nextIndex < lines.Length && string.IsNullOrWhiteSpace(lines[nextIndex]))
-            {
-                nextIndex += 1;
-            }
-
-            if (nextIndex >= lines.Length)
-            {
-                output.Add(lines[i]);
-                continue;
-            }
-
-            var next = (lines[nextIndex] ?? string.Empty).Trim();
-            if (next.Length == 0
-                || Regex.IsMatch(next, @"^\d+\.$", RegexOptions.CultureInvariant)
-                || next.StartsWith("```", StringComparison.Ordinal)
-                || IsMarkdownTableRow(next))
-            {
-                output.Add(lines[i]);
-                continue;
-            }
-
-            output.Add($"{current} {next}");
-            i = nextIndex;
-        }
-
-        return Regex.Replace(string.Join('\n', output).Trim(), @"\n{3,}", "\n\n");
-    }
-
-    private static string MergeDetachedTelegramDecimalLines(string text)
-    {
-        var normalized = (text ?? string.Empty)
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace("\r", "\n", StringComparison.Ordinal);
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return string.Empty;
-        }
-
-        normalized = Regex.Replace(
-            normalized,
-            @"(\d+)\.\s*\n+(?=\d)",
-            "$1.",
-            RegexOptions.CultureInvariant
-        );
-        return Regex.Replace(normalized.Trim(), @"\n{3,}", "\n\n");
-    }
-
-    private static string AddTelegramClaimSpacing(string text)
-    {
-        var normalized = (text ?? string.Empty)
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace("\r", "\n", StringComparison.Ordinal);
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return string.Empty;
-        }
-
-        var lines = normalized.Split('\n', StringSplitOptions.None);
-        var output = new List<string>(lines.Length + 24);
-        for (var i = 0; i < lines.Length; i += 1)
-        {
-            var trimmed = (lines[i] ?? string.Empty).Trim();
-            if (trimmed.Length == 0)
-            {
-                if (output.Count > 0 && !string.IsNullOrWhiteSpace(output[^1]))
-                {
-                    output.Add(string.Empty);
-                }
-                continue;
-            }
-
-            if (ShouldInsertTelegramBlankBefore(trimmed)
-                && output.Count > 0
-                && !string.IsNullOrWhiteSpace(output[^1]))
-            {
-                output.Add(string.Empty);
-            }
-
-            output.Add(trimmed);
-
-            var next = FindNextNonEmptyTelegramLine(lines, i + 1);
-            if (ShouldInsertTelegramBlankAfter(trimmed, next)
-                && output.Count > 0
-                && !string.IsNullOrWhiteSpace(output[^1]))
-            {
-                output.Add(string.Empty);
-            }
-        }
-
-        return Regex.Replace(string.Join('\n', output).Trim(), @"\n{3,}", "\n\n");
-    }
-
-    private static bool ShouldInsertTelegramBlankBefore(string line)
-    {
-        return IsTelegramClaimLine(line) || IsTelegramSourceLine(line);
-    }
-
-    private static bool ShouldInsertTelegramBlankAfter(string current, string? next)
-    {
-        if (string.IsNullOrWhiteSpace(next))
-        {
-            return false;
-        }
-
-        var currentTrimmed = (current ?? string.Empty).Trim();
-        if (IsTelegramSourceLine(currentTrimmed))
-        {
-            return true;
-        }
-
-        var nextTrimmed = next.Trim();
-        if (!IsTelegramClaimLine(nextTrimmed) && !IsTelegramSourceLine(nextTrimmed))
-        {
-            return false;
-        }
-
-        return currentTrimmed.EndsWith(".", StringComparison.Ordinal)
-            || currentTrimmed.EndsWith("다.", StringComparison.Ordinal)
-            || currentTrimmed.EndsWith("요.", StringComparison.Ordinal)
-            || currentTrimmed.EndsWith("니다.", StringComparison.Ordinal)
-            || currentTrimmed.EndsWith(":", StringComparison.Ordinal)
-            || currentTrimmed.EndsWith("?", StringComparison.Ordinal)
-            || currentTrimmed.EndsWith("!", StringComparison.Ordinal);
-    }
-
-    private static bool IsTelegramClaimLine(string line)
-    {
-        var trimmed = (line ?? string.Empty).Trim();
-        if (trimmed.Length == 0)
-        {
-            return false;
-        }
-
-        return IsStandaloneNumberedHeadlineLine(trimmed)
-            || trimmed.StartsWith("- ", StringComparison.Ordinal)
-            || Regex.IsMatch(trimmed, @"^\d+\.\s+", RegexOptions.CultureInvariant)
-            || Regex.IsMatch(trimmed, @"^[■□▪●◆▶▷]\s+", RegexOptions.CultureInvariant)
-            || Regex.IsMatch(
-                trimmed,
-                @"^(?:(?:No\.\d+|\d+[.)])\s*)?\*\*[A-Za-z가-힣0-9('‘’][A-Za-z가-힣0-9()'‘’,.&+_/\-·\s]{0,80}\s*[:：]\*\*",
-                RegexOptions.CultureInvariant
-            )
-            || Regex.IsMatch(
-                trimmed,
-                @"^(?:(?:No\.\d+|\d+[.)])\s*)?(제목|내용)\s*[:：]",
-                RegexOptions.CultureInvariant | RegexOptions.IgnoreCase
-            );
-    }
-
-    private static bool IsTelegramSourceLine(string line)
-    {
-        return Regex.IsMatch(
-            (line ?? string.Empty).Trim(),
-            @"^(?:\*\*)?\s*출처\s*[:：](?:\*\*)?",
-            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase
-        );
-    }
-
-    private static bool IsTelegramTitleLine(string line)
-    {
-        var trimmed = (line ?? string.Empty).Trim();
-        if (trimmed.Length == 0)
-        {
-            return false;
-        }
-
-        return IsStandaloneNumberedHeadlineLine(trimmed)
-            || Regex.IsMatch(
-            trimmed,
-            @"^(?:[-•▪]\s*)?(?:(?:No\.\d+|\d+[.)])\s*)?제목\s*[:：]",
-            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase
-        );
-    }
-
-    private static bool IsTelegramCategoryLine(string line)
-    {
-        var trimmed = (line ?? string.Empty).Trim();
-        if (trimmed.Length == 0)
-        {
-            return false;
-        }
-
-        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
-            || trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (LooksLikeStandaloneTelegramTimeLine(trimmed))
-        {
-            return false;
-        }
-
-        var match = Regex.Match(
-            trimmed,
-            @"^(?:[-•▪]\s*)?(?<label>[A-Za-z가-힣0-9()'‘’,.&+\- ]{1,24})\s*[:：]\s*(?<value>.+)$",
-            RegexOptions.CultureInvariant
-        );
-        if (!match.Success)
-        {
-            return false;
-        }
-
-        var label = match.Groups["label"].Value.Trim();
-        if (label.Length == 0)
-        {
-            return false;
-        }
-
-        if (label.Equals("제목", StringComparison.OrdinalIgnoreCase)
-            || label.Equals("내용", StringComparison.OrdinalIgnoreCase)
-            || label.Equals("출처", StringComparison.OrdinalIgnoreCase)
-            || label.Equals("출처링크", StringComparison.OrdinalIgnoreCase)
-            || label.Equals("http", StringComparison.OrdinalIgnoreCase)
-            || label.Equals("https", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    private static bool LooksLikeStandaloneTelegramTimeLine(string line)
-    {
-        var normalized = (line ?? string.Empty).Trim();
-        if (normalized.Length == 0)
-        {
-            return false;
-        }
-
-        return Regex.IsMatch(
-            normalized,
-            @"^(?:[-•▪]\s*)?(?:(?:No\.\d+|\d+[.)])\s*)?(?:(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}(?:[-/.]\d{2,4})?)\s+)?\d{1,2}\s*:\s*\d{2}(?:\s*:\s*\d{2})?(?:\s*(?:AM|PM|am|pm))?$",
-            RegexOptions.CultureInvariant
-        );
-    }
-
-    private static string? FindNextNonEmptyTelegramLine(string[] lines, int startIndex)
-    {
-        for (var i = startIndex; i < lines.Length; i += 1)
-        {
-            var candidate = (lines[i] ?? string.Empty).Trim();
-            if (candidate.Length > 0)
-            {
-                return candidate;
-            }
-        }
-
-        return null;
-    }
-
-    private static bool TryParseShortNumberedToken(string line, out string token)
-    {
-        return TryParseShortNumberedToken(line, out token, out _);
-    }
-
-    private static bool TryParseShortNumberedToken(string line, out string token, out int number)
-    {
-        token = string.Empty;
-        number = 0;
-        var normalized = (line ?? string.Empty).Trim();
-        if (normalized.Length == 0)
-        {
-            return false;
-        }
-
-        var match = Regex.Match(
-            normalized,
-            @"^(?<n>\d{1,2})\.\s+(?<token>[^\s]{1,12})$",
-            RegexOptions.CultureInvariant
-        );
-        if (!match.Success
-            || !int.TryParse(match.Groups["n"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out number))
-        {
-            return false;
-        }
-
-        token = match.Groups["token"].Value.Trim();
-        if (token.Length == 0)
-        {
-            return false;
-        }
-
-        if (token.Contains("출처", StringComparison.OrdinalIgnoreCase)
-            || token.Contains("제목", StringComparison.OrdinalIgnoreCase)
-            || token.Contains("내용", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (token.Contains(':', StringComparison.Ordinal)
-            || token.Contains('/', StringComparison.Ordinal)
-            || token.Contains('|', StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    private static bool TrySplitAsHeadlineList(string line, out IReadOnlyList<string> splitLines)
-    {
-        splitLines = Array.Empty<string>();
-        var raw = (line ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            return false;
-        }
-
-        if (Regex.IsMatch(raw, @"^\d+[.)]\s+"))
-        {
-            return false;
-        }
-
-        if (raw.Contains("http://", StringComparison.OrdinalIgnoreCase)
-            || raw.Contains("https://", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (raw.Contains(" / ", StringComparison.Ordinal)
-            || raw.Contains("|", StringComparison.Ordinal)
-            || raw.Contains("출처:", StringComparison.OrdinalIgnoreCase)
-            || raw.Contains("제목:", StringComparison.OrdinalIgnoreCase)
-            || raw.Contains("내용:", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var commaCount = raw.Count(ch => ch == ',');
-        if (raw.Length < 90 || commaCount < 2)
-        {
-            return false;
-        }
-
-        var candidate = raw;
-        candidate = Regex.Replace(
-            candidate,
-            @"([.…]{1,3})(?=(?:[""'“‘(\[])?[가-힣A-Z])",
-            "$1\n",
-            RegexOptions.CultureInvariant
-        );
-        candidate = Regex.Replace(
-            candidate,
-            @"([.…]{1,3})\s+(?=(?:[""'“‘(\[])?[가-힣A-Z])",
-            "$1\n",
-            RegexOptions.CultureInvariant
-        );
-        candidate = Regex.Replace(candidate, @"\s+(?=[^,\n]{6,36},)", "\n");
-        candidate = Regex.Replace(candidate, @"\n{2,}", "\n");
-
-        var items = candidate
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(x => x.Trim())
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .ToList();
-        if (items.Count < 3 || items.Count > 8)
-        {
-            return false;
-        }
-
-        var shortOrSingleWordCount = items.Count(item =>
-            item.Length < 8 || !item.Contains(' ', StringComparison.Ordinal));
-        if (shortOrSingleWordCount > (items.Count / 3))
-        {
-            return false;
-        }
-
-        var output = new List<string>(items.Count + 2);
-        for (var i = 0; i < items.Count; i += 1)
-        {
-            output.Add($"- {items[i]}");
-        }
-
-        splitLines = output;
-        return true;
-    }
-
-    private static IEnumerable<string> WrapLongLineForTelegram(string line, int maxWidth)
-    {
-        var value = (line ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            yield break;
-        }
-
-        var safeWidth = Math.Max(10, maxWidth);
-        while (value.Length > safeWidth)
-        {
-            var cut = value.LastIndexOf(' ', safeWidth);
-            if (cut < Math.Max(8, safeWidth / 2))
-            {
-                var nextSpace = value.IndexOf(' ', safeWidth);
-                if (nextSpace > safeWidth && nextSpace <= safeWidth + 12)
-                {
-                    cut = nextSpace;
-                }
-                else
-                {
-                    cut = safeWidth;
-                }
-            }
-
-            var head = value[..cut].Trim();
-            if (!string.IsNullOrWhiteSpace(head))
-            {
-                yield return head;
-            }
-
-            value = value[cut..].TrimStart();
-        }
-
-        if (!string.IsNullOrWhiteSpace(value))
-        {
-            yield return value;
-        }
+        return TelegramResponseFormatterPolicy.StripInlineMarkdown(text);
     }
 
     private static string BuildLocalNowText()

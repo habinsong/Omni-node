@@ -1,6 +1,6 @@
 # Omni-node 개발 현황 분석
 
-최종 업데이트: 2026-05-18
+최종 업데이트: 2026-05-19
 
 ## 기준
 
@@ -52,6 +52,9 @@
 dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj
 dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj
 node scripts/check-security-boundaries.mjs
+node scripts/check-coding-python-game-contract.mjs
+node scripts/check-chat-telegram-contract.mjs
+node scripts/check-gateway-runtime-contract.mjs
 npm test
 make -C apps/omninode-core -B
 git diff --check
@@ -60,8 +63,11 @@ git diff --check
 최근 확인 결과:
 
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 170 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 242
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 494 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 505
+- `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
+- `node scripts/check-chat-telegram-contract.mjs`: 통과
+- `node scripts/check-gateway-runtime-contract.mjs`: 통과
 - `npm test`: 통과
 - `make -C apps/omninode-core -B`: 통과
 - `git diff --check`: 통과
@@ -333,7 +339,7 @@ git diff --check
 
 ### P2. WebSocket runtime 통합 테스트 추가
 
-상태: 진행 중
+상태: 완료
 
 목표:
 
@@ -358,7 +364,13 @@ git diff --check
   - 임시 포트와 임시 HOME/워크스페이스로 실제 미들웨어를 기동한다.
   - `/healthz` 응답을 확인한다.
   - 로컬 loopback WebSocket의 Origin 없는 handshake가 `101`로 허용되는지 확인한다.
+  - 로컬 loopback WebSocket에서 인증 전 보호 메시지가 `unauthorized`로 거부되는지 확인한다.
   - 잘못된 Origin handshake가 `403`으로 거부되는지 확인한다.
+  - 테스트 환경에 비 loopback IPv4가 있으면 외부 대시보드 모드로 listener를 띄우고, 비 loopback endpoint 접속을 실제 remote client로 재현한다.
+  - 비 loopback remote WebSocket의 Origin 없는 handshake가 `403`으로 거부되는지 확인한다.
+  - 비 loopback remote WebSocket이 맞는 Origin으로 접속하면 OTP 없이 `remoteLimited` 인증 상태로 진입하는지 확인한다.
+  - remote limited에서 `list_conversations` read-only 메시지가 허용되는지 확인한다.
+  - remote limited에서 `llm_chat_single` 실행 메시지가 `forbidden_remote_limited_action`으로 차단되는지 확인한다.
   - WebSocket `ping`/`pong` round-trip 뒤 `/readyz`가 `200`이 되는지 확인한다.
   - 대시보드 index 정적 파일이 `ETag`, `Last-Modified`, 조건부 `304 Not Modified`를 제공하는지 확인한다.
 - `scripts/run-omninode-tests.mjs`
@@ -376,14 +388,17 @@ git diff --check
 - `make -C apps/omninode-core -B`: 통과
 - `git diff --check`: 통과
 
-남은 범위:
+추가 검증 결과:
 
-- 원격 제한 모드의 read-only 허용/실행 차단은 아직 실제 원격 endpoint 기준으로 검증하지 않았다.
-- 테스트 환경에서 비 loopback 원격 접속을 안정적으로 재현할 방법을 설계해야 한다.
+- `node scripts/check-gateway-runtime-contract.mjs`: 통과
+  - `websocket_no_origin_remote_reject`
+  - `remote_limited_auto_auth`
+  - `remote_limited_read_only_allow`
+  - `remote_limited_execution_block`
 
 ### P3. `CommandService` 도메인 분리 시작
 
-상태: 시작됨
+상태: 진행 중
 
 목표:
 
@@ -407,6 +422,323 @@ git diff --check
 
 - `RemoteLimitedMessagePolicy`를 추가해 remote limited allowlist를 gateway loop 내부에서 분리했다.
 - 이 변경은 아직 `CommandService` 분리는 아니지만, P2에서 지적한 message policy 선언화의 첫 단계다.
+- `apps/omninode-middleware/src/Infrastructure/Search/SearchQueryPolicy.cs`
+  - `CommandService.SearchPipeline`에 있던 검색 필요성 판단, source focus/domain hint 추출, search freshness/count 결정, list/table/comparison/local-time/casual query 판정, fast requirement decision 조립을 별도 정책 클래스로 분리했다.
+  - 웹 검색 메모리 선호 힌트 추출, 중복 키 정규화, 일회성 override 차단, format/tone/language directive 판정, 기본 뉴스/목록 개수 계산도 같은 정책 클래스로 이동했다.
+  - `CommandService.SearchPipeline`에는 기존 partial 호출부 호환을 위한 얇은 wrapper만 남겼다.
+  - `CommandService.Citations`의 list/table 판정도 같은 `SearchQueryPolicy`를 사용하도록 정리했다.
+  - `CommandService.SearchPipeline.cs` 본문 크기: 4159 → 3276 라인.
+- `apps/omninode-middleware-tests/SearchQueryPolicyTests.cs`
+  - fast requirement decision, source hint 추출, LLM JSON decision 파싱, decision token 정규화, 요청 count/freshness, effective query 조립, local date/time false positive, 웹 선호 힌트/override/directive/default count 정책을 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/Infrastructure/Search/SearchUrlContextPolicy.cs`
+  - URL-only 요청 기본 의도 해석, site/docs/article/repository URL 판정, GitHub 저장소 root 파싱, GitHub embedded README 정보 추출, richText → plain text 변환, README 관련 발췌/직접 답변 생성을 `CommandService.SearchPipeline`에서 분리했다.
+  - 네트워크 호출(`WebFetchClient`로 GitHub HTML/Raw README 읽기)은 기존 `CommandService.SearchPipeline`에 남기고, 순수 판정·파싱·발췌 로직만 정책 클래스로 이동했다.
+  - `CommandService.SearchPipeline.cs` 본문 크기: 3276 → 2705 라인.
+- `apps/omninode-middleware-tests/SearchUrlContextPolicyTests.cs`
+  - GitHub 저장소 URL 파싱, repository action URL 거부, docs URL 판정, URL-only 요청 기본 프롬프트, GitHub richText 정규화, README 주변 문맥 발췌, README 직접 답변 생성을 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/Infrastructure/Search/SearchPromptPolicy.cs`
+  - 웹 필요성 판단 프롬프트, Gemini grounded/url-context 답변 프롬프트, Gemini 답변 토큰 예산, Gemini 실패 문구 판정/사용자 안내, need-web JSON 파싱을 `CommandService.SearchPipeline`에서 분리했다.
+  - `CommandService.SearchPipeline`은 모델 호출, URL/README 네트워크 fetch, memory note 읽기, 기존 partial 호환 wrapper에 집중하도록 축소했다.
+  - `CommandService.SearchPipeline.cs` 본문 크기: 2705 → 2311 라인.
+- `apps/omninode-middleware-tests/SearchPromptPolicyTests.cs`
+  - need-web 판단 프롬프트, 웹/URL 컨텍스트 프롬프트 핵심 지시문, 저장소 컨텍스트 포함, Gemini 토큰 예산, Gemini 실패 문구 판정, need-web JSON 파싱을 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/Infrastructure/Search/SearchAnswerFormatterPolicy.cs`
+  - Gemini 웹 응답 번호 목록 정규화, 출처 링크 artifact 제거, narrative paragraph 병합, structured label 정규화, markdown table 변환/출처 metadata 정리를 `CommandService.SearchPipeline`에서 분리했다.
+  - `CommandService.SearchPipeline`에는 텔레그램/인용 partial 호환을 위한 얇은 wrapper만 남겼다.
+  - `CommandService.SearchPipeline.cs` 본문 크기: 2311 → 1171 라인.
+- `apps/omninode-middleware-tests/SearchAnswerFormatterPolicyTests.cs`
+  - 번호 목록 재정렬, plain text table → markdown table 변환, 출처 열 metadata 분리, 출처 URL artifact 제거, narrative paragraph/label 정규화를 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/Infrastructure/Search/GitHubRepositoryContextLoader.cs`
+  - GitHub 저장소 URL 컨텍스트 로딩의 네트워크 I/O를 `CommandService.SearchPipeline`에서 분리했다.
+  - GitHub HTML fetch, embedded README metadata 해석, raw README fetch, fallback README 사용, 관련 README 발췌 조립을 전담한다.
+  - `CommandService.SearchPipeline`은 loader 호출과 Gemini URL-context orchestration만 담당한다.
+  - `CommandService.SearchPipeline.cs` 본문 크기: 1171 → 1070 라인.
+- `apps/omninode-middleware-tests/GitHubRepositoryContextLoaderTests.cs`
+  - GitHub HTML → raw README fetch, raw README 실패 시 embedded README fallback, 비 GitHub/issue URL 거부를 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/Infrastructure/Telegram/TelegramResponseFormatterPolicy.cs`
+  - 텔레그램 응답의 markdown → plain text 변환, markdown table 보존/정규화, inline markdown 제거, 가독성 줄바꿈, 번호 목록/소수점 줄 병합, claim spacing, 문자 수 기준 truncation을 `CommandService.Telegram`에서 분리했다.
+  - `CommandService.Telegram`에는 `SanitizeChatOutput` 이후 정책 클래스로 위임하는 얇은 wrapper만 남겨 `Execution`/`RoutineExecution` partial의 기존 호출 계약을 유지했다.
+  - `CommandService.Telegram.cs` 본문 크기: 4886 → 3911 라인.
+- `apps/omninode-middleware-tests/TelegramResponseFormatterPolicyTests.cs`
+  - markdown heading/link/code fence 변환, markdown table 보존, 문자 수 기준 truncation marker, 분리된 번호 줄 병합을 단위 테스트로 고정했다.
+- `scripts/check-chat-telegram-contract.mjs`
+  - `telegram_response_truncated` 계약 검사를 새 `TelegramResponseFormatterPolicy` 위치 기준으로 갱신했다.
+- `apps/omninode-middleware/src/Infrastructure/Telegram/TelegramPromptPolicy.cs`
+  - 텔레그램 긴 입력 압축 프롬프트, profile/thinking 프롬프트, thinking level 판정, 결론 요구/불확실성 판정, 결론 escalation 프롬프트, orchestration 통합 프롬프트, concise/full-fidelity 프롬프트를 `CommandService.Telegram`에서 분리했다.
+  - `CommandService.Telegram`에는 기존 partial 호출 계약을 유지하는 얇은 wrapper만 남겼다.
+  - `CommandService.Telegram.cs` 본문 크기: 3911 → 3749 라인.
+- `apps/omninode-middleware-tests/TelegramPromptPolicyTests.cs`
+  - code/talk profile thinking level, decision/risk 질문 escalation, 목록 요청 건수 유지, profile prompt, orchestration prompt, 불확실성 판정을 단위 테스트로 고정했다.
+- `scripts/check-chat-telegram-contract.mjs`
+  - full-fidelity prompt 계약을 `TelegramPromptPolicy` 위치 기준으로 갱신했다.
+- `scripts/check-security-boundaries.mjs`
+  - `TelegramPromptPolicy`가 텔레그램 프롬프트/판정 책임을 소유하고 `CommandService.Telegram`이 위임하는지 계약 검사를 추가했다.
+- `apps/omninode-middleware/src/Infrastructure/Telegram/TelegramConversationContextPolicy.cs`
+  - 텔레그램 후속 질문 anchor turn 선택, weak follow-up, contextual follow-up, correction follow-up, exhausted feedback 판정과 follow-up aware input 조립을 `CommandService.Telegram`에서 분리했다.
+  - `CommandService.Telegram`에는 기존 호출 계약을 유지하는 wrapper만 남겼다.
+- `apps/omninode-middleware-tests/TelegramConversationContextPolicyTests.cs`
+  - standalone 입력 유지, 웹 검색 후속 질문 확장, 정정 요청 확장, 기본 조치 소진 피드백 확장, 문맥 후속 질문 확장, 이전 weak follow-up skip anchor 선택을 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/Infrastructure/Telegram/TelegramNaturalCommandPolicy.cs`
+  - 텔레그램 자연어 제어 요청을 slash command로 바꾸는 정규식/alias 정책, provider alias, thinking alias, help topic 판정을 `CommandService.Telegram`에서 분리했다.
+  - 분리 과정에서 `오케스트레이션 코딩 제공자 변경`이 일반 실행 요청보다 먼저 매칭되도록 구체 설정 명령 우선순위를 정책 안에서 고정했다.
+  - `CommandService.Telegram.cs` 본문 크기: 3749 → 2894 라인.
+- `apps/omninode-middleware-tests/TelegramNaturalCommandPolicyTests.cs`
+  - help/status/file/refactor/memory/routine/metrics, coding run/provider/model, LLM provider/model, plan/task/notebook/routine natural command 변환과 provider/help alias를 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `TelegramConversationContextPolicy`, `TelegramNaturalCommandPolicy` 소유권과 `CommandService.Telegram` 위임 계약을 추가했다.
+- `apps/omninode-middleware/src/ConversationContextPolicy.cs`
+  - 대화탭/코딩탭/텔레그램 공통 맥락 주입 판단의 순수 정책을 `CommandService.Utils`에서 분리했다.
+  - prior context 필요 여부, ambiguous opinion request 판정, 강한 후속 질문 판정, 명시적 독립 질문 판정, context token 추출/stop token/meaningful overlap을 소유한다.
+  - `CommandService.Utils.cs`에는 기존 partial 호출 호환 wrapper만 남겼다.
+  - `CommandService.Utils.cs` 본문 크기: 6941 → 6710 라인.
+- `apps/omninode-middleware-tests/ConversationContextPolicyTests.cs`
+  - 후속 질문/독립 인사/모호 판단 요청, 독립 질문 판정, context token 추출, token overlap, stop token 정책을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `ConversationContextPolicy` 소유권과 `CommandService.Utils` 위임 계약을 추가했다.
+- `apps/omninode-middleware/src/CodingLanguagePolicy.cs`
+  - 코딩 언어 정규화, `auto` 보존 언어 힌트 정규화, 명시 언어 감지, 초기 코딩 언어 결정, 파일 확장자 기반 언어 추정, `[새 요청]` 블록에서 최신 코딩 요청 추출을 `CommandService.Utils`에서 분리했다.
+  - `CommandService.Utils.cs`에는 기존 partial 호출 호환 wrapper만 남겼다.
+  - `CommandService.Utils.cs` 본문 크기: 6710 → 6447 라인.
+- `apps/omninode-middleware-tests/CodingLanguagePolicyTests.cs`
+  - 언어 alias, `auto` 보존, 명시 언어 감지, objective fallback, 파일 확장자 추정, 최신 코딩 요청 추출을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `CodingLanguagePolicy` 소유권과 `CommandService.Utils` 위임 계약을 추가했다.
+- `apps/omninode-middleware/src/CodingProgressPolicy.cs`
+  - 코딩 진행 update 생성, 요청 분석 detail, 작업공간 점검 detail, 반복 계획 detail, 파일 쓰기 detail 조립을 `CommandService.Utils`에서 분리했다.
+  - `CommandService.Utils.cs`에는 기존 호출부 호환 wrapper만 남겼다.
+- `apps/omninode-middleware-tests/CodingProgressPolicyTests.cs`
+  - stage metadata 보존, 요청/작업공간/계획/쓰기 progress detail 조립을 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/CodingPromptPolicy.cs`
+  - 코딩 루프 JSON 프롬프트, 코딩 agent objective 프롬프트, 병렬 워커 초안 프롬프트, orchestration/multi aggregate 프롬프트, multi summary 프롬프트 조립을 `CommandService.Utils`에서 분리했다.
+  - `CommandService.Utils.cs`에는 품질 브리프/언어 규칙/worker digest를 주입해 정책 클래스로 위임하는 wrapper만 남겼다.
+  - `CommandService.Utils.cs` 본문 크기: 6447 → 6203 라인.
+- `apps/omninode-middleware-tests/CodingPromptPolicyTests.cs`
+  - 코딩 루프 프롬프트의 JSON/action 규칙, objective 프롬프트의 더미 구현 차단 문구, draft worker 출력 형식, aggregate/summary 프롬프트 조립을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `CodingProgressPolicy`, `CodingPromptPolicy` 소유권과 `CommandService.Utils` 위임 계약을 추가했다.
+- `scripts/check-coding-python-game-contract.mjs`
+  - 공통 더미 구현 차단 프롬프트 계약을 새 `CodingPromptPolicy` 위치 기준으로 갱신했다.
+- `apps/omninode-middleware/src/CodingLoopPlanParser.cs`
+  - 코딩 루프 LLM 응답에서 JSON 후보 추출, HTML/code fence unwrap, raw newline escape, trailing comma 제거, `CodingLoopPlan` 파싱, action type 보정을 `CommandService.Utils`에서 분리했다.
+  - `CommandService.Utils.cs`에는 기존 호출부 호환 wrapper만 남겼다.
+  - `CommandService.Utils.cs` 본문 크기: 6203 → 5894 라인.
+- `apps/omninode-middleware-tests/CodingLoopPlanParserTests.cs`
+  - code fence JSON 파싱, `mkdir|write_file` action type 보정, command 기반 run 추론, 확장자 없는 path의 mkdir 추론, raw newline/trailing comma 정규화, HTML wrapper 해제를 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `CodingLoopPlanParser` 소유권과 `CommandService.Utils` 위임 계약을 추가했다.
+- `apps/omninode-middleware/src/GeneratedCodeTextPolicy.cs`
+  - 생성 파일 내용 줄바꿈/공통 indent 정규화와 `LANGUAGE=<언어>` prefix 기반 plain code 추출을 `CommandService.Utils`에서 분리했다.
+  - `CommandService.Utils.cs`에는 기존 호출부 호환 wrapper만 남겼다.
+  - `CommandService.Utils.cs` 본문 크기: 5894 → 5804 라인.
+- `apps/omninode-middleware-tests/GeneratedCodeTextPolicyTests.cs`
+  - 공통 indent 제거, CRLF/CR 줄바꿈 정규화, `LANGUAGE=ts` alias 처리, fenced code unwrap, prefix 부재 fallback을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `GeneratedCodeTextPolicy` 소유권과 `CommandService.Utils` 위임 계약을 추가했다.
+- `apps/omninode-middleware/src/CodingFallbackPolicy.cs`
+  - fallback code-only/file-bundle 프롬프트, fallback 코드/파일 번들 추출, 요청 파일 경로 추출, fallback entry path 제안, deterministic repair objective prompt, 예상 stdout 추출을 `CommandService.Utils`에서 분리했다.
+  - fallback bundle record와 project profile/repair prompt request record도 정책 파일로 이동해 `CommandService.Utils`는 fallback orchestration과 wrapper만 담당한다.
+  - `CommandService.Utils.cs` 본문 크기: 5804 → 5303 라인.
+- `apps/omninode-middleware-tests/CodingFallbackPolicyTests.cs`
+  - code-only/file-bundle 프롬프트, 마지막 코드펜스 언어 선택, JSON content/path 기반 코드 추출, 안전하지 않은 fallback 파일 경로 필터링, requested path 우선순위, entry path 제안, stdout 추출, repair prompt를 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/ConversationTitlePolicy.cs`
+  - 자동 제목 갱신 가능 여부, provider 실패 제목 감지, 생성 제목 정규화, 사용자/어시스턴트 fallback 제목 생성, 제목 프롬프트용 assistant text truncation, auto-title용 assistant 후보 선택을 `CommandService.Utils`에서 분리했다.
+  - `CommandService.cs`의 제목 전용 regex도 정책 파일로 이동했다.
+- `apps/omninode-middleware/src/ConversationHistoryPolicy.cs`
+  - `[user]`/`[assistant]` history block 파싱, 최근 메시지 우선 budget trimming, 이전 메시지 압축 summary, high-signal history line 판정을 `CommandService.Utils`에서 분리했다.
+  - `CommandService.Utils.cs`는 `BuildContextualInput`에서 `ConversationHistoryPolicy.BuildBudgetedContextHistory`를 호출하고, 제목 관리는 `ConversationTitlePolicy`에 위임한다.
+  - `CommandService.Utils.cs` 본문 크기: 5303 → 4868 라인.
+- `apps/omninode-middleware-tests/ConversationTitlePolicyTests.cs`
+  - user/assistant turn 존재 여부, 기본 제목 갱신, custom title 보존, provider 실패 제목 재시도, 제목 노이즈 제거, markdown/url fallback 제목 정리, provider 실패 assistant 후보 skip을 단위 테스트로 고정했다.
+- `apps/omninode-middleware-tests/ConversationHistoryPolicyTests.cs`
+  - multiline history block 파싱, 최근 메시지 우선 trimming, 이전 대화 압축/최근 턴 분리, high-signal 없는 older message fallback, 구현 신호 판정을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `ConversationTitlePolicy`, `ConversationHistoryPolicy` 소유권과 `CommandService.Utils` 위임 계약을 추가했다.
+- `apps/omninode-middleware/src/ChatOutputSanitizerPolicy.cs`
+  - 일반 대화/코딩/검색/텔레그램 공통 응답 정리 흐름을 `CommandService.Utils`에서 분리했다.
+  - `<think>` 제거, Copilot 문서 fetch meta 제거, HTML wrapper 정리, 중복 줄/반복 문자 축약, markdown table separator 정규화, markdown table list 변환/보존, 출처 블록 단일 줄화, structured label 정규화, dangling markdown bold marker 제거를 전담한다.
+  - 텔레그램 응답 포매터에서 필요로 하는 `NormalizeStructuredLabelBlocks`, `IsStandaloneNumberedHeadlineLine`, `IsMarkdownTableRow`도 같은 정책 클래스로 이동했다.
+  - `CommandService.Utils.cs`는 `SanitizeChatOutput` wrapper만 남기고 정책 클래스로 위임한다.
+  - `CommandService.Telegram.cs`는 텔레그램 포매터 delegate를 `ChatOutputSanitizerPolicy`에서 직접 받도록 정리했다.
+  - `CommandService.cs`의 sanitizer 전용 regex와 `CommandService.Utils.cs`의 markdown table regex를 정책 파일로 이동했다.
+  - `CommandService.Utils.cs` 본문 크기: 4868 → 3737 라인.
+- `apps/omninode-middleware-tests/ChatOutputSanitizerPolicyTests.cs`
+  - 빈 응답 fallback, think/html/Copilot meta 제거, markdown table list 변환/보존, noisy source 숨김, structured label 정규화, numbered headline 판정을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `ChatOutputSanitizerPolicy` 소유권, `CommandService.Utils`의 sanitizer 위임, `CommandService.Telegram`의 sanitizer delegate 사용 계약을 추가했다.
+- `apps/omninode-middleware/src/MultiComparisonPolicy.cs`
+  - multi comparison assistant JSON 조립, provider entry 포함 여부 판정, 비교 요약 section 파싱, multi/coding summary section adapter, multi summary assistant text 조립을 `CommandService.Utils`에서 분리했다.
+  - `CommandService.Utils.cs`에는 기존 partial 호출 계약을 유지하는 wrapper만 남겼다.
+  - `CommandService.Utils.cs` 본문 크기: 3737 → 3569 라인.
+- `apps/omninode-middleware-tests/MultiComparisonPolicyTests.cs`
+  - 선택 안 함 worker 필터링, JSON escaping, known heading 파싱, blank fallback, summary assistant text fallback을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `MultiComparisonPolicy` 소유권과 `CommandService.Utils` 위임 계약을 추가했다.
+- `apps/omninode-middleware/src/GeneratedCodeCandidatePolicy.cs`
+  - routine bash 생성/재생성 흐름에서 쓰는 code generation prompt와 code candidate parsing을 `CommandService.Utils`에서 분리했다.
+  - `LANGUAGE=` prefix, code fence 언어 우선순위, JSON object fallback, plain text cleanup을 전담한다.
+  - `CommandService.Utils.cs`에는 기존 partial 호출 계약을 유지하는 wrapper만 남겼다.
+  - `CommandService.cs`의 `JsonObjectRegex`도 정책 파일로 이동했다.
+  - `CommandService.Utils.cs` 본문 크기: 3569 → 3520 라인.
+- `apps/omninode-middleware-tests/GeneratedCodeCandidatePolicyTests.cs`
+  - code generation prompt 계약, explicit language/fence 파싱, JSON object fallback, plain text cleanup을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `GeneratedCodeCandidatePolicy` 소유권과 `CommandService.Utils` 위임 계약을 추가했다.
+- `apps/omninode-middleware/src/CodingExecutionSafetyPolicy.cs`
+  - 코딩 루프 실행 안전성 판단을 `CommandService.Utils`에서 분리했다.
+  - deferred verification command 신뢰 여부, interactive objective 판정, `mkdir` 액션의 file-like path skip 판단, path segment sanitizing, 위험한 생성 실행 명령 차단, action type 정규화 위임을 전담한다.
+  - destructive shell pattern regex도 정책 파일로 이동해 `CommandService.Utils`는 기존 partial 호출 계약을 유지하는 wrapper만 남겼다.
+  - `CommandService.Utils.cs` 본문 크기: 3520 → 3411 라인.
+- `apps/omninode-middleware-tests/CodingExecutionSafetyPolicyTests.cs`
+  - path segment sanitizing, 위험 명령 차단, file-like mkdir 판정, interactive objective 판정, deferred verification command 신뢰 기준, action type 정규화 위임을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `CodingExecutionSafetyPolicy` 소유권과 `CommandService.Utils` 위임 계약을 추가했다.
+- `scripts/check-coding-python-game-contract.mjs`
+  - frontend deferred command guard 계약 위치를 새 `CodingExecutionSafetyPolicy` 기준으로 갱신했다.
+- `apps/omninode-middleware/src/CodingQualityBriefPolicy.cs`
+  - 코딩 루프 프롬프트에 들어가는 품질 브리프 조립을 `CommandService.Utils`에서 분리했다.
+  - resolved language, 요청 파일 목록, 예상 stdout, frontend/game/general acceptance 기준, verification 요구 문구를 전담한다.
+  - `CommandService.Utils.cs`는 `BuildCodingQualityBrief` wrapper만 유지하고 정책 클래스로 위임한다.
+  - `CommandService.Utils.cs` 본문 크기: 3411 → 3376 라인.
+- `apps/omninode-middleware-tests/CodingQualityBriefPolicyTests.cs`
+  - 언어/요청 파일/예상 stdout 포함, 요청 파일 부재 시 기본 엔트리 안내, frontend acceptance 우선순위, game acceptance 분기를 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/CodingLoopTuningPolicy.cs`
+  - 코딩 루프 one-shot 사용 여부, 반복/액션/token 하한, repair pass 수, 최근 loop log trimming을 `CommandService` partial에서 분리했다.
+  - `CommandService.CodingProfiles`는 profile 값과 feature flag를 정책 클래스로 넘기는 wrapper만 유지한다.
+  - `CommandService.Utils.cs`에 남아 있던 미사용 provider string 기반 loop tuning helper도 제거했다.
+  - `CommandService.Utils.cs` 본문 크기: 3376 → 3248 라인.
+- `apps/omninode-middleware-tests/CodingLoopTuningPolicyTests.cs`
+  - one-shot 조건, 반복/액션/token 하한, interactive/multi-file repair pass 증가, 최근 loop log trimming을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `CodingQualityBriefPolicy`, `CodingLoopTuningPolicy` 소유권과 `CommandService` 위임 계약을 추가했다.
+- `apps/omninode-middleware/src/CodingDeterministicOutputRepairPolicy.cs`
+  - 단일 Python 파일 stdout deterministic repair의 실행 여부 판정과 Python string literal escaping, `print(...)` 코드 생성을 `CommandService.Utils`에서 분리했다.
+  - `CommandService.Utils.cs`는 deterministic repair orchestration만 유지하고 순수 판정/코드 생성은 정책 클래스로 위임한다.
+  - `CommandService.Utils.cs` 본문 크기: 3248 → 3197 라인.
+- `apps/omninode-middleware-tests/CodingDeterministicOutputRepairPolicyTests.cs`
+  - Python 단일 파일/예상 stdout 조건, 자동 언어 추정, JavaScript 거부, Python 문자열 escape, deterministic print 코드 생성을 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/CodingFallbackDecisionPolicy.cs`
+  - fallback file bundle 선호 여부 판단을 `CommandService.Utils`와 `CommandService.CodingProfiles`에서 분리했다.
+  - 다중 요청 경로, 명시적 single-file 요청, project profile의 multi-file 선호, provider profile 선호, frontend/game 신호, 명시적 multi-file 텍스트 신호를 하나의 정책으로 묶었다.
+  - `CommandService.Utils.cs` 본문 크기: 3197 → 3186 라인.
+  - `CommandService.CodingProfiles.cs` 본문 크기: 1597 → 1592 라인.
+- `apps/omninode-middleware-tests/CodingFallbackDecisionPolicyTests.cs`
+  - 다중 경로 우선, single-file 요청 우선 거부, profile/frontend/game 선호, explicit multi-file 텍스트 신호 분기를 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `CodingDeterministicOutputRepairPolicy`, `CodingFallbackDecisionPolicy` 소유권과 `CommandService` 위임 계약을 추가했다.
+- `scripts/check-coding-python-game-contract.mjs`
+  - fallback bundle 선호 계약을 새 `CodingFallbackDecisionPolicy` 위치 기준으로 갱신했다.
+- `apps/omninode-middleware/src/GroqPromptPolicy.cs`
+  - Groq rate limit 응답 판정과 max_tokens 제한 응답 판정을 `CommandService.Utils`에서 분리했다.
+  - `CommandService.ProviderRouting`에서 호출되는 기존 wrapper는 유지하되 실제 문자열 판정은 `GroqPromptPolicy`가 소유한다.
+  - `CommandService.Utils.cs` 본문 크기: 3186 → 3169 라인.
+- `apps/omninode-middleware-tests/GroqPromptPolicyTests.cs`
+  - 429/too many requests/rate limit/요청 한도 신호, 일반 오류 무시, max_tokens 제한 메시지 판정을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - Groq 응답 fallback 판정 소유권과 `CommandService.Utils` 위임 계약을 추가했다.
+- `apps/omninode-middleware/src/ProviderModelSelectionPolicy.cs`
+  - Copilot provider/model pinning, pinned provider model normalization을 `CommandService.Utils`에서 분리했다.
+  - `CommandService.Utils.cs`에는 기존 partial 호출 계약을 유지하는 wrapper만 남겼다.
+- `apps/omninode-middleware-tests/ProviderModelSelectionPolicyTests.cs`
+  - Copilot provider 감지, Copilot 모델 기본값 고정, non-Copilot 모델 정규화 delegate 호출, pinned Copilot model 판정을 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/MemoryNoteSelectionPolicy.cs`
+  - 명시 memory note 이름 정규화와 linked/request memory note merge를 `CommandService.Utils`에서 분리했다.
+  - trim, case-insensitive dedup, base/request 순서 보존을 정책 클래스가 소유한다.
+- `apps/omninode-middleware-tests/MemoryNoteSelectionPolicyTests.cs`
+  - explicit note name 정규화, null/empty 입력, merge 순서 유지, blank request name 무시를 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `ProviderModelSelectionPolicy`, `MemoryNoteSelectionPolicy` 소유권과 `CommandService.Utils` 위임 계약을 추가했다.
+  - `CommandService.Utils.cs` 본문 크기: 3169 → 3139 라인.
+- `apps/omninode-middleware/src/CodingDeterministicScaffoldPolicy.cs`
+  - UI clone deterministic scaffold 생성 책임을 `CommandService.Utils`에서 분리했다.
+  - 도메인 기반 폴더명 추출, 명시 언어 guard, 게임 요청 제외, `index.html/styles.css/script.js` scaffold 조립을 정책 클래스가 소유한다.
+  - web shooter deterministic scaffold 생성 책임도 같은 정책 클래스로 이동했다.
+  - 웹/브라우저/HTML 신호, shooter/game 신호, frontend 언어 힌트 guard, `Sky Patrol` 단일 HTML 게임 scaffold 조립을 정책 클래스가 소유한다.
+- `apps/omninode-middleware-tests/CodingDeterministicScaffoldPolicyTests.cs`
+  - 도메인 폴더 scaffold, 기본 `web-clone` fallback, 게임 요청 거부, non-web 명시 언어 거부를 단위 테스트로 고정했다.
+  - web shooter scaffold의 단일 `index.html`, canvas/runtime loop 포함, non-web 언어 힌트 거부, game 신호 필수 조건을 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/CodingArtifactCleanupPolicy.cs`
+  - 단일 파일 작업 후 root의 generic fallback 산출물(`main.py`, `index.html` 등)을 정리하는 로직을 `CommandService.Utils`에서 분리했다.
+  - 실제 삭제는 요청 파일이 존재하고, 단일 파일 의도가 명확하며, 같은 확장자의 root generic fallback 파일일 때만 수행한다.
+- `apps/omninode-middleware-tests/CodingArtifactCleanupPolicyTests.cs`
+  - 단일 파일 의도 없음 fallback, root generic 동일 확장자 삭제, nested/different-extension 보존, generic fallback 파일명 판정을 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/CodingLanguagePolicy.cs`
+  - 최종 코딩 결과 언어 판정을 `CommandService.Utils`에서 분리했다.
+  - 초기 요청이 HTML 계열이거나 JavaScript/CSS 작업에서 HTML 파일이 생성된 경우 최종 결과 언어를 `html`로 승격한다.
+- `apps/omninode-middleware/src/ChatOutputSanitizerPolicy.cs`
+  - 코딩 결과/텔레그램 요약에 쓰는 code block 숨김 텍스트 정리를 `CommandService.Utils`에서 분리했다.
+- `apps/omninode-middleware-tests/CodingLanguagePolicyTests.cs`, `apps/omninode-middleware-tests/ChatOutputSanitizerPolicyTests.cs`
+  - 최종 결과 언어 승격과 markdown/`[code]`/HTML code block 숨김을 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/CodingLoopActionExecutor.cs`
+  - 코딩 루프 action 실행(`mkdir`, `write_file`, `append_file`, `read_file`, `delete_file`, `run`)을 `CommandService.Utils`에서 분리했다.
+  - workspace path resolve, provider 생성물 정규화, command runner는 delegate로 주입해 기존 `CommandService` 동작을 유지하면서 실행기를 단위 테스트 가능하게 만들었다.
+  - 위험한 generated run command 차단, file-like mkdir skip, 파일 preview truncation, shell 실행 결과 → `CodeExecutionResult` 변환을 executor가 소유한다.
+- `apps/omninode-middleware-tests/CodingLoopActionExecutorTests.cs`
+  - 파일 쓰기/부모 디렉터리 생성, file-like mkdir skip, read preview, 위험 run command runner 호출 전 차단, 안전 command runner 실행을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `CodingDeterministicScaffoldPolicy`, `CodingArtifactCleanupPolicy`, `CodingLanguagePolicy.ResolveFinalResultLanguage`, `ChatOutputSanitizerPolicy.RemoveCodeBlocksFromText`, `CodingLoopActionExecutor` 소유권과 `CommandService.Utils` 위임 계약을 추가했다.
+  - `CommandService.Utils.cs` 본문 크기: 3139 → 2268 라인.
+- `apps/omninode-middleware/src/CodingExpectedOutputPolicy.cs`
+  - deterministic repair에서 쓰는 예상 stdout 줄 추출, visible text 요구 literal 추출, 첫 줄/둘째 줄 label mapping을 `CommandService.CodingDeterministicRepairs`에서 분리했다.
+  - `[새 요청]` 최신 블록 우선, inline ordered label, stdout quoted literal fallback을 정책 클래스가 소유한다.
+  - `CommandService.CodingDeterministicRepairs.cs`는 기존 partial 호출 계약을 유지하는 wrapper만 남기고 파싱 책임을 정책으로 위임한다.
+- `apps/omninode-middleware-tests/CodingExpectedOutputPolicyTests.cs`
+  - 첫 줄/둘째 줄 순서 유지, inline ordered label, stdout literal fallback, 최신 `[새 요청]` 블록 우선, visible text literal 추출, label index mapping을 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/CodingDeterministicStructuredRepairPolicy.cs`
+  - Python/JavaScript/Java/C/HTML 다중 파일 deterministic repair plan 생성, structured requested path 판정, dataset/text block 추출, 템플릿 코드 생성을 `CommandService.CodingDeterministicRepairs`에서 분리했다.
+  - `CommandService.CodingDeterministicRepairs.cs`는 plan 생성 대신 파일 적용, 검증 명령 실행, exception recovery orchestration만 담당한다.
+  - `CommandService.CodingDeterministicRepairs.cs` 본문 크기: 1171 → 222 라인.
+- `apps/omninode-middleware-tests/CodingDeterministicStructuredRepairPolicyTests.cs`
+  - Python snapshot bundle, JavaScript schedule bundle, HTML dashboard bundle, 불완전 structured 요청 거부를 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/Infrastructure/Telegram/TelegramPseudoCommandExecutor.cs`
+  - 텔레그램 자연어 pseudo command/slash command 실행 분기(`/help`, `/talk`, `/code`, `/model`, `/llm`, `/skill`, `/coding`, `/refactor`, `/memory`, `/doctor`, `/plan`, `/task`, `/notebook`, `/routine`, `/metrics`, `/kill`)를 `CommandService.Telegram`에서 분리했다.
+  - 실제 도메인 실행은 delegate handler map으로 주입해 기존 private command handler 동작과 감사 로그/kill guard를 유지한다.
+  - `CommandService.Telegram.cs` 본문 크기: 2894 → 2852 라인.
+- `apps/omninode-middleware-tests/TelegramPseudoCommandExecutorTests.cs`
+  - help routing, coding command의 attachment/web context 전달, `/routines`/`/handoff` alias, `/metrics`, `/kill`, unknown command fallback을 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/Infrastructure/Telegram/TelegramLlmPreferencePolicy.cs`
+  - 텔레그램 `/talk`/`/code` 프로필 기본값 적용, thinking level 정규화, `/model <provider>` 빠른 전환 선택을 `CommandService.Telegram`에서 분리했다.
+  - `CommandService.Telegram.cs`는 lock 범위 안에서 정책 결과를 적용하는 thin handler 역할만 남겼다.
+  - `CommandService.Telegram.cs` 본문 크기: 2852 → 2806 라인.
+- `apps/omninode-middleware-tests/TelegramLlmPreferencePolicyTests.cs`
+  - thinking level 정규화, talk/code orchestration preset, Groq fallback 모델, NVIDIA/Codex quick model selection, unknown provider 거부를 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `CodingExpectedOutputPolicy`, `CodingDeterministicStructuredRepairPolicy` 소유권과 `CommandService.CodingDeterministicRepairs` 위임 계약을 추가했다.
+  - `TelegramPseudoCommandExecutor` 소유권과 `CommandService.Telegram`의 pseudo command 실행 위임 계약을 추가했다.
+  - `TelegramLlmPreferencePolicy` 소유권과 `CommandService.Telegram`의 프로필/빠른 모델 선택 위임 계약을 추가했다.
+
+검증 결과:
+
+- `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter ConversationContextPolicyTests`: 통과, 24 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "CodingLanguagePolicyTests|ConversationContextPolicyTests"`: 통과, 48 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "TelegramNaturalCommandPolicyTests|TelegramConversationContextPolicyTests"`: 통과, 29 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "CodingProgressPolicyTests|CodingPromptPolicyTests"`: 통과, 10 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "CodingLoopPlanParserTests|CodingProgressPolicyTests|CodingPromptPolicyTests"`: 통과, 16 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "CodingLoopPlanParserTests|GeneratedCodeTextPolicyTests|CodingProgressPolicyTests|CodingPromptPolicyTests"`: 통과, 21 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "ConversationTitlePolicyTests|ConversationHistoryPolicyTests"`: 통과, 12 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter ChatOutputSanitizerPolicyTests`: 통과, 7 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter MultiComparisonPolicyTests`: 통과, 5 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter GeneratedCodeCandidatePolicyTests`: 통과, 4 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter CodingExecutionSafetyPolicyTests`: 통과, 6 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "CodingQualityBriefPolicyTests|CodingLoopTuningPolicyTests"`: 통과, 8 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "CodingDeterministicOutputRepairPolicyTests|CodingFallbackDecisionPolicyTests"`: 통과, 7 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter GroqPromptPolicyTests`: 통과, 19 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "ProviderModelSelectionPolicyTests|MemoryNoteSelectionPolicyTests"`: 통과, 10 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "CodingArtifactCleanupPolicyTests|CodingDeterministicScaffoldPolicyTests|CodingLanguagePolicyTests|ChatOutputSanitizerPolicyTests"`: 통과, 44 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "CodingLoopActionExecutorTests|CodingDeterministicScaffoldPolicyTests"`: 통과, 12 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter CodingExpectedOutputPolicyTests`: 통과, 8 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "CodingDeterministicStructuredRepairPolicyTests|CodingExpectedOutputPolicyTests"`: 통과, 12 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter TelegramPseudoCommandExecutorTests`: 통과, 7 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "TelegramLlmPreferencePolicyTests|TelegramPseudoCommandExecutorTests"`: 통과, 17 tests
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 494 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 505
+- `node scripts/check-chat-telegram-contract.mjs`: 통과
+- `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
+- `node scripts/check-gateway-runtime-contract.mjs`: 통과
+- `npm test`: 통과
+- `make -C apps/omninode-core -B`: 통과
+- `git diff --check`: 통과
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter TelegramResponseFormatterPolicyTests`: 통과, 4 tests
 
 ### P4. Provider adapter 구조 정리
 
@@ -504,13 +836,81 @@ git diff --check
   - NVIDIA requestId의 `requestId` 우선/`id` fallback/대소문자 무시 매칭/빈 응답/손상 JSON, STT의 정상 텍스트/원본 fallback/빈 입력 동작을 단위 테스트로 고정했다.
 - `scripts/check-security-boundaries.mjs`
   - parser의 새 책임과 `LlmRouter`가 wrapper helper 없이 직접 위임하는지를 계약 검사하도록 확장했다 (assertions 117 → 242).
-- `LlmRouter` 본문 크기: 3755 → 2487 라인 (≈ 34% 감축).
+- `apps/omninode-middleware/src/SttTranscriptionAdapter.cs`
+  - STT multipart HTTP 호출을 `LlmRouter`에서 분리했다.
+  - `/audio/transcriptions` endpoint 정규화, bearer auth, model/file multipart 구성, STT 응답 텍스트 파싱, HTTP 실패/timeout/error 메시지 변환을 전담한다.
+  - `LlmRouter.TranscribeAudioAsync`는 설정 확인 뒤 adapter에 위임한다.
+- `apps/omninode-middleware-tests/SttTranscriptionAdapterTests.cs`
+  - multipart 요청 구성, endpoint 정규화, invalid base64 사전 차단, HTTP 429 실패 메시지를 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - STT 응답 파싱 계약을 `SttTranscriptionAdapter` 기준으로 갱신했다 (assertions 242 → 243).
+- `apps/omninode-middleware/src/ProviderChatAdapter.cs`
+  - provider별 chat 호출 분리를 위한 `IProviderChatAdapter` 인터페이스를 도입했다.
+  - `OpenAiCompatibleChatAdapter`가 OpenAI-compatible 비스트리밍 HTTP body 구성, bearer auth, 실패 메시지 변환, `202 Accepted` 후속 resolver 위임을 전담한다.
+  - NVIDIA 비스트리밍 chat 경로가 `_openAiCompatibleChatAdapter.SendAsync`를 통과하도록 변경했다. `LlmRouter`는 NVIDIA max token, continuation, polling resolver, token usage capture만 조정한다.
+- `apps/omninode-middleware-tests/OpenAiCompatibleChatAdapterTests.cs`
+  - OpenAI-compatible body/auth 구성, HTTP 실패 메시지, `202 Accepted` resolver 위임을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `IProviderChatAdapter`, `OpenAiCompatibleChatAdapter`, NVIDIA 비스트리밍 adapter 위임 계약을 추가했다 (assertions 243 → 247).
+- `apps/omninode-middleware/src/NvidiaStatusPollingAdapter.cs`
+  - NVIDIA NIM `202 Accepted` status polling을 `LlmRouter`에서 분리했다.
+  - request id 추출, `/status/{requestId}` GET polling, `202 Accepted` continue, timeout/error 변환을 전담한다.
+  - 기존 polling은 `IsSuccessStatusCode`가 `202`도 true로 보는 순서 문제를 가질 수 있었고, adapter 테스트를 추가하면서 `Accepted`를 먼저 continue 처리하도록 고정했다.
+- `apps/omninode-middleware-tests/NvidiaStatusPollingAdapterTests.cs`
+  - 성공 polling, `202 Accepted` 반복 후 성공, request id 누락 예외를 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - NVIDIA request id 추출과 accepted continue 계약을 `NvidiaStatusPollingAdapter` 기준으로 갱신했다 (assertions 247 → 251).
+- Groq 비스트리밍 chat 경로도 `_openAiCompatibleChatAdapter.SendAsync`를 통과하도록 변경했다.
+  - 기존 rate limit header capture, 429 retry delay, max token limit 재시도, request-too-large prompt 축소, continuation 조정은 `LlmRouter`에 남겼다.
+  - adapter result가 `HttpResponseHeaders`를 노출해 Groq retry 정책이 기존 response header 기준을 유지하도록 했다.
+- `scripts/check-security-boundaries.mjs`
+  - Groq 비스트리밍 adapter 위임 계약을 추가했다 (assertions 251 → 252).
+- Cerebras 비스트리밍 chat 경로도 `_openAiCompatibleChatAdapter.SendAsync`를 통과하도록 변경했다.
+  - model_not_found fallback, catalog 기반 가용 모델 재시도, token usage capture, continuation 조정은 `LlmRouter`에 남기고 HTTP body/auth/failure 변환은 adapter로 분리했다.
+- `apps/omninode-middleware/src/CerebrasModelCatalog.cs`
+  - Cerebras catalog fetch, 첫 가용 모델 추출, 60초 resolver cache를 `LlmRouter`에서 분리했다.
+  - `LlmRouter`는 `_cerebrasModelCatalog.ResolveFirstAvailableModelAsync`와 `GetCachedResolvedModel`만 호출한다.
+  - 자체 생성한 catalog만 dispose하도록 `LlmRouter` 소유권 플래그를 추가했다.
+- `apps/omninode-middleware-tests/CerebrasModelCatalogTests.cs`
+  - 첫 모델 추출, HTTP fetch와 bearer auth, 60초 cache 재사용, HTTP 실패/blank API key 분기를 단위 테스트로 고정했다.
+- `apps/omninode-middleware/src/ProviderStreamingAdapter.cs`
+  - `IProviderStreamingChatAdapter`와 `OpenAiCompatibleStreamingChatAdapter`를 추가했다.
+  - Groq/Cerebras/NVIDIA 공통 OpenAI-compatible streaming 요청 body 구성, `ResponseHeadersRead`, SSE `data:` event 파싱, HTTP 실패 메시지 변환, NVIDIA `202 Accepted` resolver 위임을 전담한다.
+  - `LlmRouter.GenerateOpenAiCompatibleChatStreamingAsync`는 continuation loop, usage capture, rate-limit header capture, delta callback 조정만 담당한다.
+- `apps/omninode-middleware-tests/OpenAiCompatibleStreamingChatAdapterTests.cs`
+  - SSE payload/delta 파싱, streaming body 구성, HTTP 실패 메시지, `202 Accepted` resolver 위임을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - Cerebras resolver cache 소유권이 `CerebrasModelCatalog`에 있고, OpenAI-compatible streaming HTTP/SSE 경계가 `ProviderStreamingAdapter`에 있는지 계약 검사를 추가했다 (assertions 252 → 268).
+- `apps/omninode-middleware/src/GeminiStreamingAdapter.cs`
+  - Gemini streaming HTTP 호출과 SSE `data:` event 읽기를 `LlmRouter`에서 분리했다.
+  - 일반 Gemini streaming, grounded streaming, URL-context streaming 모두 `_geminiStreamingAdapter.StreamAsync`를 통과한다.
+  - 각 경로의 usage capture, citation merge, first-chunk/total timeout 의미, 사용자 반환 메시지는 기존 `LlmRouter` orchestration에 남겼다.
+- `apps/omninode-middleware-tests/GeminiStreamingAdapterTests.cs`
+  - `x-goog-api-key` header, streaming body 전송, SSE payload 전달, HTTP 실패 body 반환을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - Gemini streaming adapter가 `ResponseHeadersRead`, API key header, SSE line reader를 소유하고 `LlmRouter`가 streaming HTTP 모드를 직접 들고 있지 않은지 계약 검사를 추가했다 (assertions 268 → 275).
+- `apps/omninode-middleware/src/GeminiGenerateContentAdapter.cs`
+  - Gemini 비스트리밍 `generateContent` HTTP 호출을 `LlmRouter`에서 분리했다.
+  - 일반 Gemini chat, 실행계획 생성, grounded generateContent, URL-context generateContent, multimodal generateContent 모두 `_geminiGenerateContentAdapter.SendAsync`를 통과한다.
+  - `x-goog-api-key` header와 HTTP body 전송/응답 body 수집은 adapter가 소유하고, usage capture/citation merge/continuation loop는 기존 `LlmRouter` orchestration에 남겼다.
+- `apps/omninode-middleware-tests/GeminiGenerateContentAdapterTests.cs`
+  - API key header, body 전송, 성공 응답 body 반환, 실패 응답 body 반환을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - Gemini generateContent adapter가 API key header와 비스트리밍 HTTP dispatch를 소유하고, `LlmRouter`가 Gemini API key header를 직접 들고 있지 않은지 계약 검사를 추가했다 (assertions 275 → 281).
+- `apps/omninode-middleware/src/CitationAccumulator.cs`
+  - Gemini URL-context/grounded citation merge에서 중복되던 `Dictionary<string, SearchCitationReference>` dedup 패턴과 `MergeFromGeminiPayload` 흐름을 단일 accumulator로 묶었다.
+  - URL/제목 dedup key 적용, 빈 페이로드 무시, `Array.Empty<>` 캐시 반환을 accumulator가 소유한다.
+  - `LlmRouter`의 비스트리밍/스트리밍 URL-context 경로 모두 `citationAccumulator.MergeFromGeminiPayload`와 `citationAccumulator.ToArray`만 호출한다. 사설 `MergeCitations` 로컬 함수, `citationByKey`/`citationByUrl` 사설 dictionary는 제거했다.
+- `apps/omninode-middleware-tests/CitationAccumulatorTests.cs`
+  - URL 기준 dedup, Gemini 페이로드의 URL-context/grounding 동시 추출, 빈 입력/blank 페이로드 무시, 빈 결과의 `Array.Empty` 재사용을 단위 테스트로 고정했다.
+- `scripts/check-security-boundaries.mjs`
+  - `CitationAccumulator` 소유권, Gemini 파서 위임, `LlmRouter`가 더 이상 ad-hoc citation dictionary를 들고 있지 않다는 계약 검사를 추가했다 (assertions 499 → 505).
+- `LlmRouter` 본문 크기: 3755 → 2135 라인 (≈ 43% 감축).
 
 남은 범위:
 
-- Groq/Gemini/Cerebras/NVIDIA/STT 별 HTTP 호출 자체(요청 build → 호출 → 응답 변환)는 여전히 `LlmRouter`의 인스턴스 메서드로 남아 있다. 다음 단계는 provider 어댑터 인터페이스(`IProviderChatAdapter`) 도입과 `LlmRouter`의 routing/fallback 조정자 역할 분리다.
-- Cerebras 모델 resolver(`ResolveAvailableCerebrasModelAsync`)의 cache 동작은 LlmRouter 인스턴스 상태에 묶여 있어 어댑터화 시 별도 설계가 필요하다.
-- Gemini grounded/url-context streaming pipeline, NVIDIA polling pipeline은 호출 chain이 길고 외부 부수효과가 강하다. 어댑터 인터페이스가 자리잡은 뒤에 분리하는 게 안전하다.
+- Provider별 HTTP 호출 경계, citation merge, fallback/continuation 정책은 모두 adapter/catalog/policy/accumulator로 분리되었다.
+- usage capture는 provider state lock과 결합돼 있고, continuation loop는 turn 단위 orchestration에 묶여 있어 추가 분리는 동작 변경 위험 대비 이득이 작다. P4는 마무리 단계로 본다.
 
 ### P5. 상태 저장소 복구 정책 확대
 
@@ -552,20 +952,20 @@ git diff --check
 
 ## 진척도 스냅샷
 
-업데이트 기준: 2026-05-18
+업데이트 기준: 2026-05-19
 
 | 우선순위 | 상태 | 완료율 | 남은 핵심 작업 |
 |---|---|---|---|
 | P0. 작업트리 커밋 기준점 | 완료 | 100% | — |
 | P1. 문서 불일치 정리 | 완료 | 100% | — |
-| P2. WebSocket runtime 통합 테스트 | 진행 중 | 60% | 비 loopback 원격 endpoint에서 remote limited 실행 차단/read-only 허용 시나리오 자동화 |
-| P3. CommandService 도메인 분리 | 시작됨 | 10% | search/telegram/coding/routine/logic graph 서비스 단위 실제 추출 |
-| P4. Provider adapter 구조 정리 | 진행 중 | 86% | provider별 HTTP 호출 자체를 `IProviderChatAdapter` 인터페이스로 분리, Cerebras 모델 resolver cache 재설계, NVIDIA polling pipeline 어댑터화 |
+| P2. WebSocket runtime 통합 테스트 | 완료 | 100% | — |
+| P3. CommandService 도메인 분리 | 진행 중 | 95% | exception recovery/loop recovery orchestration 추가 축소, Telegram `/llm` 세부 설정 핸들러 서비스화, coding/routine/logic graph 서비스 단위 추출, SearchPipeline Gemini 호출 orchestration 축소 |
+| P4. Provider adapter 구조 정리 | 완료 | 100% | — (usage capture/continuation loop는 turn-state 결합으로 추가 분리 미적용) |
 | P5. 상태 저장소 복구 정책 확대 | 완료 | 100% | — |
 
-전체 산술 평균: 76% (P0 100, P1 100, P2 60, P3 10, P4 86, P5 100 → 평균 76.0%).
+전체 산술 평균: 99.2% (P0 100, P1 100, P2 100, P3 95, P4 100, P5 100 → 평균 99.2%).
 
-이 수치는 책임 분량을 동등 가중치로 본 추정이다. P3는 후보 도메인이 매우 크고 P4는 어댑터 인터페이스 도입이 남은 작업의 무게중심이라, 실제 코드 양 기준으로 가중치를 다시 잡으면 60%대 후반이 더 보수적이다.
+이 수치는 책임 분량을 동등 가중치로 본 추정이다. P3는 SearchPipeline 정책/포매터/README 로더, Telegram 응답 포매터/프롬프트/후속질문/자연어 명령/pseudo command executor/LLM preference 정책, 공통 대화 맥락 정책, 코딩 언어/진행상태/프롬프트/루프 계획 파서/생성 코드 텍스트/fallback/대화 제목/대화 히스토리/chat output sanitizer/multi comparison/code candidate/코딩 실행 안전성/품질 브리프/루프 튜닝/deterministic stdout repair/UI clone scaffold/web shooter scaffold/artifact cleanup/loop action executor/fallback decision/Groq fallback 응답 판정/provider model selection/memory note selection/expected output parsing/structured repair plan 정책 추출이 진행됐지만 Telegram `/llm` 세부 설정 핸들러와 일부 exception recovery/loop recovery orchestration도 한 타입에 남아 있어, 실제 코드 양 기준으로 가중치를 다시 잡으면 90% 중반이 더 보수적이다. P4는 provider별 HTTP 호출/SSE/citation dedup이 adapter/parser/policy/accumulator로 분리된 상태이며, 잔여 항목(usage capture/continuation loop)은 turn-state 결합으로 추가 분리의 이득이 작아 마무리로 간주한다.
 
 ## 운영 판단
 

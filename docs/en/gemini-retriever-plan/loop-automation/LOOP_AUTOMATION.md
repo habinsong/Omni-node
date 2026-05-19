@@ -2,7 +2,7 @@
 
 [한국어](../../../gemini-retriever-plan/loop-automation/LOOP_AUTOMATION.md) · [English](./LOOP_AUTOMATION.md)
 
-Updated: 2026-05-15
+Updated: 2026-05-19
 
 This is an English companion note for the archived Gemini retriever migration record. The current operating documentation is in [Usage](../../usage.md), [Architecture](../../architecture.md), and [Tool Integration Panel](../../tool-integration-panel.md).
 

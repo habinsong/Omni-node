@@ -1385,35 +1385,12 @@ public sealed partial class CommandService
 
     private static bool LooksLikeListOutputRequest(string input)
     {
-        var normalized = (input ?? string.Empty).Trim().ToLowerInvariant();
-        if (normalized.Length == 0)
-        {
-            return false;
-        }
-
-        return RequestedCountRegex.IsMatch(normalized)
-            || TopCountRegex.IsMatch(normalized)
-            || ContainsAny(normalized, "뉴스", "news", "헤드라인", "속보", "목록", "리스트", "top");
+        return SearchQueryPolicy.LooksLikeListOutputRequest(input);
     }
 
     private static bool LooksLikeTableRenderRequest(string input)
     {
-        var normalized = (input ?? string.Empty).Trim().ToLowerInvariant();
-        if (normalized.Length == 0)
-        {
-            return false;
-        }
-
-        return ContainsAny(
-            normalized,
-            "표로",
-            "표 형태",
-            "표형식",
-            "테이블",
-            "도표",
-            "table",
-            "tabular"
-        );
+        return SearchQueryPolicy.LooksLikeTableRenderRequest(input);
     }
 
     private static int CountListItemsInResponse(string responseText)

@@ -97,6 +97,33 @@ internal static class GroqPromptPolicy
                || responseBody.IndexOf("entity too large", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
+    public static bool IsRateLimitResponse(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        return text.Contains("429", StringComparison.Ordinal)
+               || text.Contains("rate limit", StringComparison.OrdinalIgnoreCase)
+               || text.Contains("too many requests", StringComparison.OrdinalIgnoreCase)
+               || text.Contains("요청 한도", StringComparison.Ordinal)
+               || text.Contains("한도", StringComparison.Ordinal);
+    }
+
+    public static bool IsMaxTokensResponse(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var lowered = text.ToLowerInvariant();
+        return lowered.Contains("max_tokens", StringComparison.Ordinal)
+               && (lowered.Contains("less than or equal", StringComparison.Ordinal)
+                   || lowered.Contains("maximum value", StringComparison.Ordinal));
+    }
+
     public static int GetGroqRetryDelayMs(HttpResponseHeaders headers, int fallbackMs)
     {
         string? retryAfter = null;

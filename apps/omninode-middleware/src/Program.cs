@@ -63,9 +63,9 @@ internal static class Program
         }
 
         using var telegramClient = new TelegramClient(runtimeSettings);
-        using var llmRouter = new LlmRouter(providers, paths, context, runtimeSettings);
         using var groqModelCatalog = new GroqModelCatalog(providers, context, runtimeSettings);
         using var cerebrasModelCatalog = new CerebrasModelCatalog(providers, runtimeSettings);
+        using var llmRouter = new LlmRouter(providers, paths, context, runtimeSettings, cerebrasModelCatalog);
         var persistence = ConfigurePersistence(config, pathResolver);
         var codeRunner = new UniversalCodeRunner(paths.CodeRunsRootDir, config.CodeExecutionTimeoutSec, providers.PythonBinary);
         var providerRegistry = new ProviderRegistry(llmRouter, copilotWrapper, codexWrapper);

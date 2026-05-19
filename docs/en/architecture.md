@@ -2,7 +2,7 @@
 
 [한국어](../아키텍처_흐름.md) · [English](./architecture.md)
 
-Updated: 2026-05-18
+Updated: 2026-05-19
 
 Omni-node keeps the web dashboard and Telegram bot on the same command layer. That is the main design choice.
 

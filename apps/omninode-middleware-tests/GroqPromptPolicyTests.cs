@@ -101,6 +101,29 @@ public sealed class GroqPromptPolicyTests
         Assert.True(GroqPromptPolicy.IsGroqRequestTooLarge(HttpStatusCode.BadRequest, "{\"error\":{\"code\":\"request_too_large\"}}"));
     }
 
+    [Theory]
+    [InlineData("429 too many requests")]
+    [InlineData("rate limit exceeded")]
+    [InlineData("요청 한도 초과")]
+    public void IsRateLimitResponseMatchesRateLimitSignals(string text)
+    {
+        Assert.True(GroqPromptPolicy.IsRateLimitResponse(text));
+    }
+
+    [Fact]
+    public void IsRateLimitResponseIgnoresPlainErrors()
+    {
+        Assert.False(GroqPromptPolicy.IsRateLimitResponse("model returned invalid json"));
+    }
+
+    [Theory]
+    [InlineData("`max_tokens` must be less than or equal to `4096`")]
+    [InlineData("maximum value for `max_tokens` is 8192")]
+    public void IsMaxTokensResponseMatchesGroqTokenLimitMessages(string text)
+    {
+        Assert.True(GroqPromptPolicy.IsMaxTokensResponse(text));
+    }
+
     [Fact]
     public void GetGroqRetryDelayMsHonorsRetryAfterHeader()
     {

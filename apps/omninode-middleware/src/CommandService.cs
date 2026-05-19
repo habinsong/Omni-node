@@ -30,12 +30,6 @@ public sealed partial class CommandService :
     private const int TelegramLongContextThresholdChars = 200000;
     private const int TelegramLongContextTargetChars = 1200;
     private static readonly Regex CodeFenceRegex = new("```([a-zA-Z0-9#+._-]*)\\s*\\n(.*?)```", RegexOptions.Compiled | RegexOptions.Singleline);
-    private static readonly Regex JsonObjectRegex = new("\\{[\\s\\S]*\\}", RegexOptions.Compiled);
-    private static readonly Regex LeadingTitleNoiseRegex = new(
-        @"^(?:(?:[-*#>]+\s*)|(?:\(\d+\)\s+)|(?:\d+[.)]\s+))+",
-        RegexOptions.Compiled
-    );
-    private static readonly Regex RepeatedChunkRegex = new(@"(.{12,120}?)(?:\s+\1){2,}", RegexOptions.Compiled | RegexOptions.Singleline);
     private static readonly Regex OuterHtmlContainerRegex = new(@"^\s*<\s*(p|pre|code)\b[^>]*>([\s\S]*)</\s*\1\s*>\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex JsonTrailingCommaRegex = new(@",\s*([}\]])", RegexOptions.Compiled);
     private static readonly Regex DomainRegex = new(@"([a-z0-9][a-z0-9-]*\.[a-z]{2,})", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -52,38 +46,6 @@ public sealed partial class CommandService :
     private static readonly Regex HtmlTagStripRegex = new(
         @"<[^>]+>",
         RegexOptions.Compiled
-    );
-    private static readonly Regex CopilotFetchParagraphRegex = new(
-        @"●?\s*<p>\s*Fetching the Copilot CLI documentation[\s\S]*?</p>\s*",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase
-    );
-    private static readonly Regex CopilotFetchSentenceRegex = new(
-        @"Fetching the Copilot CLI documentation[\s\S]*?parallel\.\s*",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase
-    );
-    private static readonly Regex HtmlBreakTagRegex = new(
-        @"<\s*(?:br|/p|/div|/li)\s*/?\s*>",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase
-    );
-    private static readonly Regex HtmlTagRegex = new(
-        @"<[^>]+>",
-        RegexOptions.Compiled
-    );
-    private static readonly Regex LeadingBulletSymbolRegex = new(
-        @"^\s*[●•▪◦■□▶➤❖]+\s*",
-        RegexOptions.Compiled
-    );
-    private static readonly Regex CopilotMetaLineRegex = new(
-        @"(?i)(fetch_copilot_cli_documentation|fetching the copilot cli documentation|문서 조회 및 진행 상태 보고|활성 모델 확인을 위해 copilot cli 문서를 조회|i'?ll call the docs fetch|현재 작업:\s*fetch_copilot_cli_documentation)",
-        RegexOptions.Compiled
-    );
-    private static readonly Regex ThinkTagBlockRegex = new(
-        @"<think\b[^>]*>[\s\S]*?</think>",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase
-    );
-    private static readonly Regex ThinkTagInlineRegex = new(
-        @"</?think\b[^>]*>",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase
     );
     private static readonly HttpClient WebFetchClient = CreateWebFetchClient();
     private readonly ProviderOptions _providers;

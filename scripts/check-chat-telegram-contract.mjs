@@ -22,6 +22,16 @@ const contracts = read("apps/omninode-middleware/src/Application/ApplicationServ
 const inputPrep = read("apps/omninode-middleware/src/CommandService.InputPreparation.cs");
 const utils = read("apps/omninode-middleware/src/CommandService.Utils.cs");
 const searchPipeline = read("apps/omninode-middleware/src/CommandService.SearchPipeline.cs");
+const searchQueryPolicy = read("apps/omninode-middleware/src/Infrastructure/Search/SearchQueryPolicy.cs");
+const telegramResponseFormatterPolicy = read(
+  "apps/omninode-middleware/src/Infrastructure/Telegram/TelegramResponseFormatterPolicy.cs"
+);
+const telegramPromptPolicy = read(
+  "apps/omninode-middleware/src/Infrastructure/Telegram/TelegramPromptPolicy.cs"
+);
+const telegramConversationContextPolicy = read(
+  "apps/omninode-middleware/src/Infrastructure/Telegram/TelegramConversationContextPolicy.cs"
+);
 
 assert(
   contracts.includes("TelegramTurnContext? telegramContext = null"),
@@ -59,19 +69,20 @@ assert(
 assert(
   telegram.includes("BuildTelegramFullFidelityPrompt") &&
     telegram.includes("preserveContext") &&
-    telegram.includes("첨부/검색/스킬 컨텍스트를 임의로 줄이지 마세요"),
+    telegramPromptPolicy.includes("첨부/검색/스킬 컨텍스트를 임의로 줄이지 마세요"),
   "텔레그램은 스킬/검색/첨부 컨텍스트가 있을 때 7줄 압축 프롬프트를 쓰면 안 됩니다."
 );
 assert(
   telegram.includes("ShouldSkipTelegramDriftRecovery") &&
-    telegram.includes("[직전 주제]") &&
+    telegramConversationContextPolicy.includes("[직전 주제]") &&
     telegram.includes("[Active Skill") &&
     telegram.includes("[Think+ 참고 자료"),
   "텔레그램 off-topic 재요청은 follow-up, 스킬, Think+ 컨텍스트에서 보수적으로 건너뛰어야 합니다."
 );
 assert(
   !telegram.includes(".Take(safeMaxChars == 0 ? 200") &&
-    telegram.includes("telegram_response_truncated"),
+    telegram.includes("TelegramResponseFormatterPolicy.FormatSanitizedResponse") &&
+    telegramResponseFormatterPolicy.includes("telegram_response_truncated"),
   "FormatTelegramResponse가 줄 수 기준으로 조용히 자르면 안 됩니다."
 );
 assert(
@@ -94,16 +105,17 @@ assert(
   "대화탭은 후속 질문, 독립 질문, 독립 인사를 구분하는 공통 맥락 판단 규칙을 가져야 합니다."
 );
 assert(
-  searchPipeline.includes("LooksLikeStandaloneFreshGreeting") &&
-    searchPipeline.includes("\"ㅎㅇ\"") &&
-    searchPipeline.includes("\"hello\""),
+  searchPipeline.includes("SearchQueryPolicy.LooksLikeStandaloneFreshGreeting") &&
+    searchQueryPolicy.includes("\"ㅎㅇ\"") &&
+    searchQueryPolicy.includes("\"hello\""),
   "대화탭은 'ㅎㅇ' 같은 독립 인사를 최근 대화 맥락 주입에서 제외해야 합니다."
 );
 assert(
-  telegram.includes("FindTelegramAnchorTurn") &&
-    telegram.includes("[직전 답변]") &&
-    telegram.includes("IsTelegramContextualFollowup") &&
-    telegram.includes("[현재 후속 질문]"),
+  telegram.includes("TelegramConversationContextPolicy.BuildFollowupAwareInput") &&
+    telegramConversationContextPolicy.includes("FindAnchorTurn") &&
+    telegramConversationContextPolicy.includes("[직전 답변]") &&
+    telegramConversationContextPolicy.includes("IsContextualFollowup") &&
+    telegramConversationContextPolicy.includes("[현재 후속 질문]"),
   "텔레그램 후속 질문은 직전 사용자 주제와 직전 assistant 답변을 함께 전달해야 합니다."
 );
 
