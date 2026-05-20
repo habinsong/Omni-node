@@ -32,7 +32,7 @@ public sealed partial class CommandService
         if (head is "/talk" or "/code")
         {
             var profile = head == "/talk" ? "talk" : "code";
-            var thinking = tokens.Length >= 2 ? NormalizeThinkingLevel(tokens[1], "auto") : "auto";
+            var thinking = tokens.Length >= 2 ? TelegramLlmPreferencePolicy.NormalizeThinkingLevel(tokens[1], "auto") : "auto";
             return ApplyChannelProfile(source, profile, thinking);
         }
 
@@ -49,7 +49,7 @@ public sealed partial class CommandService
                 return "invalid profile. use talk|code";
             }
 
-            var thinking = tokens.Length >= 3 ? NormalizeThinkingLevel(tokens[2], "auto") : "auto";
+            var thinking = tokens.Length >= 3 ? TelegramLlmPreferencePolicy.NormalizeThinkingLevel(tokens[2], "auto") : "auto";
             return ApplyChannelProfile(source, profile, thinking);
         }
 
@@ -2917,7 +2917,7 @@ public sealed partial class CommandService
         _webLlmPreferences.MultiNvidiaModel = _providers.NvidiaModel;
         _webLlmPreferences.MultiCodexModel = _providers.CodexModel;
         _webLlmPreferences.MultiSummaryProvider = "gemini";
-        _webLlmPreferences.TalkThinkingLevel = NormalizeThinkingLevel(requestedThinking, "low");
+        _webLlmPreferences.TalkThinkingLevel = TelegramLlmPreferencePolicy.NormalizeThinkingLevel(requestedThinking, "low");
     }
 
     private void ApplyWebCodeDefaults(string requestedThinking)
@@ -2937,7 +2937,7 @@ public sealed partial class CommandService
         _webLlmPreferences.MultiNvidiaModel = _providers.NvidiaModel;
         _webLlmPreferences.MultiCodexModel = _providers.CodexModel;
         _webLlmPreferences.MultiSummaryProvider = "gemini";
-        _webLlmPreferences.CodeThinkingLevel = NormalizeThinkingLevel(requestedThinking, "high");
+        _webLlmPreferences.CodeThinkingLevel = TelegramLlmPreferencePolicy.NormalizeThinkingLevel(requestedThinking, "high");
     }
 
     private string SetTelegramProviderCore(string slot, string provider)

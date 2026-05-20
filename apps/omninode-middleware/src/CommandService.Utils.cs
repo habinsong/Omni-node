@@ -1445,7 +1445,7 @@ public sealed partial class CommandService
         if (allowRunActions)
         {
             var shouldUseDeferredRunCommand = ShouldTrustDeferredVerificationCommand(currentLanguage, objective, deferredRunCommand);
-            var expectedOutputLines = ExtractExpectedConsoleOutputLines(objective);
+            var expectedOutputLines = CodingExpectedOutputPolicy.ExtractExpectedConsoleOutputLines(objective);
             var finalDisplayCommand = !shouldUseDeferredRunCommand
                 ? BuildVerificationDisplayCommand(currentLanguage, changedFiles, workspaceRoot, objective, requestedPaths, expectedOutput)
                 : DescribeCommandWithExpectedOutput(CodingFallbackPolicy.NormalizeGeneratedRunCommand(deferredRunCommand), expectedOutput, expectedOutputLines);

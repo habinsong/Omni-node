@@ -95,16 +95,6 @@ public sealed partial class CommandService
         return (true, plan.Language, primaryCode, changedPaths.ToArray(), execution, plan.Note);
     }
 
-    private static IReadOnlyList<string> ExtractExpectedConsoleOutputLines(string objective)
-    {
-        return CodingExpectedOutputPolicy.ExtractExpectedConsoleOutputLines(objective);
-    }
-
-    private static IReadOnlyList<string> ExtractVisibleTextRequirementLiterals(string objective)
-    {
-        return CodingExpectedOutputPolicy.ExtractVisibleTextRequirementLiterals(objective);
-    }
-
     private async Task<AutonomousCodingOutcome?> TryRecoverCodingLoopExceptionAsync(
         Exception exception,
         string objective,

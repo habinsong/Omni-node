@@ -131,7 +131,7 @@ public sealed partial class CommandService
     )
     {
         var baseCommand = BuildVerificationBaseCommand(language, changedFiles, workspaceRoot, objective, requestedPaths, expectedOutput);
-        var expectedOutputLines = ExtractExpectedConsoleOutputLines(objective);
+        var expectedOutputLines = CodingExpectedOutputPolicy.ExtractExpectedConsoleOutputLines(objective);
         return WrapCommandWithVerificationAssertions(baseCommand, expectedOutput, changedFiles, expectedOutputLines);
     }
 
@@ -145,7 +145,7 @@ public sealed partial class CommandService
     )
     {
         var baseCommand = BuildVerificationBaseCommand(language, changedFiles, workspaceRoot, objective, requestedPaths, expectedOutput);
-        var expectedOutputLines = ExtractExpectedConsoleOutputLines(objective);
+        var expectedOutputLines = CodingExpectedOutputPolicy.ExtractExpectedConsoleOutputLines(objective);
         return DescribeVerificationCommand(baseCommand, expectedOutput, changedFiles, expectedOutputLines);
     }
 
@@ -160,7 +160,7 @@ public sealed partial class CommandService
     {
         var objectiveText = ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty));
         var normalizedLanguage = NormalizeLanguageForCode(language);
-        var expectedOutputLines = ExtractExpectedConsoleOutputLines(objectiveText);
+        var expectedOutputLines = CodingExpectedOutputPolicy.ExtractExpectedConsoleOutputLines(objectiveText);
         var hasExpectedOutput = !string.IsNullOrWhiteSpace(expectedOutput) || expectedOutputLines.Count > 0;
         var shouldRunProgram = ShouldPreferProgramExecutionForVerification(
             objectiveText,

@@ -64,7 +64,7 @@ git diff --check
 
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 788 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 704
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 699
 - `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
 - `node scripts/check-chat-telegram-contract.mjs`: 통과
 - `node scripts/check-gateway-runtime-contract.mjs`: 통과
@@ -835,6 +835,13 @@ git diff --check
 - `apps/omninode-middleware/src/CommandService.CodingWorkspace.cs` (wrapper 정리)
   - 단일 줄 위임 wrapper 6종(`NormalizeGeneratedActionPath`/`NormalizeRequestedCodingPath`/`CollapseKnownCodingRootPrefixes`/`IsSafeRelativeCodingPath`/`NormalizeGeneratedRunCommand`/`InferFallbackPathForGeneratedCode`)을 제거하고 호출처를 `CodingFallbackPolicy.*` 직접 호출로 갱신했다.
   - 갱신된 partial: CodingWorkspace, CodingVerification, CodingResultActions, Utils.
+- `apps/omninode-middleware/src/CommandService.{Telegram,CodingDeterministicRepairs}.cs` (wrapper 정리)
+  - Telegram의 단일 줄 위임 wrapper 19종(`NormalizeThinkingLevel`/`TryBuildTelegramNaturalPseudoCommand`/`ExtractProviderAliasFromNaturalText`/`ExtractThinkingLevelFromNaturalText`/`ExtractHelpTopicFromNaturalText`/`IsTelegramWeakFollowupInput`/`IsTelegramContextualFollowup`/`IsTelegramCorrectionFollowup`/`IsTelegramExhaustedFeedback`/`BuildTelegramCompressionPrompt`/`ResolveTelegramThinkingLevel`/`IsDecisionOrRiskQuestion`/`UserRequiresConclusion`/`ModelShowsUncertainty`/`BuildTelegramConclusionEscalationPrompt`/`ConvertMarkdownToTelegramPlainText`/`NormalizeTelegramTableRowForPlainText`/`ExpandCollapsedMarkdownForTelegram`/`StripInlineMarkdownForTelegram`)을 제거했다.
+  - CodingDeterministicRepairs의 wrapper 2종(`ExtractExpectedConsoleOutputLines`/`ExtractVisibleTextRequirementLiterals`)을 제거하고 호출처를 `CodingExpectedOutputPolicy.*` 직접 호출로 갱신했다.
+  - 갱신된 partial: Telegram, NaturalCommands, CodingDeterministicRepairs, CodingProjectProfiles, CodingVerification, Utils.
+  - `CommandService.Telegram.cs` 본문 크기: 2806 → 2702 라인, `CommandService.CodingDeterministicRepairs.cs` 본문 크기: 222 → 212 라인.
+- `scripts/check-security-boundaries.mjs`
+  - 제거된 wrapper 6개 assertion(`weak/correction/exhausted follow-up` Telegram 위임, `ExtractThinkingLevel` Telegram 위임, `ExtractExpectedConsoleOutputLines`/`ExtractVisibleTextRequirementLiterals` deterministic repairs 위임)을 갱신했다 (정책 내부 자체 사용은 유지).
 
 검증 결과:
 
@@ -861,7 +868,7 @@ git diff --check
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter TelegramPseudoCommandExecutorTests`: 통과, 7 tests
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "TelegramLlmPreferencePolicyTests|TelegramPseudoCommandExecutorTests"`: 통과, 17 tests
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 788 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 704
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 699
 - `node scripts/check-chat-telegram-contract.mjs`: 통과
 - `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
 - `node scripts/check-gateway-runtime-contract.mjs`: 통과

@@ -53,7 +53,7 @@ public sealed partial class CommandService
                 """);
         }
 
-        var requestedThinking = tokens.Length >= 2 ? NormalizeThinkingLevel(tokens[1], "auto") : "auto";
+        var requestedThinking = tokens.Length >= 2 ? TelegramLlmPreferencePolicy.NormalizeThinkingLevel(tokens[1], "auto") : "auto";
         lock (_telegramLlmLock)
         {
             if (command == "/talk")
@@ -97,11 +97,6 @@ public sealed partial class CommandService
             _providers.CerebrasModel,
             _providers.CodexModel
         );
-    }
-
-    private static string NormalizeThinkingLevel(string? value, string fallback)
-    {
-        return TelegramLlmPreferencePolicy.NormalizeThinkingLevel(value, fallback);
     }
 
     private async Task<string?> TryHandleTelegramLlmControlCommandAsync(string text, CancellationToken cancellationToken)
@@ -430,7 +425,7 @@ public sealed partial class CommandService
                 : await ExecuteTelegramPseudoCommandAsync(latestCodingPlan, attachments, webUrls, webSearchEnabled, cancellationToken);
         }
 
-        var pseudoCommand = TryBuildTelegramNaturalPseudoCommand(normalized, lowered);
+        var pseudoCommand = TelegramNaturalCommandPolicy.TryBuildNaturalPseudoCommand(normalized, lowered);
         if (!string.IsNullOrWhiteSpace(pseudoCommand))
         {
             var pseudoResult = await ExecuteTelegramPseudoCommandAsync(
@@ -467,7 +462,7 @@ public sealed partial class CommandService
             return await BuildTelegramUsageReportAsync(cancellationToken);
         }
 
-        var helpTopic = ExtractHelpTopicFromNaturalText(lowered);
+        var helpTopic = TelegramNaturalCommandPolicy.ExtractHelpTopic(lowered);
         if (helpTopic != null)
         {
             return BuildTelegramHelpText(helpTopic);
@@ -476,7 +471,7 @@ public sealed partial class CommandService
         var setProviderModel = Regex.Match(normalized, @"(?i)(groq|그록|gemini|제미니|copilot|코파일럿|cerebras|세레브라스|세레브라|nvidia|nvidia-nim|nim|엔비디아|codex|코덱스)\s*모델\s*([a-zA-Z0-9._/\-]+)\s*(?:로|으로)?\s*(?:바꿔|변경|설정)");
         if (setProviderModel.Success)
         {
-            var provider = ExtractProviderAliasFromNaturalText(setProviderModel.Groups[1].Value, allowAuto: false);
+            var provider = TelegramNaturalCommandPolicy.ExtractProviderAlias(setProviderModel.Groups[1].Value, allowAuto: false);
             var modelId = setProviderModel.Groups[2].Value.Trim();
             if (!string.IsNullOrWhiteSpace(provider) && !string.IsNullOrWhiteSpace(modelId))
             {
@@ -578,11 +573,6 @@ public sealed partial class CommandService
         return result;
     }
 
-    private static string? TryBuildTelegramNaturalPseudoCommand(string normalized, string lowered)
-    {
-        return TelegramNaturalCommandPolicy.TryBuildNaturalPseudoCommand(normalized, lowered);
-    }
-
     private async Task<string?> TryHandleTelegramMemoryCommandAsync(string text, CancellationToken cancellationToken)
     {
         if (!text.StartsWith("/memory", StringComparison.OrdinalIgnoreCase))
@@ -618,21 +608,6 @@ public sealed partial class CommandService
         }
 
         return BuildTelegramHelpText("memory");
-    }
-
-    private static string? ExtractProviderAliasFromNaturalText(string text, bool allowAuto)
-    {
-        return TelegramNaturalCommandPolicy.ExtractProviderAlias(text, allowAuto);
-    }
-
-    private static string? ExtractThinkingLevelFromNaturalText(string lowered)
-    {
-        return TelegramNaturalCommandPolicy.ExtractThinkingLevel(lowered);
-    }
-
-    private static string? ExtractHelpTopicFromNaturalText(string lowered)
-    {
-        return TelegramNaturalCommandPolicy.ExtractHelpTopic(lowered);
     }
 
     private async Task<string> SetGroqModelForTelegramAsync(string modelId, CancellationToken cancellationToken)
@@ -1316,7 +1291,7 @@ public sealed partial class CommandService
             }
         }
 
-        var thinkingLevel = ResolveTelegramThinkingLevel(snapshot, requestText);
+        var thinkingLevel = TelegramPromptPolicy.ResolveThinkingLevel(snapshot, requestText);
         var profiledInput = BuildTelegramProfilePrompt(preparedInput, snapshot.Profile, thinkingLevel);
         var contextualProfiledInput = BuildContextualInput(
             session.SessionId,
@@ -1881,26 +1856,6 @@ public sealed partial class CommandService
         return TelegramConversationContextPolicy.FindAnchorTurn(thread, currentInput);
     }
 
-    private static bool IsTelegramWeakFollowupInput(string input)
-    {
-        return TelegramConversationContextPolicy.IsWeakFollowupInput(input);
-    }
-
-    private static bool IsTelegramContextualFollowup(string input)
-    {
-        return TelegramConversationContextPolicy.IsContextualFollowup(input);
-    }
-
-    private static bool IsTelegramCorrectionFollowup(string input)
-    {
-        return TelegramConversationContextPolicy.IsCorrectionFollowup(input);
-    }
-
-    private static bool IsTelegramExhaustedFeedback(string input)
-    {
-        return TelegramConversationContextPolicy.IsExhaustedFeedback(input);
-    }
-
     private async Task<LlmSingleChatResult> ExecuteTelegramGroqSingleAsync(
         string rawUserInput,
         string profiledInput,
@@ -1945,7 +1900,7 @@ public sealed partial class CommandService
             return BuildTelegramConcisePrompt(text);
         }
 
-        var compressionPrompt = BuildTelegramCompressionPrompt(text);
+        var compressionPrompt = TelegramPromptPolicy.BuildCompressionPrompt(text);
         string compressed;
         if (_llmRouter.HasGroqApiKey())
         {
@@ -2001,39 +1956,9 @@ public sealed partial class CommandService
                || combined.Contains("[Forced", StringComparison.Ordinal);
     }
 
-    private static string BuildTelegramCompressionPrompt(string input)
-    {
-        return TelegramPromptPolicy.BuildCompressionPrompt(input);
-    }
-
     private static string BuildTelegramProfilePrompt(string concisePrompt, string profile, string thinkingLevel)
     {
         return TelegramPromptPolicy.BuildProfilePrompt(concisePrompt, profile, thinkingLevel, BuildLocalNowText());
-    }
-
-    private static string ResolveTelegramThinkingLevel(TelegramLlmPreferences snapshot, string userText)
-    {
-        return TelegramPromptPolicy.ResolveThinkingLevel(snapshot, userText);
-    }
-
-    private static bool IsDecisionOrRiskQuestion(string input)
-    {
-        return TelegramPromptPolicy.IsDecisionOrRiskQuestion(input);
-    }
-
-    private static bool UserRequiresConclusion(string input)
-    {
-        return TelegramPromptPolicy.UserRequiresConclusion(input);
-    }
-
-    private static bool ModelShowsUncertainty(string answer)
-    {
-        return TelegramPromptPolicy.ModelShowsUncertainty(answer);
-    }
-
-    private static string BuildTelegramConclusionEscalationPrompt(string contextualPrompt, string priorAnswer, string thinkingLevel)
-    {
-        return TelegramPromptPolicy.BuildConclusionEscalationPrompt(contextualPrompt, priorAnswer, thinkingLevel);
     }
 
     private static string BuildOrchestrationPrompt(
@@ -2256,26 +2181,6 @@ public sealed partial class CommandService
             ChatOutputSanitizerPolicy.IsStandaloneNumberedHeadlineLine,
             ChatOutputSanitizerPolicy.IsMarkdownTableRow
         );
-    }
-
-    private static string ConvertMarkdownToTelegramPlainText(string text, bool keepMarkdownTables = false)
-    {
-        return TelegramResponseFormatterPolicy.ConvertMarkdownToPlainText(text, keepMarkdownTables);
-    }
-
-    private static string NormalizeTelegramTableRowForPlainText(string tableRow)
-    {
-        return TelegramResponseFormatterPolicy.NormalizeTableRowForPlainText(tableRow);
-    }
-
-    private static string ExpandCollapsedMarkdownForTelegram(string text)
-    {
-        return TelegramResponseFormatterPolicy.ExpandCollapsedMarkdown(text);
-    }
-
-    private static string StripInlineMarkdownForTelegram(string text)
-    {
-        return TelegramResponseFormatterPolicy.StripInlineMarkdown(text);
     }
 
     private static string BuildLocalNowText()

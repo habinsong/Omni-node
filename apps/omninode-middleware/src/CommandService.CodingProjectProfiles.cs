@@ -87,7 +87,7 @@ public sealed partial class CommandService
     )
     {
         var text = ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty)).ToLowerInvariant();
-        var expectedOutputLines = ExtractExpectedConsoleOutputLines(text);
+        var expectedOutputLines = CodingExpectedOutputPolicy.ExtractExpectedConsoleOutputLines(text);
         var pathCount = requestedPaths?.Count ?? 0;
         var singleFileIntent = HasSingleFileIntent(text)
             || ContainsAny(text, "single file", "one file", "파일 하나", "파일 한개", "단일 파일");

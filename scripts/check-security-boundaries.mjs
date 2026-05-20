@@ -546,8 +546,7 @@ assertIncludes(codingExpectedOutputPolicy, "ExtractExpectedConsoleOutputLines", 
 assertIncludes(codingExpectedOutputPolicy, "ExtractVisibleTextRequirementLiterals", "coding expected output policy owns visible text requirement extraction");
 assertIncludes(codingExpectedOutputPolicy, "ResolveExpectedOutputLineIndex", "coding expected output policy owns expected stdout line label mapping");
 assertIncludes(codingDeterministicRepairs, "CodingDeterministicStructuredRepairPolicy.TryBuildPlan", "coding deterministic repairs delegates structured repair plan generation");
-assertIncludes(codingDeterministicRepairs, "CodingExpectedOutputPolicy.ExtractExpectedConsoleOutputLines", "coding deterministic repairs delegates expected stdout line extraction");
-assertIncludes(codingDeterministicRepairs, "CodingExpectedOutputPolicy.ExtractVisibleTextRequirementLiterals", "coding deterministic repairs delegates visible text requirement extraction");
+assertIncludes(utils, "CodingExpectedOutputPolicy.ExtractExpectedConsoleOutputLines", "command service utils delegates expected stdout line extraction");
 assertNotIncludes(codingDeterministicRepairs, "BuildDeterministicPythonMain", "coding deterministic repairs no longer owns deterministic template generation");
 assertIncludes(codingFallbackPolicy, "BuildCodeOnlyPrompt", "coding fallback policy owns fallback code-only prompt");
 assertIncludes(codingFallbackPolicy, "BuildFileBundlePrompt", "coding fallback policy owns fallback file-bundle prompt");
@@ -598,12 +597,8 @@ assertIncludes(telegram, "ChatOutputSanitizerPolicy.IsStandaloneNumberedHeadline
 assertIncludes(telegram, "ChatOutputSanitizerPolicy.IsMarkdownTableRow", "command service telegram uses sanitizer policy for markdown table rows");
 assertIncludes(telegram, "TelegramConversationContextPolicy.BuildFollowupAwareInput", "command service telegram delegates follow-up input expansion");
 assertIncludes(telegram, "TelegramConversationContextPolicy.FindAnchorTurn", "command service telegram delegates anchor turn selection");
-assertIncludes(telegram, "TelegramConversationContextPolicy.IsWeakFollowupInput", "command service telegram delegates weak follow-up detection");
-assertIncludes(telegram, "TelegramConversationContextPolicy.IsCorrectionFollowup", "command service telegram delegates correction follow-up detection");
-assertIncludes(telegram, "TelegramConversationContextPolicy.IsExhaustedFeedback", "command service telegram delegates exhausted feedback detection");
 assertIncludes(telegram, "TelegramNaturalCommandPolicy.TryBuildNaturalPseudoCommand", "command service telegram delegates natural pseudo-command mapping");
 assertIncludes(telegram, "TelegramNaturalCommandPolicy.ExtractProviderAlias", "command service telegram delegates provider alias mapping");
-assertIncludes(telegram, "TelegramNaturalCommandPolicy.ExtractThinkingLevel", "command service telegram delegates thinking alias mapping");
 assertIncludes(telegram, "TelegramNaturalCommandPolicy.ExtractHelpTopic", "command service telegram delegates natural help topic detection");
 assertIncludes(telegram, "TelegramPseudoCommandExecutor.ExecuteAsync", "command service telegram delegates pseudo command execution");
 assertIncludes(telegram, "BuildTelegramPseudoCommandHandlers", "command service telegram builds pseudo command handler map");
