@@ -64,7 +64,7 @@ git diff --check
 
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 788 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 699
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 696
 - `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
 - `node scripts/check-chat-telegram-contract.mjs`: 통과
 - `node scripts/check-gateway-runtime-contract.mjs`: 통과
@@ -842,6 +842,12 @@ git diff --check
   - `CommandService.Telegram.cs` 본문 크기: 2806 → 2702 라인, `CommandService.CodingDeterministicRepairs.cs` 본문 크기: 222 → 212 라인.
 - `scripts/check-security-boundaries.mjs`
   - 제거된 wrapper 6개 assertion(`weak/correction/exhausted follow-up` Telegram 위임, `ExtractThinkingLevel` Telegram 위임, `ExtractExpectedConsoleOutputLines`/`ExtractVisibleTextRequirementLiterals` deterministic repairs 위임)을 갱신했다 (정책 내부 자체 사용은 유지).
+- `apps/omninode-middleware/src/CommandService.{SearchPipeline,Utils}.cs` (잔여 wrapper 정리)
+  - SearchPipeline 단일 줄 위임 wrapper 4종(`ResolveForcedMemoryMinScore`/`ResolveSearchFreshnessForQuery`/`ResolveRequestedResultCountFromQuery`/`HasExplicitRequestedCountInQuery`)과 Utils 단일 줄 위임 wrapper 15종(`ParseCodingLoopPlan`/`BuildCodingPlanTextVariants`/`NormalizeJsonCandidate`/`ExtractFallbackCode`/`ExtractFallbackFileBundle`/`NormalizeGeneratedFileContent`/`ExtractLanguagePrefixedPlainCode`/`SuggestFallbackEntryPath`/`ExtractRequestedCodingPaths`/`SelectRequestedCodingPath`/`HasSingleFileIntent`/`ResolveFinalCodingResultLanguage`/`ExtractExpectedConsoleOutput`/`ExtractLatestCodingRequestText`/`ShouldTryDeterministicSingleFileOutputRepair`)를 제거하고 호출처를 `SearchQueryPolicy.*`/`CodingFallbackPolicy.*`/`CodingLoopPlanParser.*`/`GeneratedCodeTextPolicy.*`/`CodingLanguagePolicy.*`/`CodingDeterministicOutputRepairPolicy.*` 직접 호출로 갱신했다.
+  - `ShouldTryDeterministicSingleFileOutputRepair` 1st arg `objective` 드롭에 맞춰 caller 인자를 3개로 정리했다.
+  - `CommandService.SearchPipeline.cs` 본문 크기: 874 → 854 라인, `CommandService.Utils.cs` 본문 크기: 2169 → 2080 라인.
+- `scripts/check-security-boundaries.mjs`
+  - 사라진 utils wrapper에 묶여 있던 위임 assertion 4건(`ExtractLatestCodingRequestText`/`BuildTextVariants`/`NormalizeJsonCandidate`/`NormalizeGeneratedFileContent`/`ExtractLanguagePrefixedPlainCode`)을 실제 호출 파일(`commandServiceCodingQuality`/`commandServiceCodingProfiles`) 기준으로 재정렬하거나 더 이상 호출처가 없는 항목은 제거했다.
 
 검증 결과:
 
@@ -868,7 +874,7 @@ git diff --check
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter TelegramPseudoCommandExecutorTests`: 통과, 7 tests
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "TelegramLlmPreferencePolicyTests|TelegramPseudoCommandExecutorTests"`: 통과, 17 tests
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 788 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 699
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 696
 - `node scripts/check-chat-telegram-contract.mjs`: 통과
 - `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
 - `node scripts/check-gateway-runtime-contract.mjs`: 통과

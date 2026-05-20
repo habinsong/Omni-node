@@ -22,7 +22,7 @@ public sealed partial class CommandService
     )
     {
         var normalizedLanguage = NormalizeLanguageForCode(language);
-        var objectiveText = ExtractLatestCodingRequestText(objective ?? string.Empty);
+        var objectiveText = CodingLanguagePolicy.ExtractLatestCodingRequestText(objective ?? string.Empty);
         var files = (changedFiles ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -50,7 +50,7 @@ public sealed partial class CommandService
             passed.Add("더미/TODO 중심 구현 아님");
         }
 
-        var requestedPaths = ExtractRequestedCodingPaths(objectiveText, normalizedLanguage);
+        var requestedPaths = CodingFallbackPolicy.ExtractRequestedCodingPaths(objectiveText, normalizedLanguage);
         foreach (var requestedPath in requestedPaths.Take(12))
         {
             var full = ResolveWorkspacePath(workspaceRoot, requestedPath);

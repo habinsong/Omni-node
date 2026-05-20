@@ -158,7 +158,7 @@ public sealed partial class CommandService
         string? expectedOutput = null
     )
     {
-        var objectiveText = ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty));
+        var objectiveText = CodingLanguagePolicy.ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty));
         var normalizedLanguage = NormalizeLanguageForCode(language);
         var expectedOutputLines = CodingExpectedOutputPolicy.ExtractExpectedConsoleOutputLines(objectiveText);
         var hasExpectedOutput = !string.IsNullOrWhiteSpace(expectedOutput) || expectedOutputLines.Count > 0;
@@ -1291,7 +1291,7 @@ async function waitFor(url, deadlineMs = 12000) {
             "events",
             "render"
         };
-        var text = ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objectiveText ?? string.Empty)).ToLowerInvariant();
+        var text = CodingLanguagePolicy.ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objectiveText ?? string.Empty)).ToLowerInvariant();
         if (ContainsAny(text, "tetris", "테트리스"))
         {
             requiredMarkers.AddRange(new[] { "board", "pieces", "rotation", "collision", "line_clear", "score", "level", "game_over" });

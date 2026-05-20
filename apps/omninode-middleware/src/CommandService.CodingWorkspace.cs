@@ -169,7 +169,7 @@ public sealed partial class CommandService
 
         if (actionType == "write_file" || actionType == "append_file")
         {
-            var requestedPath = SelectRequestedCodingPath(requestedPaths, GuessLanguageFromPath(CodingFallbackPolicy.InferFallbackPathForGeneratedCode(content), "auto"), content);
+            var requestedPath = CodingFallbackPolicy.SelectRequestedCodingPath(requestedPaths, GuessLanguageFromPath(CodingFallbackPolicy.InferFallbackPathForGeneratedCode(content), "auto"), content);
             if (!string.IsNullOrWhiteSpace(requestedPath))
             {
                 return requestedPath;

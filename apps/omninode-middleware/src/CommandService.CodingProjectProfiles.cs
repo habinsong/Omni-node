@@ -20,7 +20,7 @@ public sealed partial class CommandService
         IReadOnlyList<string>? requestedPaths = null
     )
     {
-        var text = ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty)).ToLowerInvariant();
+        var text = CodingLanguagePolicy.ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty)).ToLowerInvariant();
         var explicitLanguage = ResolveExplicitObjectiveLanguage(objective);
         var language = NormalizeCodingLanguageHintPreservingAuto(languageHint);
         if (language == "auto" && !string.IsNullOrWhiteSpace(explicitLanguage))
@@ -86,10 +86,10 @@ public sealed partial class CommandService
         IReadOnlyList<string>? requestedPaths
     )
     {
-        var text = ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty)).ToLowerInvariant();
+        var text = CodingLanguagePolicy.ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty)).ToLowerInvariant();
         var expectedOutputLines = CodingExpectedOutputPolicy.ExtractExpectedConsoleOutputLines(text);
         var pathCount = requestedPaths?.Count ?? 0;
-        var singleFileIntent = HasSingleFileIntent(text)
+        var singleFileIntent = CodingFallbackPolicy.HasSingleFileIntent(text)
             || ContainsAny(text, "single file", "one file", "파일 하나", "파일 한개", "단일 파일");
         var simpleStdout = expectedOutputLines.Count > 0
             || ContainsAny(text, "출력", "print", "echo", "stdout");

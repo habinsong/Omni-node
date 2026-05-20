@@ -154,6 +154,7 @@ const logicNodeRuntimePolicy = read("apps/omninode-middleware/src/LogicNodeRunti
 const commandServiceLogicGraphs = read("apps/omninode-middleware/src/CommandService.LogicGraphs.cs");
 const codingOrchestrationPromptPolicy = read("apps/omninode-middleware/src/CodingOrchestrationPromptPolicy.cs");
 const commandServiceCoding = read("apps/omninode-middleware/src/CommandService.Coding.cs");
+const commandServiceCodingProfiles = read("apps/omninode-middleware/src/CommandService.CodingProfiles.cs");
 const textOutputTruncator = read("apps/omninode-middleware/src/TextOutputTruncator.cs");
 const commandServiceTelegram = read("apps/omninode-middleware/src/CommandService.Telegram.cs");
 const codingWorkerSelectionPolicy = read("apps/omninode-middleware/src/CodingWorkerSelectionPolicy.cs");
@@ -492,7 +493,7 @@ assertIncludes(utils, "CodingLanguagePolicy.ResolveExplicitObjectiveLanguage", "
 assertIncludes(utils, "CodingLanguagePolicy.ResolveInitialCodingLanguage", "command service utils delegates initial language resolution");
 assertIncludes(utils, "CodingLanguagePolicy.GuessLanguageFromPath", "command service utils delegates extension language mapping");
 assertIncludes(utils, "CodingLanguagePolicy.ResolveFinalResultLanguage", "command service utils delegates final result language resolution");
-assertIncludes(utils, "CodingLanguagePolicy.ExtractLatestCodingRequestText", "command service utils delegates latest coding request extraction");
+assertIncludes(commandServiceCodingQuality, "CodingLanguagePolicy.ExtractLatestCodingRequestText", "command service coding quality delegates latest coding request extraction");
 assertIncludes(utils, "CodingQualityBriefPolicy.Build", "command service utils delegates coding quality brief");
 assertIncludes(utils, "CodingLoopTuningPolicy.ResolveMaxRepairPasses", "command service utils delegates repair pass limit to loop tuning policy");
 assertIncludes(utils, "CodingDeterministicOutputRepairPolicy.ShouldTrySingleFileOutputRepair", "command service utils delegates deterministic stdout repair gate");
@@ -534,14 +535,11 @@ assertIncludes(codingLoopActionExecutor, "ExecuteAsync", "coding loop action exe
 assertIncludes(codingLoopActionExecutor, "CodingExecutionSafetyPolicy.IsDangerousGeneratedRunCommand", "coding loop action executor owns generated run command safety gate");
 assertIncludes(codingLoopActionExecutor, "runWorkspaceCommandAsync", "coding loop action executor exposes command runner dependency");
 assertIncludes(utils, "CodingLoopPlanParser.Parse", "command service utils delegates coding loop plan parsing");
-assertIncludes(utils, "CodingLoopPlanParser.BuildTextVariants", "command service utils delegates coding plan text variants");
-assertIncludes(utils, "CodingLoopPlanParser.NormalizeJsonCandidate", "command service utils delegates json candidate normalization");
 assertIncludes(utils, "CodingLoopActionExecutor.ExecuteAsync", "command service utils delegates coding loop action execution");
 assertIncludes(codingExecutionSafetyPolicy, "CodingLoopPlanParser.NormalizeActionType", "coding execution safety policy delegates action type normalization to loop plan parser");
 assertIncludes(generatedCodeTextPolicy, "NormalizeGeneratedFileContent", "generated code text policy owns generated file content normalization");
 assertIncludes(generatedCodeTextPolicy, "ExtractLanguagePrefixedPlainCode", "generated code text policy owns language-prefixed plain code extraction");
-assertIncludes(utils, "GeneratedCodeTextPolicy.NormalizeGeneratedFileContent", "command service utils delegates generated file content normalization");
-assertIncludes(utils, "GeneratedCodeTextPolicy.ExtractLanguagePrefixedPlainCode", "command service utils delegates language-prefixed plain code extraction");
+assertIncludes(commandServiceCodingProfiles, "GeneratedCodeTextPolicy.NormalizeGeneratedFileContent", "command service coding profiles delegates generated file content normalization");
 assertIncludes(codingExpectedOutputPolicy, "ExtractExpectedConsoleOutputLines", "coding expected output policy owns expected stdout line extraction");
 assertIncludes(codingExpectedOutputPolicy, "ExtractVisibleTextRequirementLiterals", "coding expected output policy owns visible text requirement extraction");
 assertIncludes(codingExpectedOutputPolicy, "ResolveExpectedOutputLineIndex", "coding expected output policy owns expected stdout line label mapping");

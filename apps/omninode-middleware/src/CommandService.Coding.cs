@@ -241,13 +241,13 @@ public sealed partial class CommandService
             session.LinkedMemoryNotes,
             contextDecisionInput: rawInput
         );
-        var rawRequestedPaths = ExtractRequestedCodingPaths(rawInput, request.Language);
-        var rawExpectedOutput = ExtractExpectedConsoleOutput(rawInput);
+        var rawRequestedPaths = CodingFallbackPolicy.ExtractRequestedCodingPaths(rawInput, request.Language);
+        var rawExpectedOutput = CodingFallbackPolicy.ExtractExpectedConsoleOutput(rawInput);
         AutonomousCodingOutcome outcome;
         try
         {
             if (string.Equals(provider, "copilot", StringComparison.OrdinalIgnoreCase)
-                && ShouldTryDeterministicSingleFileOutputRepair(rawInput, request.Language, rawRequestedPaths, rawExpectedOutput))
+                && CodingDeterministicOutputRepairPolicy.ShouldTrySingleFileOutputRepair(request.Language, rawRequestedPaths, rawExpectedOutput))
             {
                 progressCallback?.Invoke(BuildCodingProgressUpdate(
                     "single",

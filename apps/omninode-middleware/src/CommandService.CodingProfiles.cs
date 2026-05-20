@@ -300,7 +300,7 @@ public sealed partial class CommandService
     private static bool IsFrontendLikeCodingTask(string objective, string languageHint)
     {
         var lang = NormalizeCodingLanguageHintPreservingAuto(languageHint);
-        var text = ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty)).ToLowerInvariant();
+        var text = CodingLanguagePolicy.ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty)).ToLowerInvariant();
         var explicitLanguage = ResolveExplicitObjectiveLanguage(objective);
         var backendSignals = ContainsAny(
             text,
@@ -354,7 +354,7 @@ public sealed partial class CommandService
     private static bool IsGameLikeCodingTask(string objective, string languageHint)
     {
         var lang = NormalizeCodingLanguageHintPreservingAuto(languageHint);
-        var text = ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty)).ToLowerInvariant();
+        var text = CodingLanguagePolicy.ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty)).ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(text))
         {
             return lang is "html" or "javascript" or "css";
@@ -502,7 +502,7 @@ public sealed partial class CommandService
         var normalizedModel = (model ?? string.Empty).Trim();
         var projectProfile = ResolveCodingProjectProfile(objective, languageHint, requestedPaths);
         var normalizedLanguage = projectProfile.Language;
-        var effectiveRequestedPaths = requestedPaths ?? ExtractRequestedCodingPaths(objective, normalizedLanguage);
+        var effectiveRequestedPaths = requestedPaths ?? CodingFallbackPolicy.ExtractRequestedCodingPaths(objective, normalizedLanguage);
         var frontendLike = IsFrontendLikeCodingTask(objective, normalizedLanguage);
         var gameLike = IsGameLikeCodingTask(objective, normalizedLanguage);
         var lines = new List<string>
@@ -1044,7 +1044,7 @@ public sealed partial class CommandService
         CancellationToken cancellationToken
     )
     {
-        var fallbackBundle = ExtractFallbackFileBundle(rawResponse, initialLanguage, objective);
+        var fallbackBundle = CodingFallbackPolicy.ExtractFallbackFileBundle(rawResponse, initialLanguage, objective);
         if (fallbackBundle.Files.Count == 0)
         {
             return null;
@@ -1073,7 +1073,7 @@ public sealed partial class CommandService
             return null;
         }
 
-        var expectedOutput = ExtractExpectedConsoleOutput(objective);
+        var expectedOutput = CodingFallbackPolicy.ExtractExpectedConsoleOutput(objective);
         var execution = await RunDirectRecoveryVerificationAsync(
             fallbackBundle.Language,
             workspaceRoot,
@@ -1111,13 +1111,13 @@ public sealed partial class CommandService
         CancellationToken cancellationToken
     )
     {
-        var fallbackCode = ExtractFallbackCode(rawResponse, initialLanguage, objective);
+        var fallbackCode = CodingFallbackPolicy.ExtractFallbackCode(rawResponse, initialLanguage, objective);
         if (string.IsNullOrWhiteSpace(fallbackCode.Code))
         {
             return null;
         }
 
-        var fallbackPath = SuggestFallbackEntryPath(fallbackCode.Language, objective, requestedPaths);
+        var fallbackPath = CodingFallbackPolicy.SuggestFallbackEntryPath(fallbackCode.Language, objective, requestedPaths);
         var normalizedCode = NormalizeProviderGeneratedFileContent(provider, fallbackPath, fallbackCode.Code);
         var writeAction = new CodingLoopAction("write_file", fallbackPath, normalizedCode, string.Empty);
         var writeResult = await ExecuteCodingLoopActionAsync(writeAction, workspaceRoot, requestedPaths, provider, cancellationToken);
@@ -1127,7 +1127,7 @@ public sealed partial class CommandService
         }
 
         var changedPaths = new[] { writeResult.ChangedPath };
-        var expectedOutput = ExtractExpectedConsoleOutput(objective);
+        var expectedOutput = CodingFallbackPolicy.ExtractExpectedConsoleOutput(objective);
         var execution = await RunDirectRecoveryVerificationAsync(
             fallbackCode.Language,
             workspaceRoot,
@@ -1155,7 +1155,7 @@ public sealed partial class CommandService
 
     private static string NormalizeProviderGeneratedFileContent(string provider, string path, string content)
     {
-        var normalized = NormalizeGeneratedFileContent(content);
+        var normalized = GeneratedCodeTextPolicy.NormalizeGeneratedFileContent(content);
         var extractedShellWrapped = ExtractShellWrappedFileContent(path, normalized);
         if (!string.IsNullOrWhiteSpace(extractedShellWrapped))
         {
@@ -1240,7 +1240,7 @@ public sealed partial class CommandService
             {
                 if (string.Equals(lines[bodyIndex].Trim(), delimiter, StringComparison.Ordinal))
                 {
-                    return NormalizeGeneratedFileContent(string.Join('\n', extracted));
+                    return GeneratedCodeTextPolicy.NormalizeGeneratedFileContent(string.Join('\n', extracted));
                 }
 
                 extracted.Add(lines[bodyIndex]);

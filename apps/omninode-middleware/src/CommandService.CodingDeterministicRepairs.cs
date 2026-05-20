@@ -57,7 +57,7 @@ public sealed partial class CommandService
             );
         }
 
-        var expectedOutput = ExtractExpectedConsoleOutput(objective);
+        var expectedOutput = CodingFallbackPolicy.ExtractExpectedConsoleOutput(objective);
         var displayCommand = BuildVerificationDisplayCommand(plan.Language, changedPaths, workspaceRoot, objective, requestedPaths, expectedOutput);
         var command = BuildVerificationCommand(plan.Language, changedPaths, workspaceRoot, objective, requestedPaths, expectedOutput);
         if (string.IsNullOrWhiteSpace(command))
@@ -134,13 +134,13 @@ public sealed partial class CommandService
             return null;
         }
 
-        var resolvedLanguage = ResolveFinalCodingResultLanguage(
+        var resolvedLanguage = CodingLanguagePolicy.ResolveFinalResultLanguage(
             ResolveInitialCodingLanguage(languageHint, objective),
             languageHint,
             objective,
             recoveredFiles
         );
-        var expectedOutput = ExtractExpectedConsoleOutput(objective);
+        var expectedOutput = CodingFallbackPolicy.ExtractExpectedConsoleOutput(objective);
         var displayCommand = BuildVerificationDisplayCommand(
             resolvedLanguage,
             recoveredFiles,

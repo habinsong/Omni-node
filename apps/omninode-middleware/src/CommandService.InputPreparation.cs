@@ -604,7 +604,7 @@ public sealed partial class CommandService
         }
         else
         {
-            var memorySearch = _memorySearchTool.Search(query, maxResults: 4, minScore: ResolveForcedMemoryMinScore(query));
+            var memorySearch = _memorySearchTool.Search(query, maxResults: 4, minScore: SearchQueryPolicy.ResolveForcedMemoryMinScore(query));
             var scopedMemoryResults = FilterMemorySearchResultsByScope(memorySearch.Results, normalizedMemoryScope, allowedConversationIds);
             if (memorySearch.Disabled)
             {
@@ -730,8 +730,8 @@ public sealed partial class CommandService
         }
         else
         {
-            var freshness = ResolveSearchFreshnessForQuery(query);
-            var requestedSearchCount = ResolveRequestedResultCountFromQuery(query);
+            var freshness = SearchQueryPolicy.ResolveSearchFreshnessForQuery(query);
+            var requestedSearchCount = SearchQueryPolicy.ResolveRequestedResultCountFromQuery(query);
             var effectiveSearchQuery = BuildEffectiveSearchQuery(query, webSearchDecision);
             WebSearchToolResult webSearch;
             try

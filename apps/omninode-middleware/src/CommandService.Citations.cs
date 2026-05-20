@@ -441,8 +441,8 @@ public sealed partial class CommandService
             return ApplyHighRiskFactualGuardFallback(input, normalizedResponse);
         }
 
-        var hasExplicitRequestedCount = HasExplicitRequestedCountInQuery(input);
-        var requestedCount = Math.Clamp(ResolveRequestedResultCountFromQuery(input), 1, 10);
+        var hasExplicitRequestedCount = SearchQueryPolicy.HasExplicitRequestedCountInQuery(input);
+        var requestedCount = Math.Clamp(SearchQueryPolicy.ResolveRequestedResultCountFromQuery(input), 1, 10);
         var validCitations = citations
             .Select(item =>
             {

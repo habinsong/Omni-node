@@ -451,7 +451,7 @@ public sealed partial class CommandService
         var hasSourceOverride = sourceFocus.Length > 0
             || sourceDomain.Length > 0
             || normalizedInput.Contains("site:", StringComparison.OrdinalIgnoreCase);
-        var hasCountOverride = HasExplicitRequestedCountInQuery(normalizedInput);
+        var hasCountOverride = SearchQueryPolicy.HasExplicitRequestedCountInQuery(normalizedInput);
         var hasFormatOverride = SearchQueryPolicy.LooksLikeWebFormatDirective(normalizedInput);
         var hasToneOverride = SearchQueryPolicy.LooksLikeWebToneDirective(normalizedInput);
         var hasLanguageOverride = SearchQueryPolicy.LooksLikeWebLanguageDirective(normalizedInput);
@@ -806,32 +806,12 @@ public sealed partial class CommandService
         return SearchQueryPolicy.BuildEffectiveSearchQuery(query, decision, ResolveSourceDomainFromQueryOrFocus);
     }
 
-    private static double ResolveForcedMemoryMinScore(string input)
-    {
-        return SearchQueryPolicy.ResolveForcedMemoryMinScore(input);
-    }
-
-    private static string ResolveSearchFreshnessForQuery(string input)
-    {
-        return SearchQueryPolicy.ResolveSearchFreshnessForQuery(input);
-    }
-
-    private static int ResolveRequestedResultCountFromQuery(string input)
-    {
-        return SearchQueryPolicy.ResolveRequestedResultCountFromQuery(input);
-    }
-
-    private static bool HasExplicitRequestedCountInQuery(string input)
-    {
-        return SearchQueryPolicy.HasExplicitRequestedCountInQuery(input);
-    }
-
     private static bool CanUseDeterministicListFastPath(
         string input,
         IReadOnlyList<SearchCitationReference>? citations
     )
     {
-        if (!HasExplicitRequestedCountInQuery(input))
+        if (!SearchQueryPolicy.HasExplicitRequestedCountInQuery(input))
         {
             return false;
         }
@@ -841,7 +821,7 @@ public sealed partial class CommandService
             return false;
         }
 
-        var targetCount = Math.Clamp(ResolveRequestedResultCountFromQuery(input), 1, 10);
+        var targetCount = Math.Clamp(SearchQueryPolicy.ResolveRequestedResultCountFromQuery(input), 1, 10);
         var normalized = citations
             .Select(item =>
             {

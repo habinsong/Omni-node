@@ -740,7 +740,7 @@ public sealed partial class CommandService
         string role = ""
     )
     {
-        var requestedPaths = ExtractRequestedCodingPaths(objective, languageHint);
+        var requestedPaths = CodingFallbackPolicy.ExtractRequestedCodingPaths(objective, languageHint);
         var profile = ResolveCodingExecutionProfile(provider, model, objective, languageHint, requestedPaths);
         var draftPrompt = BuildDraftCodingWorkerPrompt(objective, languageHint);
         var generated = await GenerateByProviderSafeAsync(
@@ -755,7 +755,7 @@ public sealed partial class CommandService
         );
 
         var rawResponse = (generated.Text ?? string.Empty).Trim();
-        var parsed = ExtractFallbackCode(rawResponse, languageHint, objective);
+        var parsed = CodingFallbackPolicy.ExtractFallbackCode(rawResponse, languageHint, objective);
         var draftTokenUsage = generated.TokenUsage;
         if (string.IsNullOrWhiteSpace(parsed.Code))
         {
@@ -771,7 +771,7 @@ public sealed partial class CommandService
                 timeoutOverrideSeconds: profile.RequestTimeoutSeconds
             );
             var fallbackRaw = (fallback.Text ?? string.Empty).Trim();
-            var fallbackParsed = ExtractFallbackCode(fallbackRaw, languageHint, objective);
+            var fallbackParsed = CodingFallbackPolicy.ExtractFallbackCode(fallbackRaw, languageHint, objective);
             if (!string.IsNullOrWhiteSpace(fallbackParsed.Code))
             {
                 parsed = fallbackParsed;
@@ -824,7 +824,7 @@ public sealed partial class CommandService
     )
     {
         var workspaceRoot = ResolveCodingWorkspaceRoot(workspaceRootOverride);
-        var requestedPaths = ExtractRequestedCodingPaths(objective, languageHint);
+        var requestedPaths = CodingFallbackPolicy.ExtractRequestedCodingPaths(objective, languageHint);
         var profile = ResolveCodingExecutionProfile(provider, model, objective, languageHint, requestedPaths);
         var oneShotMode = ShouldUseOneShotMode(profile, objective, languageHint);
         var maxIterations = ResolveMaxIterations(profile, oneShotMode);
@@ -834,7 +834,7 @@ public sealed partial class CommandService
         var progressMode = string.IsNullOrWhiteSpace(progressModeOverride) ? modeLabel : progressModeOverride;
 
         var currentLanguage = ResolveInitialCodingLanguage(languageHint, objective);
-        var expectedOutput = ExtractExpectedConsoleOutput(objective);
+        var expectedOutput = CodingFallbackPolicy.ExtractExpectedConsoleOutput(objective);
         var lastCode = string.Empty;
         var lastWritePath = "-";
         var lastRawResponse = string.Empty;
@@ -927,7 +927,7 @@ public sealed partial class CommandService
         }
 
         if (profile.AllowDeterministicStdoutFastPath
-            && ShouldTryDeterministicSingleFileOutputRepair(objective, currentLanguage, requestedPaths, expectedOutput))
+            && CodingDeterministicOutputRepairPolicy.ShouldTrySingleFileOutputRepair(currentLanguage, requestedPaths, expectedOutput))
         {
             progressCallback?.Invoke(BuildCodingProgressUpdate(
                 progressMode,
@@ -1022,7 +1022,7 @@ public sealed partial class CommandService
             );
             totalTokenUsage = TokenUsageEstimator.Combine(totalTokenUsage, generated.TokenUsage);
             lastRawResponse = generated.Text;
-            var plan = ParseCodingLoopPlan(generated.Text);
+            var plan = CodingLoopPlanParser.Parse(generated.Text);
             if (plan == null)
             {
                 consecutivePlanParseFailures++;
@@ -1217,7 +1217,7 @@ public sealed partial class CommandService
                 );
                 totalTokenUsage = TokenUsageEstimator.Combine(totalTokenUsage, bundleGenerated.TokenUsage);
                 lastRawResponse = bundleGenerated.Text;
-                var fallbackBundle = ExtractFallbackFileBundle(bundleGenerated.Text, currentLanguage, objective);
+                var fallbackBundle = CodingFallbackPolicy.ExtractFallbackFileBundle(bundleGenerated.Text, currentLanguage, objective);
                 if (fallbackBundle.Files.Count > 0)
                 {
                     currentLanguage = fallbackBundle.Language;
@@ -1269,10 +1269,10 @@ public sealed partial class CommandService
                 );
                 totalTokenUsage = TokenUsageEstimator.Combine(totalTokenUsage, fallbackGenerated.TokenUsage);
                 lastRawResponse = fallbackGenerated.Text;
-                var fallbackCode = ExtractFallbackCode(fallbackGenerated.Text, currentLanguage, objective);
+                var fallbackCode = CodingFallbackPolicy.ExtractFallbackCode(fallbackGenerated.Text, currentLanguage, objective);
                 if (!string.IsNullOrWhiteSpace(fallbackCode.Code))
                 {
-                    var fallbackPath = SuggestFallbackEntryPath(fallbackCode.Language, objective, requestedPaths);
+                    var fallbackPath = CodingFallbackPolicy.SuggestFallbackEntryPath(fallbackCode.Language, objective, requestedPaths);
                     var normalizedCode = NormalizeProviderGeneratedFileContent(provider, fallbackPath, fallbackCode.Code);
                     var writeAction = new CodingLoopAction("write_file", fallbackPath, normalizedCode, string.Empty);
                     var writeResult = await ExecuteCodingLoopActionAsync(writeAction, workspaceRoot, requestedPaths, provider, cancellationToken);
@@ -1312,7 +1312,7 @@ public sealed partial class CommandService
                     lastRawResponse = string.IsNullOrWhiteSpace(bundleGenerated.Text)
                         ? fallbackGenerated.Text
                         : bundleGenerated.Text;
-                    var fallbackBundle = ExtractFallbackFileBundle(bundleGenerated.Text, currentLanguage, objective);
+                    var fallbackBundle = CodingFallbackPolicy.ExtractFallbackFileBundle(bundleGenerated.Text, currentLanguage, objective);
                     if (fallbackBundle.Files.Count > 0)
                     {
                         currentLanguage = fallbackBundle.Language;
@@ -1423,7 +1423,7 @@ public sealed partial class CommandService
 
         if (changedFiles.Count > 0)
         {
-            currentLanguage = ResolveFinalCodingResultLanguage(currentLanguage, languageHint, objective, changedFiles);
+            currentLanguage = CodingLanguagePolicy.ResolveFinalResultLanguage(currentLanguage, languageHint, objective, changedFiles);
             progressCallback?.Invoke(BuildCodingProgressUpdate(
                 progressMode,
                 provider,
@@ -1715,21 +1715,6 @@ public sealed partial class CommandService
         );
     }
 
-    private static CodingLoopPlan? ParseCodingLoopPlan(string rawText)
-    {
-        return CodingLoopPlanParser.Parse(rawText);
-    }
-
-    private static IReadOnlyList<string> BuildCodingPlanTextVariants(string text)
-    {
-        return CodingLoopPlanParser.BuildTextVariants(text);
-    }
-
-    private static string NormalizeJsonCandidate(string candidate)
-    {
-        return CodingLoopPlanParser.NormalizeJsonCandidate(candidate);
-    }
-
     private static string BuildFallbackCodeOnlyPrompt(string objective, string languageHint)
     {
         var resolvedLanguage = ResolveInitialCodingLanguage(languageHint, objective);
@@ -1765,31 +1750,6 @@ public sealed partial class CommandService
         );
     }
 
-    private static ParsedCode ExtractFallbackCode(string rawText, string languageHint, string objective)
-    {
-        return CodingFallbackPolicy.ExtractFallbackCode(rawText, languageHint, objective);
-    }
-
-    private static FallbackFileBundle ExtractFallbackFileBundle(string rawText, string languageHint, string objective)
-    {
-        return CodingFallbackPolicy.ExtractFallbackFileBundle(rawText, languageHint, objective);
-    }
-
-    private static string NormalizeGeneratedFileContent(string content)
-    {
-        return GeneratedCodeTextPolicy.NormalizeGeneratedFileContent(content);
-    }
-
-    private static ParsedCode ExtractLanguagePrefixedPlainCode(string text, string fallbackLanguage)
-    {
-        return GeneratedCodeTextPolicy.ExtractLanguagePrefixedPlainCode(text, fallbackLanguage);
-    }
-
-    private static string SuggestFallbackEntryPath(string language, string objective, IReadOnlyList<string>? requestedPaths = null)
-    {
-        return CodingFallbackPolicy.SuggestFallbackEntryPath(language, objective, requestedPaths);
-    }
-
     private static string BuildCodingRepairObjectivePrompt(
         string objective,
         string languageHint,
@@ -1809,35 +1769,6 @@ public sealed partial class CommandService
         ));
     }
 
-    private static IReadOnlyList<string> ExtractRequestedCodingPaths(string objective, string languageHint)
-    {
-        return CodingFallbackPolicy.ExtractRequestedCodingPaths(objective, languageHint);
-    }
-
-    private static string SelectRequestedCodingPath(
-        IReadOnlyList<string>? requestedPaths,
-        string? languageHint,
-        string? content
-    )
-    {
-        return CodingFallbackPolicy.SelectRequestedCodingPath(requestedPaths, languageHint, content);
-    }
-
-    private static bool HasSingleFileIntent(string objective)
-    {
-        return CodingFallbackPolicy.HasSingleFileIntent(objective);
-    }
-
-    private static string ResolveFinalCodingResultLanguage(
-        string currentLanguage,
-        string languageHint,
-        string objective,
-        IReadOnlyCollection<string> changedFiles
-    )
-    {
-        return CodingLanguagePolicy.ResolveFinalResultLanguage(currentLanguage, languageHint, objective, changedFiles);
-    }
-
     private static string[] CleanupRedundantSingleFileArtifacts(
         string workspaceRoot,
         string objective,
@@ -1852,26 +1783,6 @@ public sealed partial class CommandService
             changedFiles,
             ResolveWorkspacePath
         );
-    }
-
-    private static string ExtractExpectedConsoleOutput(string objective)
-    {
-        return CodingFallbackPolicy.ExtractExpectedConsoleOutput(objective);
-    }
-
-    private static string ExtractLatestCodingRequestText(string objective)
-    {
-        return CodingLanguagePolicy.ExtractLatestCodingRequestText(objective);
-    }
-
-    private static bool ShouldTryDeterministicSingleFileOutputRepair(
-        string objective,
-        string languageHint,
-        IReadOnlyList<string> requestedPaths,
-        string expectedOutput
-    )
-    {
-        return CodingDeterministicOutputRepairPolicy.ShouldTrySingleFileOutputRepair(languageHint, requestedPaths, expectedOutput);
     }
 
     private static bool ShouldPreferFileBundleFallback(string objective, IReadOnlyList<string>? requestedPaths)
@@ -1895,7 +1806,7 @@ public sealed partial class CommandService
         CancellationToken cancellationToken
     )
     {
-        if (!ShouldTryDeterministicSingleFileOutputRepair(objective, languageHint, requestedPaths, expectedOutput))
+        if (!CodingDeterministicOutputRepairPolicy.ShouldTrySingleFileOutputRepair(languageHint, requestedPaths, expectedOutput))
         {
             return (false, string.Empty, string.Empty, new CodeExecutionResult("bash", workspaceRoot, "-", "(skipped)", 0, string.Empty, string.Empty, "skipped"));
         }
