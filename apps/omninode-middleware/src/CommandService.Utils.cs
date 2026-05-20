@@ -170,7 +170,7 @@ public sealed partial class CommandService
         }
 
         var thread = _conversationStore.Ensure(scope, mode, safeConversationId, conversationTitle, project, category, tags);
-        var mergedNotes = MergeMemoryNoteNames(thread.LinkedMemoryNotes, linkedMemoryNotes);
+        var mergedNotes = MemoryNoteSelectionPolicy.MergeNames(thread.LinkedMemoryNotes, linkedMemoryNotes);
         if (mergedNotes.Count != thread.LinkedMemoryNotes.Count
             || mergedNotes.Except(thread.LinkedMemoryNotes, StringComparer.OrdinalIgnoreCase).Any())
         {
@@ -216,14 +216,14 @@ public sealed partial class CommandService
         var contextDecisionText = contextDecisionInput ?? input;
         var suppressPriorContext = SearchQueryPolicy.LooksLikeStandaloneFreshGreeting(contextDecisionText);
         var includePriorContext = !suppressPriorContext && ShouldUsePriorConversationContext(conversationId, contextDecisionText);
-        var explicitRequestNotes = NormalizeExplicitMemoryNoteNames(requestMemoryNotes);
+        var explicitRequestNotes = MemoryNoteSelectionPolicy.NormalizeExplicitNames(requestMemoryNotes);
         // linked memory notes는 압축된 대화 맥락이므로 includePriorContext와 무관하게 항상 로드.
         // 그렇지 않으면 압축 직후 첫 질문에서 맥락이 단절됨.
         // 단독 인사는 새 대화 행위라서 이전 주제 메모리도 함께 붙이지 않는다.
         var autoLinkedNotes = suppressPriorContext
             ? Array.Empty<string>()
             : _conversationStore.Get(conversationId)?.LinkedMemoryNotes ?? Array.Empty<string>();
-        var notes = MergeMemoryNoteNames(
+        var notes = MemoryNoteSelectionPolicy.MergeNames(
             autoLinkedNotes,
             explicitRequestNotes
         );
@@ -331,11 +331,6 @@ public sealed partial class CommandService
             ? historySection
             : historySection[^availableForHistory..];
         return $"{header}{trimmedHistory}{requestSection}";
-    }
-
-    private static IReadOnlyList<string> NormalizeExplicitMemoryNoteNames(IReadOnlyList<string>? names)
-    {
-        return MemoryNoteSelectionPolicy.NormalizeExplicitNames(names);
     }
 
     private bool ShouldUsePriorConversationContext(string conversationId, string input)
@@ -643,11 +638,6 @@ public sealed partial class CommandService
             "codex" => _providers.CodexModel,
             _ => _llmRouter.GetSelectedGroqModel()
         };
-    }
-
-    private static IReadOnlyList<string> MergeMemoryNoteNames(IReadOnlyList<string> baseNames, IReadOnlyList<string>? requestNames)
-    {
-        return MemoryNoteSelectionPolicy.MergeNames(baseNames, requestNames);
     }
 
     private async Task<LlmSingleChatResult?> TryFallbackFromGroqRateLimitAsync(string input, CancellationToken cancellationToken)

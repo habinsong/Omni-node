@@ -498,7 +498,7 @@ public sealed partial class CommandService
             }
         }
 
-        var memoryNotes = MergeMemoryNoteNames(Array.Empty<string>(), linkedMemoryNotes);
+        var memoryNotes = MemoryNoteSelectionPolicy.MergeNames(Array.Empty<string>(), linkedMemoryNotes);
         foreach (var noteName in memoryNotes.Take(4))
         {
             var read = _memoryNoteStore.Read(noteName);

@@ -854,6 +854,9 @@ git diff --check
   - `CommandService.Utils.cs` 본문 크기: 2080 → 2045 라인.
 - `scripts/check-security-boundaries.mjs`
   - SanitizePathSegment 위임 위치 검증을 `utils` → `commandServiceCodingWorkspace` 기준으로 갱신했다 (Utils.cs는 더 이상 SanitizePathSegment를 직접 호출하지 않는다).
+- `apps/omninode-middleware/src/CommandService.Utils.cs` (memory note 잔여 wrapper 정리)
+  - 단일 줄 위임 wrapper 2종(`NormalizeExplicitMemoryNoteNames`/`MergeMemoryNoteNames`)을 제거하고 호출처(Utils, SearchPipeline)를 `MemoryNoteSelectionPolicy.NormalizeExplicitNames`/`MemoryNoteSelectionPolicy.MergeNames` 직접 호출로 갱신했다.
+  - `CommandService.Utils.cs` 본문 크기: 2045 → 2035 라인.
 
 검증 결과:
 
