@@ -832,6 +832,9 @@ git diff --check
   - `CommandService.Utils.cs` 본문 크기: 2204 → 2169 라인.
 - `scripts/check-security-boundaries.mjs`
   - 사라진 utils wrapper에 묶여 있던 위임 assertion 5건을 실제 호출 파일(`commandServiceChat`/`commandServiceRoutineManagement`) 기준으로 재정렬했고, 더 이상 호출처가 없는 `GeneratedCodeCandidatePolicy.BuildCodeGenerationPrompt` 위임 assertion은 제거했다 (policy 자체 소유권 assertion은 유지).
+- `apps/omninode-middleware/src/CommandService.CodingWorkspace.cs` (wrapper 정리)
+  - 단일 줄 위임 wrapper 6종(`NormalizeGeneratedActionPath`/`NormalizeRequestedCodingPath`/`CollapseKnownCodingRootPrefixes`/`IsSafeRelativeCodingPath`/`NormalizeGeneratedRunCommand`/`InferFallbackPathForGeneratedCode`)을 제거하고 호출처를 `CodingFallbackPolicy.*` 직접 호출로 갱신했다.
+  - 갱신된 partial: CodingWorkspace, CodingVerification, CodingResultActions, Utils.
 
 검증 결과:
 

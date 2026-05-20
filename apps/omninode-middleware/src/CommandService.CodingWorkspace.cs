@@ -160,7 +160,7 @@ public sealed partial class CommandService
     )
     {
         var normalizedPath = string.IsNullOrWhiteSpace(workspaceRoot)
-            ? NormalizeGeneratedActionPath(path)
+            ? CodingFallbackPolicy.NormalizeGeneratedActionPath(path)
             : NormalizeGeneratedActionPathForWorkspace(path, workspaceRoot);
         if (!string.IsNullOrWhiteSpace(normalizedPath))
         {
@@ -169,41 +169,31 @@ public sealed partial class CommandService
 
         if (actionType == "write_file" || actionType == "append_file")
         {
-            var requestedPath = SelectRequestedCodingPath(requestedPaths, GuessLanguageFromPath(InferFallbackPathForGeneratedCode(content), "auto"), content);
+            var requestedPath = SelectRequestedCodingPath(requestedPaths, GuessLanguageFromPath(CodingFallbackPolicy.InferFallbackPathForGeneratedCode(content), "auto"), content);
             if (!string.IsNullOrWhiteSpace(requestedPath))
             {
                 return requestedPath;
             }
 
-            return InferFallbackPathForGeneratedCode(content);
+            return CodingFallbackPolicy.InferFallbackPathForGeneratedCode(content);
         }
 
         return null;
     }
 
-    private static string NormalizeGeneratedActionPath(string? path)
-    {
-        return CodingFallbackPolicy.NormalizeGeneratedActionPath(path);
-    }
-
-    private static string NormalizeRequestedCodingPath(string? path)
-    {
-        return CodingFallbackPolicy.NormalizeRequestedCodingPath(path);
-    }
-
     private static string NormalizeGeneratedActionPathForWorkspace(string? path, string workspaceRoot)
     {
-        var normalized = NormalizeGeneratedActionPath(path);
+        var normalized = CodingFallbackPolicy.NormalizeGeneratedActionPath(path);
         if (string.IsNullOrWhiteSpace(normalized))
         {
             return string.Empty;
         }
 
-        normalized = CollapseKnownCodingRootPrefixes(normalized);
+        normalized = CodingFallbackPolicy.CollapseKnownCodingRootPrefixes(normalized);
         if (!Path.IsPathRooted(normalized))
         {
             normalized = normalized.Replace('\\', '/').Trim('/');
-            return IsSafeRelativeCodingPath(normalized) ? normalized : string.Empty;
+            return CodingFallbackPolicy.IsSafeRelativeCodingPath(normalized) ? normalized : string.Empty;
         }
 
         try
@@ -220,26 +210,6 @@ public sealed partial class CommandService
         {
             return string.Empty;
         }
-    }
-
-    private static string CollapseKnownCodingRootPrefixes(string path)
-    {
-        return CodingFallbackPolicy.CollapseKnownCodingRootPrefixes(path);
-    }
-
-    private static bool IsSafeRelativeCodingPath(string? path)
-    {
-        return CodingFallbackPolicy.IsSafeRelativeCodingPath(path);
-    }
-
-    private static string NormalizeGeneratedRunCommand(string? command)
-    {
-        return CodingFallbackPolicy.NormalizeGeneratedRunCommand(command);
-    }
-
-    private static string InferFallbackPathForGeneratedCode(string? content)
-    {
-        return CodingFallbackPolicy.InferFallbackPathForGeneratedCode(content);
     }
 
     private static string ResolveWorkspacePath(string workspaceRoot, string? relativeOrAbsolutePath)
@@ -284,7 +254,7 @@ public sealed partial class CommandService
         foreach (Match match in ExplicitShellExecutionCommandRegex.Matches(objectiveText))
         {
             var rawCommand = (match.Groups["cmd"].Value ?? string.Empty).Trim().ToLowerInvariant();
-            var normalizedPath = NormalizeRequestedCodingPath(match.Groups["path"].Value.Replace('\\', '/'));
+            var normalizedPath = CodingFallbackPolicy.NormalizeRequestedCodingPath(match.Groups["path"].Value.Replace('\\', '/'));
             if (string.IsNullOrWhiteSpace(normalizedPath))
             {
                 continue;
@@ -336,7 +306,7 @@ public sealed partial class CommandService
 
         foreach (Match match in ExplicitExecutionTargetRegex.Matches(objectiveText))
         {
-            var normalizedPath = NormalizeRequestedCodingPath(match.Groups["path"].Value.Replace('\\', '/'));
+            var normalizedPath = CodingFallbackPolicy.NormalizeRequestedCodingPath(match.Groups["path"].Value.Replace('\\', '/'));
             if (string.IsNullOrWhiteSpace(normalizedPath))
             {
                 continue;

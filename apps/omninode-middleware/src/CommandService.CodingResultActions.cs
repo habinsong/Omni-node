@@ -218,7 +218,7 @@ public sealed partial class CommandService
             return preferredLaunchCommand;
         }
 
-        var normalizedCommand = NormalizeGeneratedRunCommand(target.Execution.Command);
+        var normalizedCommand = CodingFallbackPolicy.NormalizeGeneratedRunCommand(target.Execution.Command);
         if (IsRunnableCodingExecutionCommand(normalizedCommand))
         {
             return new LatestCodingExecutionCommandPlan(normalizedCommand, normalizedCommand);

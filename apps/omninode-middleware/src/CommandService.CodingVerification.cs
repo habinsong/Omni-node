@@ -12,7 +12,7 @@ public sealed partial class CommandService
         IReadOnlyList<string>? expectedOutputLines = null
     )
     {
-        var normalizedCommand = NormalizeGeneratedRunCommand(command);
+        var normalizedCommand = CodingFallbackPolicy.NormalizeGeneratedRunCommand(command);
         var resolvedExpectedLines = ResolveExpectedOutputAssertionLines(expectedOutput, expectedOutputLines);
         if (string.IsNullOrWhiteSpace(normalizedCommand) || resolvedExpectedLines.Count == 0)
         {
@@ -41,7 +41,7 @@ public sealed partial class CommandService
         IReadOnlyList<string>? expectedOutputLines = null
     )
     {
-        var normalizedCommand = NormalizeGeneratedRunCommand(command);
+        var normalizedCommand = CodingFallbackPolicy.NormalizeGeneratedRunCommand(command);
         var resolvedExpectedLines = ResolveExpectedOutputAssertionLines(expectedOutput, expectedOutputLines);
         var files = (verifiedFiles ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path))
@@ -89,7 +89,7 @@ public sealed partial class CommandService
         IReadOnlyList<string>? expectedOutputLines = null
     )
     {
-        var normalizedCommand = NormalizeGeneratedRunCommand(command);
+        var normalizedCommand = CodingFallbackPolicy.NormalizeGeneratedRunCommand(command);
         var resolvedExpectedLines = ResolveExpectedOutputAssertionLines(expectedOutput, expectedOutputLines);
         if (resolvedExpectedLines.Count == 0)
         {

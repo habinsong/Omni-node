@@ -1113,7 +1113,7 @@ public sealed partial class CommandService
             {
                 if (string.Equals(action.Type, "run", StringComparison.OrdinalIgnoreCase))
                 {
-                    var candidateCommand = NormalizeGeneratedRunCommand(action.Command);
+                    var candidateCommand = CodingFallbackPolicy.NormalizeGeneratedRunCommand(action.Command);
                     if (string.IsNullOrWhiteSpace(candidateCommand))
                     {
                         actionResults.Add("run_deferred:empty_command");
@@ -1448,7 +1448,7 @@ public sealed partial class CommandService
             var expectedOutputLines = ExtractExpectedConsoleOutputLines(objective);
             var finalDisplayCommand = !shouldUseDeferredRunCommand
                 ? BuildVerificationDisplayCommand(currentLanguage, changedFiles, workspaceRoot, objective, requestedPaths, expectedOutput)
-                : DescribeCommandWithExpectedOutput(NormalizeGeneratedRunCommand(deferredRunCommand), expectedOutput, expectedOutputLines);
+                : DescribeCommandWithExpectedOutput(CodingFallbackPolicy.NormalizeGeneratedRunCommand(deferredRunCommand), expectedOutput, expectedOutputLines);
             var finalCommand = !shouldUseDeferredRunCommand
                 ? BuildVerificationCommand(currentLanguage, changedFiles, workspaceRoot, objective, requestedPaths, expectedOutput)
                 : WrapCommandWithExpectedOutputAssertion(deferredRunCommand, expectedOutput, expectedOutputLines);
