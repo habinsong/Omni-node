@@ -221,7 +221,7 @@ public sealed partial class CommandService
         }
         else
         {
-            outputText = SanitizeChatOutput(response.Text, keepMarkdownTables: allowMarkdownTable);
+            outputText = ChatOutputSanitizerPolicy.Sanitize(response.Text, keepMarkdownTables: allowMarkdownTable);
             outputText = SearchAnswerFormatterPolicy.EnsureReadableWebAnswerResponse(outputText, input, allowMarkdownTable);
         }
 
@@ -345,7 +345,7 @@ public sealed partial class CommandService
         }
         else
         {
-            outputText = SanitizeChatOutput(response.Text, keepMarkdownTables: allowMarkdownTable);
+            outputText = ChatOutputSanitizerPolicy.Sanitize(response.Text, keepMarkdownTables: allowMarkdownTable);
             outputText = SearchAnswerFormatterPolicy.EnsureReadableWebAnswerResponse(outputText, input, allowMarkdownTable);
         }
 

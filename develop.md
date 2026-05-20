@@ -64,7 +64,7 @@ git diff --check
 
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 788 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 706
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 704
 - `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
 - `node scripts/check-chat-telegram-contract.mjs`: 통과
 - `node scripts/check-gateway-runtime-contract.mjs`: 통과
@@ -826,6 +826,12 @@ git diff --check
   - 사라진 wrapper 위임 계약을 갱신했다: Groq rate-limit/max-token 검사 위임을 `commandServiceUtils` → `providerRouting` 기준으로 옮기고, `IsPinnedCopilotProvider`/`IsPinnedCopilotModel` 위임을 `commandServiceCoding` 기준으로 옮기고, `LooksLikeStrongFollowupQuestion` 위임 assertion을 ConversationContextPolicy 내부 자체 사용으로 축소했다.
 - `scripts/check-chat-telegram-contract.mjs`
   - 대화탭 공통 맥락 판단 규칙 검증에서 `LooksLikeStrongFollowupQuestion` 직접 참조를 제외하고, `ConversationContextPolicy.LooksLikeExplicitStandaloneQuestion` 직접 호출 + `LooksLikeStandaloneFreshGreeting(input)` 사용 + 공통 맥락 가이드 문구로 기준을 갱신했다.
+- `apps/omninode-middleware/src/CommandService.Utils.cs` (잔여 단일줄 wrapper 정리)
+  - 단일 줄 위임 wrapper 7종(`SanitizeChatOutput`/`BuildMultiComparisonAssistantText`/`ParseMultiSummarySections`/`ParseCodingMultiSummarySections`/`BuildMultiSummaryAssistantText`/`BuildCodeGenerationPrompt`/`ParseCodeCandidate`)을 제거하고 호출처를 `ChatOutputSanitizerPolicy.Sanitize`/`MultiComparisonPolicy.*`/`GeneratedCodeCandidatePolicy.*` 직접 호출로 갱신했다.
+  - 갱신된 partial: Chat, Coding, InputPreparation, ProviderRouting, RoutineManagement, SearchPipeline, Telegram, Telegram.Coding.
+  - `CommandService.Utils.cs` 본문 크기: 2204 → 2169 라인.
+- `scripts/check-security-boundaries.mjs`
+  - 사라진 utils wrapper에 묶여 있던 위임 assertion 5건을 실제 호출 파일(`commandServiceChat`/`commandServiceRoutineManagement`) 기준으로 재정렬했고, 더 이상 호출처가 없는 `GeneratedCodeCandidatePolicy.BuildCodeGenerationPrompt` 위임 assertion은 제거했다 (policy 자체 소유권 assertion은 유지).
 
 검증 결과:
 
@@ -852,7 +858,7 @@ git diff --check
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter TelegramPseudoCommandExecutorTests`: 통과, 7 tests
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "TelegramLlmPreferencePolicyTests|TelegramPseudoCommandExecutorTests"`: 통과, 17 tests
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 788 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 706
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 704
 - `node scripts/check-chat-telegram-contract.mjs`: 통과
 - `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
 - `node scripts/check-gateway-runtime-contract.mjs`: 통과

@@ -499,7 +499,7 @@ public sealed partial class CommandService
             );
         }
 
-        var cleanedSummary = SanitizeChatOutput(summary);
+        var cleanedSummary = ChatOutputSanitizerPolicy.Sanitize(summary);
         if (string.IsNullOrWhiteSpace(cleanedSummary))
         {
             cleanedSummary = "첨부 분석 결과를 생성하지 못했습니다.";
@@ -1776,7 +1776,7 @@ public sealed partial class CommandService
             );
             if (!SearchPromptPolicy.IsGeminiUrlContextFailureText(summaryResponse.Text))
             {
-                var summary = SanitizeChatOutput(summaryResponse.Text);
+                var summary = ChatOutputSanitizerPolicy.Sanitize(summaryResponse.Text);
                 if (!string.IsNullOrWhiteSpace(summary))
                 {
                     return "[URL 참조]\n" + summary.Trim();

@@ -433,12 +433,10 @@ assertIncludes(utils, "ConversationContextPolicy.HasMeaningfulTokenOverlap", "co
 assertIncludes(utils, "ConversationTitlePolicy.ShouldAutoTitle", "command service utils delegates auto-title eligibility");
 assertIncludes(utils, "ConversationTitlePolicy.NormalizeConversationTitle", "command service utils delegates title normalization");
 assertIncludes(utils, "ConversationHistoryPolicy.BuildBudgetedContextHistory", "command service utils delegates history budgeting");
-assertIncludes(utils, "ChatOutputSanitizerPolicy.Sanitize", "command service utils delegates chat output sanitizing");
-assertIncludes(utils, "ChatOutputSanitizerPolicy.RemoveCodeBlocksFromText", "command service utils delegates code block hiding");
-assertIncludes(utils, "MultiComparisonPolicy.BuildComparisonAssistantText", "command service utils delegates comparison message assembly");
-assertIncludes(utils, "MultiComparisonPolicy.ParseMultiSummarySections", "command service utils delegates multi summary parsing");
-assertIncludes(utils, "GeneratedCodeCandidatePolicy.BuildCodeGenerationPrompt", "command service utils delegates code generation prompt");
-assertIncludes(utils, "GeneratedCodeCandidatePolicy.ParseCodeCandidate", "command service utils delegates code candidate parsing");
+assertIncludes(commandServiceChat, "ChatOutputSanitizerPolicy.Sanitize", "command service chat delegates chat output sanitizing");
+assertIncludes(commandServiceChat, "MultiComparisonPolicy.BuildComparisonAssistantText", "command service chat delegates comparison message assembly");
+assertIncludes(commandServiceChat, "MultiComparisonPolicy.ParseMultiSummarySections", "command service chat delegates multi summary parsing");
+assertIncludes(commandServiceRoutineManagement, "GeneratedCodeCandidatePolicy.ParseCodeCandidate", "routine management delegates code candidate parsing");
 assertIncludes(utils, "CodingExecutionSafetyPolicy.ShouldTrustDeferredVerificationCommand", "command service utils delegates deferred verification trust decision");
 assertIncludes(utils, "CodingExecutionSafetyPolicy.IsInteractiveProgramObjective", "command service utils delegates interactive objective detection");
 assertIncludes(utils, "CodingExecutionSafetyPolicy.SanitizePathSegment", "command service utils delegates path segment sanitizing");

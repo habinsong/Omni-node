@@ -703,7 +703,7 @@ public sealed partial class CommandService
             optimizeCodexForCoding: planningProfile.OptimizeCodexCli,
             timeoutOverrideSeconds: planningProfile.RequestTimeoutSeconds
         );
-        var planningText = SanitizeChatOutput(planningGenerated.Text);
+        var planningText = ChatOutputSanitizerPolicy.Sanitize(planningGenerated.Text);
         var planningResult = new CodingWorkerResult(
             planningStage.Provider,
             planningStage.Model,
@@ -1254,11 +1254,11 @@ public sealed partial class CommandService
                 codexWorkingDirectoryOverride: codingRunRoot,
                 optimizeCodexForCoding: string.Equals(aggregateProvider, "codex", StringComparison.OrdinalIgnoreCase)
             );
-            summary = SanitizeChatOutput(summaryResult.Text);
+            summary = ChatOutputSanitizerPolicy.Sanitize(summaryResult.Text);
             summaryTokenUsage = summaryResult.TokenUsage;
         }
 
-        var summarySections = ParseCodingMultiSummarySections(summary);
+        var summarySections = MultiComparisonPolicy.ParseCodingMultiSummarySections(summary);
         var multiSummary = string.IsNullOrWhiteSpace(summarySections.CommonSummary)
             ? "공통 요약을 생성하지 못했습니다."
             : summarySections.CommonSummary;

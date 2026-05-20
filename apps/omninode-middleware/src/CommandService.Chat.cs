@@ -1702,7 +1702,7 @@ public sealed partial class CommandService
         var responseCopilotText = generated.CopilotText;
         var responseCodexText = generated.CodexText;
         var responseSummaryText = generated.Summary;
-        var comparisonMessageText = BuildMultiComparisonAssistantText(new LlmMultiChatResult(
+        var comparisonMessageText = MultiComparisonPolicy.BuildComparisonAssistantText(new LlmMultiChatResult(
             responseGroqText,
             responseGeminiText,
             responseCerebrasText,
@@ -1721,7 +1721,7 @@ public sealed partial class CommandService
             responseNvidiaText,
             generated.NvidiaModel
         ));
-        var summaryMessageText = BuildMultiSummaryAssistantText(
+        var summaryMessageText = MultiComparisonPolicy.BuildMultiSummaryAssistantText(
             responseSummaryText,
             generated.CommonCore,
             generated.Differences
@@ -1804,7 +1804,7 @@ public sealed partial class CommandService
             maxOutputTokens,
             streamCallback: streamCallback
         );
-        var cleaned = SanitizeChatOutput(generated.Text);
+        var cleaned = ChatOutputSanitizerPolicy.Sanitize(generated.Text);
         _auditLogger.Log(source, "chat_single", "ok", $"provider={generated.Provider} model={generated.Model}");
         return generated with { Text = cleaned };
     }
@@ -1899,7 +1899,7 @@ public sealed partial class CommandService
             .Select(x =>
             {
                 var result = x.Task.Result;
-                return result with { Text = SanitizeChatOutput(result.Text) };
+                return result with { Text = ChatOutputSanitizerPolicy.Sanitize(result.Text) };
             })
             .ToList();
         var availabilityByProvider = await GetProviderAvailabilityMapAsync(cancellationToken);
@@ -1953,7 +1953,7 @@ public sealed partial class CommandService
             aggregatePrompt,
             cancellationToken
         );
-        var cleanedFinal = SanitizeChatOutput(finalResult.Text);
+        var cleanedFinal = ChatOutputSanitizerPolicy.Sanitize(finalResult.Text);
 
         var workerRoute = string.Join(
             ",",
@@ -2060,12 +2060,12 @@ public sealed partial class CommandService
         await Task.WhenAll(groqTask, geminiTask, cerebrasTask, nvidiaTask, copilotTask, codexTask);
         var workerResults = new[]
         {
-            groqTask.Result with { Text = SanitizeChatOutput(groqTask.Result.Text) },
-            geminiTask.Result with { Text = SanitizeChatOutput(geminiTask.Result.Text) },
-            cerebrasTask.Result with { Text = SanitizeChatOutput(cerebrasTask.Result.Text) },
-            nvidiaTask.Result with { Text = SanitizeChatOutput(nvidiaTask.Result.Text) },
-            copilotTask.Result with { Text = SanitizeChatOutput(copilotTask.Result.Text) },
-            codexTask.Result with { Text = SanitizeChatOutput(codexTask.Result.Text) }
+            groqTask.Result with { Text = ChatOutputSanitizerPolicy.Sanitize(groqTask.Result.Text) },
+            geminiTask.Result with { Text = ChatOutputSanitizerPolicy.Sanitize(geminiTask.Result.Text) },
+            cerebrasTask.Result with { Text = ChatOutputSanitizerPolicy.Sanitize(cerebrasTask.Result.Text) },
+            nvidiaTask.Result with { Text = ChatOutputSanitizerPolicy.Sanitize(nvidiaTask.Result.Text) },
+            copilotTask.Result with { Text = ChatOutputSanitizerPolicy.Sanitize(copilotTask.Result.Text) },
+            codexTask.Result with { Text = ChatOutputSanitizerPolicy.Sanitize(codexTask.Result.Text) }
         };
         var availabilityByProvider = await GetProviderAvailabilityMapAsync(cancellationToken);
         var selectionByProvider = BuildProviderSelectionMap(groqModel, geminiModel, cerebrasModel, copilotModel, codexModel, nvidiaModel);
@@ -2135,10 +2135,10 @@ public sealed partial class CommandService
         else
         {
             var summaryResult = await GenerateByProviderSafeAsync(resolvedSummaryProvider, null, summaryPrompt, cancellationToken);
-            summary = SanitizeChatOutput(summaryResult.Text);
+            summary = ChatOutputSanitizerPolicy.Sanitize(summaryResult.Text);
             summaryTokenUsage = summaryResult.TokenUsage;
         }
-        var summarySections = ParseMultiSummarySections(summary);
+        var summarySections = MultiComparisonPolicy.ParseMultiSummarySections(summary);
 
         _auditLogger.Log(source, "chat_multi", "ok", $"groq={groqSelected} nvidia={nvidiaSelected} cerebras={cerebrasSelected} copilot={copilotSelected} codex={codexSelected} summary={resolvedSummaryProvider}");
         return new LlmMultiChatResult(

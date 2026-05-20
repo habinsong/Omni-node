@@ -608,7 +608,7 @@ public sealed partial class CommandService
             }
 
             var merged = string.Join("\n\n", chunks);
-            var parsed = ParseCodeCandidate(merged, "bash");
+            var parsed = GeneratedCodeCandidatePolicy.ParseCodeCandidate(merged, "bash");
             var language = parsed.Language is "bash" or "python" ? parsed.Language : "bash";
             var code = string.IsNullOrWhiteSpace(parsed.Code)
                 ? string.Empty
@@ -644,7 +644,7 @@ public sealed partial class CommandService
         }
 
         var single = await GenerateByProviderSafeAsync("groq", strategy.Models[0], objective, cancellationToken, Math.Min(_context.CodingMaxOutputTokens, 4200));
-        var singleParsed = ParseCodeCandidate(single.Text, "bash");
+        var singleParsed = GeneratedCodeCandidatePolicy.ParseCodeCandidate(single.Text, "bash");
         var singleLanguage = singleParsed.Language is "bash" or "python" ? singleParsed.Language : "bash";
         var singleCode = string.IsNullOrWhiteSpace(singleParsed.Code)
             ? string.Empty
@@ -1442,7 +1442,7 @@ public sealed partial class CommandService
             cancellationToken,
             Math.Min(_context.CodingMaxOutputTokens, 4200)
         );
-        var reparsed = ParseCodeCandidate(regenerated.Text, "bash");
+        var reparsed = GeneratedCodeCandidatePolicy.ParseCodeCandidate(regenerated.Text, "bash");
         var repairedLanguage = reparsed.Language is "bash" or "python" ? reparsed.Language : "bash";
         var repairedCode = string.IsNullOrWhiteSpace(reparsed.Code)
             ? string.Empty

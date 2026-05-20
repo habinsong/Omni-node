@@ -335,7 +335,7 @@ public sealed partial class CommandService
                 effectiveMaxTokens,
                 streamCallback: i == 0 ? streamCallback : null
             );
-            var cleaned = SanitizeChatOutput(generated.Text);
+            var cleaned = ChatOutputSanitizerPolicy.Sanitize(generated.Text);
             if (!GroqPromptPolicy.IsRateLimitResponse(cleaned))
             {
                 return generated with { Provider = "groq", Text = cleaned };

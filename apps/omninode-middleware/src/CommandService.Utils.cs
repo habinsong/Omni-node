@@ -680,41 +680,6 @@ public sealed partial class CommandService
         return CodingQualityBriefPolicy.Build(objective, languageHint, IsFrontendLikeCodingTask, IsGameLikeCodingTask);
     }
 
-    private static string SanitizeChatOutput(string text, bool keepMarkdownTables = false)
-    {
-        return ChatOutputSanitizerPolicy.Sanitize(text, keepMarkdownTables);
-    }
-
-    private static string BuildMultiComparisonAssistantText(LlmMultiChatResult result)
-    {
-        return MultiComparisonPolicy.BuildComparisonAssistantText(result);
-    }
-
-    private static (string CommonSummary, string CommonCore, string Differences) ParseMultiSummarySections(string text)
-    {
-        return MultiComparisonPolicy.ParseMultiSummarySections(text);
-    }
-
-    private static (string CommonSummary, string CommonPoints, string Differences, string Recommendation) ParseCodingMultiSummarySections(string text)
-    {
-        return MultiComparisonPolicy.ParseCodingMultiSummarySections(text);
-    }
-
-    private static string BuildMultiSummaryAssistantText(string commonSummary, string commonCore, string differences)
-    {
-        return MultiComparisonPolicy.BuildMultiSummaryAssistantText(commonSummary, commonCore, differences);
-    }
-
-    private static string BuildCodeGenerationPrompt(string input, string languageHint, string modeLabel)
-    {
-        return GeneratedCodeCandidatePolicy.BuildCodeGenerationPrompt(input, languageHint, modeLabel);
-    }
-
-    private static ParsedCode ParseCodeCandidate(string text, string languageHint)
-    {
-        return GeneratedCodeCandidatePolicy.ParseCodeCandidate(text, languageHint);
-    }
-
     private async Task<CodingWorkerResult> RunCodingWorkerAsync(
         string provider,
         string model,

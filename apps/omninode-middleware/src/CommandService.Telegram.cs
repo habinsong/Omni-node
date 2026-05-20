@@ -1925,7 +1925,7 @@ public sealed partial class CommandService
             maxTokens,
             streamCallback
         );
-        return new LlmSingleChatResult(generated.Provider, generated.Model, SanitizeChatOutput(generated.Text));
+        return new LlmSingleChatResult(generated.Provider, generated.Model, ChatOutputSanitizerPolicy.Sanitize(generated.Text));
     }
 
     private async Task<string> PrepareTelegramInputAsync(
@@ -1956,12 +1956,12 @@ public sealed partial class CommandService
                 cancellationToken,
                 700
             );
-            compressed = SanitizeChatOutput(groq.Text);
+            compressed = ChatOutputSanitizerPolicy.Sanitize(groq.Text);
         }
         else if (_llmRouter.HasGeminiApiKey())
         {
             var gemini = await GenerateByProviderSafeAsync("gemini", _providers.GeminiModel, compressionPrompt, cancellationToken, 700);
-            compressed = SanitizeChatOutput(gemini.Text);
+            compressed = ChatOutputSanitizerPolicy.Sanitize(gemini.Text);
         }
         else
         {
@@ -2248,7 +2248,7 @@ public sealed partial class CommandService
         }
 
         const bool keepMarkdownTables = true;
-        var sanitized = SanitizeChatOutput(text, keepMarkdownTables: keepMarkdownTables);
+        var sanitized = ChatOutputSanitizerPolicy.Sanitize(text, keepMarkdownTables: keepMarkdownTables);
         return TelegramResponseFormatterPolicy.FormatSanitizedResponse(
             sanitized,
             maxChars,
