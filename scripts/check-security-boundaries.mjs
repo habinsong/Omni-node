@@ -155,6 +155,7 @@ const commandServiceLogicGraphs = read("apps/omninode-middleware/src/CommandServ
 const codingOrchestrationPromptPolicy = read("apps/omninode-middleware/src/CodingOrchestrationPromptPolicy.cs");
 const commandServiceCoding = read("apps/omninode-middleware/src/CommandService.Coding.cs");
 const commandServiceCodingProfiles = read("apps/omninode-middleware/src/CommandService.CodingProfiles.cs");
+const commandServiceCodingWorkspace = read("apps/omninode-middleware/src/CommandService.CodingWorkspace.cs");
 const textOutputTruncator = read("apps/omninode-middleware/src/TextOutputTruncator.cs");
 const commandServiceTelegram = read("apps/omninode-middleware/src/CommandService.Telegram.cs");
 const codingWorkerSelectionPolicy = read("apps/omninode-middleware/src/CodingWorkerSelectionPolicy.cs");
@@ -440,7 +441,7 @@ assertIncludes(commandServiceChat, "MultiComparisonPolicy.ParseMultiSummarySecti
 assertIncludes(commandServiceRoutineManagement, "GeneratedCodeCandidatePolicy.ParseCodeCandidate", "routine management delegates code candidate parsing");
 assertIncludes(utils, "CodingExecutionSafetyPolicy.ShouldTrustDeferredVerificationCommand", "command service utils delegates deferred verification trust decision");
 assertIncludes(utils, "CodingExecutionSafetyPolicy.IsInteractiveProgramObjective", "command service utils delegates interactive objective detection");
-assertIncludes(utils, "CodingExecutionSafetyPolicy.SanitizePathSegment", "command service utils delegates path segment sanitizing");
+assertIncludes(commandServiceCodingWorkspace, "CodingExecutionSafetyPolicy.SanitizePathSegment", "command service coding workspace delegates path segment sanitizing");
 assertIncludes(utils, "CodingExecutionSafetyPolicy.IsDangerousGeneratedRunCommand", "command service utils delegates dangerous generated command detection");
 assertNotIncludes(utils, "private static bool ShouldAutoTitle(", "command service utils no longer owns auto-title eligibility");
 assertNotIncludes(utils, "private static string BuildBudgetedContextHistory(", "command service utils no longer owns context history budgeting");

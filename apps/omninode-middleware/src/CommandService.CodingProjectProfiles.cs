@@ -31,7 +31,7 @@ public sealed partial class CommandService
         if (language == "auto" && requestedPaths != null)
         {
             var pathLanguage = requestedPaths
-                .Select(path => GuessLanguageFromPath(path, "auto"))
+                .Select(path => CodingLanguagePolicy.GuessLanguageFromPath(path, "auto"))
                 .FirstOrDefault(value => value != "auto");
             if (!string.IsNullOrWhiteSpace(pathLanguage))
             {

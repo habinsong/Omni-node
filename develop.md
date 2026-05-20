@@ -1,6 +1,6 @@
 # Omni-node 개발 현황 분석
 
-최종 업데이트: 2026-05-20
+최종 업데이트: 2026-05-21
 
 ## 기준
 
@@ -848,6 +848,12 @@ git diff --check
   - `CommandService.SearchPipeline.cs` 본문 크기: 874 → 854 라인, `CommandService.Utils.cs` 본문 크기: 2169 → 2080 라인.
 - `scripts/check-security-boundaries.mjs`
   - 사라진 utils wrapper에 묶여 있던 위임 assertion 4건(`ExtractLatestCodingRequestText`/`BuildTextVariants`/`NormalizeJsonCandidate`/`NormalizeGeneratedFileContent`/`ExtractLanguagePrefixedPlainCode`)을 실제 호출 파일(`commandServiceCodingQuality`/`commandServiceCodingProfiles`) 기준으로 재정렬하거나 더 이상 호출처가 없는 항목은 제거했다.
+- `apps/omninode-middleware/src/CommandService.Utils.cs` (path/safety/progress 잔여 wrapper 정리)
+  - 단일 줄 위임 wrapper 7종(`SanitizePathSegment`/`IsDangerousGeneratedRunCommand`/`BuildCodingObjectiveProgressDetail`/`BuildWorkspaceProgressDetail`/`BuildCodingPlanProgressDetail`/`BuildCodingWriteProgressDetail`/`GuessLanguageFromPath`)를 제거하고 호출처를 `CodingExecutionSafetyPolicy.*`/`CodingProgressPolicy.*`/`CodingLanguagePolicy.*` 직접 호출로 갱신했다.
+  - 갱신된 partial: Utils, CodingProjectProfiles, CodingWorkspace.
+  - `CommandService.Utils.cs` 본문 크기: 2080 → 2045 라인.
+- `scripts/check-security-boundaries.mjs`
+  - SanitizePathSegment 위임 위치 검증을 `utils` → `commandServiceCodingWorkspace` 기준으로 갱신했다 (Utils.cs는 더 이상 SanitizePathSegment를 직접 호출하지 않는다).
 
 검증 결과:
 

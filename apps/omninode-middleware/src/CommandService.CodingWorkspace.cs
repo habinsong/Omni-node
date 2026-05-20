@@ -106,7 +106,7 @@ public sealed partial class CommandService
         var runsRoot = Path.Combine(workspaceRoot, "runs");
         Directory.CreateDirectory(runsRoot);
 
-        var safeMode = SanitizePathSegment((modeLabel ?? string.Empty).ToLowerInvariant());
+        var safeMode = CodingExecutionSafetyPolicy.SanitizePathSegment((modeLabel ?? string.Empty).ToLowerInvariant());
         if (string.IsNullOrWhiteSpace(safeMode))
         {
             safeMode = "coding";
@@ -169,7 +169,7 @@ public sealed partial class CommandService
 
         if (actionType == "write_file" || actionType == "append_file")
         {
-            var requestedPath = CodingFallbackPolicy.SelectRequestedCodingPath(requestedPaths, GuessLanguageFromPath(CodingFallbackPolicy.InferFallbackPathForGeneratedCode(content), "auto"), content);
+            var requestedPath = CodingFallbackPolicy.SelectRequestedCodingPath(requestedPaths, CodingLanguagePolicy.GuessLanguageFromPath(CodingFallbackPolicy.InferFallbackPathForGeneratedCode(content), "auto"), content);
             if (!string.IsNullOrWhiteSpace(requestedPath))
             {
                 return requestedPath;

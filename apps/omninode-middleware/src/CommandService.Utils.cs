@@ -867,7 +867,7 @@ public sealed partial class CommandService
             false,
             "request",
             "요청 분석",
-            BuildCodingObjectiveProgressDetail(objective, languageHint),
+            CodingProgressPolicy.BuildObjectiveDetail(objective, languageHint),
             1,
             VisibleCodingStageTotal
         ));
@@ -885,7 +885,7 @@ public sealed partial class CommandService
             false,
             "workspace",
             "작업공간 점검",
-            BuildWorkspaceProgressDetail(initialSnapshot),
+            CodingProgressPolicy.BuildWorkspaceDetail(initialSnapshot),
             2,
             VisibleCodingStageTotal
         ));
@@ -1068,7 +1068,7 @@ public sealed partial class CommandService
                 false,
                 "planning",
                 "구현 계획",
-                BuildCodingPlanProgressDetail(plan, actions, actions.Any(action => string.Equals(action.Type, "run", StringComparison.OrdinalIgnoreCase))),
+                CodingProgressPolicy.BuildPlanDetail(plan, actions, actions.Any(action => string.Equals(action.Type, "run", StringComparison.OrdinalIgnoreCase))),
                 3,
                 VisibleCodingStageTotal
             ));
@@ -1118,7 +1118,7 @@ public sealed partial class CommandService
                     {
                         actionResults.Add("run_deferred:empty_command");
                     }
-                    else if (IsDangerousGeneratedRunCommand(candidateCommand))
+                    else if (CodingExecutionSafetyPolicy.IsDangerousGeneratedRunCommand(candidateCommand))
                     {
                         actionResults.Add($"run_blocked_unsafe:{TrimForOutput(candidateCommand, 120)}");
                     }
@@ -1147,7 +1147,7 @@ public sealed partial class CommandService
                 if (!string.IsNullOrWhiteSpace(exec.CodePreview))
                 {
                     lastCode = exec.CodePreview;
-                    currentLanguage = GuessLanguageFromPath(exec.LastWrittenFile, currentLanguage);
+                    currentLanguage = CodingLanguagePolicy.GuessLanguageFromPath(exec.LastWrittenFile, currentLanguage);
                 }
 
                 if (exec.Changed && !string.IsNullOrWhiteSpace(exec.ChangedPath))
@@ -1170,7 +1170,7 @@ public sealed partial class CommandService
                 false,
                 "writing",
                 "파일 생성 및 수정",
-                BuildCodingWriteProgressDetail(iterationChangedPaths, hasDeferredRunAction),
+                CodingProgressPolicy.BuildWriteDetail(iterationChangedPaths, hasDeferredRunAction),
                 4,
                 VisibleCodingStageTotal
             ));
@@ -1413,7 +1413,7 @@ public sealed partial class CommandService
             if (!string.IsNullOrWhiteSpace(preferredRecoveredPath))
             {
                 lastWritePath = preferredRecoveredPath;
-                currentLanguage = GuessLanguageFromPath(lastWritePath, currentLanguage);
+                currentLanguage = CodingLanguagePolicy.GuessLanguageFromPath(lastWritePath, currentLanguage);
             }
 
             iterations.Add(changedFiles.Count == workspaceRecoveredCount
@@ -1554,7 +1554,7 @@ public sealed partial class CommandService
                 changedFiles.Add(deterministicRepair.ChangedPath);
                 lastWritePath = deterministicRepair.ChangedPath;
                 lastCode = deterministicRepair.Code;
-                currentLanguage = GuessLanguageFromPath(deterministicRepair.ChangedPath, currentLanguage);
+                currentLanguage = CodingLanguagePolicy.GuessLanguageFromPath(deterministicRepair.ChangedPath, currentLanguage);
                 lastExecution = deterministicRepair.Execution;
                 iterations.Add("deterministic_repair=single_file_output");
                 progressCallback?.Invoke(BuildCodingProgressUpdate(
@@ -1868,16 +1868,6 @@ public sealed partial class CommandService
         return CodingDeterministicScaffoldPolicy.TryGenerateWebShooterScaffold(objective, languageHint, out files);
     }
 
-    private static string SanitizePathSegment(string raw)
-    {
-        return CodingExecutionSafetyPolicy.SanitizePathSegment(raw);
-    }
-
-    private static bool IsDangerousGeneratedRunCommand(string? command)
-    {
-        return CodingExecutionSafetyPolicy.IsDangerousGeneratedRunCommand(command);
-    }
-
     private const int VisibleCodingStageTotal = 6;
     private const int MaxCodingRepairPasses = 1;
 
@@ -1926,26 +1916,6 @@ public sealed partial class CommandService
             stageIndex,
             stageTotal
         );
-    }
-
-    private static string BuildCodingObjectiveProgressDetail(string objective, string languageHint)
-    {
-        return CodingProgressPolicy.BuildObjectiveDetail(objective, languageHint);
-    }
-
-    private static string BuildWorkspaceProgressDetail(string workspaceSnapshot)
-    {
-        return CodingProgressPolicy.BuildWorkspaceDetail(workspaceSnapshot);
-    }
-
-    private static string BuildCodingPlanProgressDetail(CodingLoopPlan plan, IReadOnlyList<CodingLoopAction> actions, bool hasDeferredRunAction)
-    {
-        return CodingProgressPolicy.BuildPlanDetail(plan, actions, hasDeferredRunAction);
-    }
-
-    private static string BuildCodingWriteProgressDetail(IReadOnlyCollection<string> changedPaths, bool hasDeferredRunAction)
-    {
-        return CodingProgressPolicy.BuildWriteDetail(changedPaths, hasDeferredRunAction);
     }
 
     private string BuildCodingLoopPrompt(
@@ -2015,11 +1985,6 @@ public sealed partial class CommandService
         }
 
         return value.ValueKind == JsonValueKind.String ? value.GetString() : value.ToString();
-    }
-
-    private static string GuessLanguageFromPath(string path, string fallback)
-    {
-        return CodingLanguagePolicy.GuessLanguageFromPath(path, fallback);
     }
 
     private static string BuildOrchestrationCodingAggregatePrompt(
