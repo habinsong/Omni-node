@@ -477,7 +477,7 @@ public sealed partial class CommandService
                 "orchestration" => _telegramCodingPreferences.OrchestrationProvider,
                 _ => _telegramCodingPreferences.MultiProvider
             };
-            if (IsPinnedCopilotProvider(targetProvider))
+            if (ProviderModelSelectionPolicy.IsPinnedCopilotProvider(targetProvider))
             {
                 normalizedModel = DefaultCopilotModel;
             }
@@ -513,7 +513,7 @@ public sealed partial class CommandService
             return "사용법: /coding <orchestration|multi> worker <groq|gemini|copilot|cerebras|codex> <model-id|none>";
         }
 
-        if (IsPinnedCopilotProvider(normalizedProvider) && !string.Equals(normalizedModel, "none", StringComparison.OrdinalIgnoreCase))
+        if (ProviderModelSelectionPolicy.IsPinnedCopilotProvider(normalizedProvider) && !string.Equals(normalizedModel, "none", StringComparison.OrdinalIgnoreCase))
         {
             normalizedModel = DefaultCopilotModel;
         }

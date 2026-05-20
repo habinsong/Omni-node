@@ -777,7 +777,7 @@ public sealed partial class CommandService
             return false;
         }
 
-        return LooksLikeListOutputRequest(input);
+        return SearchQueryPolicy.LooksLikeListOutputRequest(input);
     }
 
     private static bool TryGetPropertyIgnoreCase(JsonElement element, string propertyName, out JsonElement value)

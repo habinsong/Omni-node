@@ -427,7 +427,6 @@ assertIncludes(codingExecutionSafetyPolicy, "LooksLikeFilePathForDirectoryAction
 assertIncludes(codingExecutionSafetyPolicy, "IsDangerousGeneratedRunCommand", "coding execution safety policy owns dangerous generated command detection");
 assertIncludes(codingExecutionSafetyPolicy, "DangerousGeneratedRunCommandRegex", "coding execution safety policy owns dangerous generated command regex");
 assertIncludes(utils, "ConversationContextPolicy.ShouldUsePriorConversationContext", "command service utils delegates prior-context decision");
-assertIncludes(utils, "ConversationContextPolicy.LooksLikeStrongFollowupQuestion", "command service utils delegates strong follow-up detection");
 assertIncludes(utils, "ConversationContextPolicy.LooksLikeExplicitStandaloneQuestion", "command service utils delegates standalone question detection");
 assertIncludes(utils, "ConversationContextPolicy.ExtractContextTokens", "command service utils delegates token extraction");
 assertIncludes(utils, "ConversationContextPolicy.HasMeaningfulTokenOverlap", "command service utils delegates token overlap");
@@ -504,11 +503,10 @@ assertIncludes(utils, "CodingDeterministicScaffoldPolicy.TryGenerateUiCloneScaff
 assertIncludes(utils, "CodingDeterministicScaffoldPolicy.TryGenerateWebShooterScaffold", "command service utils delegates web shooter scaffold generation");
 assertIncludes(utils, "CodingArtifactCleanupPolicy.CleanupRedundantSingleFileArtifacts", "command service utils delegates redundant artifact cleanup");
 assertIncludes(utils, "CodingFallbackDecisionPolicy.ShouldPreferFileBundleFallback", "command service utils delegates file-bundle fallback decision");
-assertIncludes(utils, "GroqPromptPolicy.IsRateLimitResponse", "command service utils delegates groq rate-limit response detection");
-assertIncludes(utils, "GroqPromptPolicy.IsMaxTokensResponse", "command service utils delegates groq max-token response detection");
-assertIncludes(utils, "ProviderModelSelectionPolicy.IsPinnedCopilotProvider", "command service utils delegates pinned copilot provider detection");
+assertIncludes(providerRouting, "GroqPromptPolicy.IsRateLimitResponse", "provider routing delegates groq rate-limit response detection");
+assertIncludes(providerRouting, "GroqPromptPolicy.IsMaxTokensResponse", "provider routing delegates groq max-token response detection");
 assertIncludes(utils, "ProviderModelSelectionPolicy.NormalizePinnedProviderModelSelection", "command service utils delegates pinned provider model normalization");
-assertIncludes(utils, "ProviderModelSelectionPolicy.IsPinnedCopilotModel", "command service utils delegates pinned copilot model detection");
+assertIncludes(commandServiceCoding, "ProviderModelSelectionPolicy.IsPinnedCopilotModel", "command service coding delegates pinned copilot model detection");
 assertIncludes(utils, "MemoryNoteSelectionPolicy.NormalizeExplicitNames", "command service utils delegates explicit memory note normalization");
 assertIncludes(utils, "MemoryNoteSelectionPolicy.MergeNames", "command service utils delegates memory note merge");
 assertIncludes(read("apps/omninode-middleware/src/CommandService.CodingProfiles.cs"), "CodingLoopTuningPolicy.ShouldUseOneShotMode", "coding profiles delegate one-shot decision to loop tuning policy");

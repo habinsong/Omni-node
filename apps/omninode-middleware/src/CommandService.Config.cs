@@ -1905,14 +1905,14 @@ public sealed partial class CommandService
             return false;
         }
 
-        return LooksLikeListOutputRequest(normalized)
+        return SearchQueryPolicy.LooksLikeListOutputRequest(normalized)
             && ContainsAny(normalized, "뉴스", "news", "헤드라인", "속보", "브리핑");
     }
 
     private static bool ShouldRunEmergencyNewsRecoveryQuery(string query, string reason)
     {
         var normalizedQuery = (query ?? string.Empty).Trim().ToLowerInvariant();
-        if (normalizedQuery.Length == 0 || !LooksLikeListOutputRequest(normalizedQuery))
+        if (normalizedQuery.Length == 0 || !SearchQueryPolicy.LooksLikeListOutputRequest(normalizedQuery))
         {
             return false;
         }
@@ -1949,7 +1949,7 @@ public sealed partial class CommandService
     private static bool ShouldUseGlobalNewsFeedFallback(string query, string reason)
     {
         var normalizedQuery = (query ?? string.Empty).Trim().ToLowerInvariant();
-        if (normalizedQuery.Length == 0 || !LooksLikeListOutputRequest(normalizedQuery))
+        if (normalizedQuery.Length == 0 || !SearchQueryPolicy.LooksLikeListOutputRequest(normalizedQuery))
         {
             return false;
         }

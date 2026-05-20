@@ -64,7 +64,7 @@ git diff --check
 
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 788 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 708
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 706
 - `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
 - `node scripts/check-chat-telegram-contract.mjs`: 통과
 - `node scripts/check-gateway-runtime-contract.mjs`: 통과
@@ -816,6 +816,16 @@ git diff --check
   - `CommandService.SearchPipeline.cs` 본문 크기: 994 → 874 라인.
 - `scripts/check-chat-telegram-contract.mjs`
   - `LooksLikeStandaloneFreshGreeting` 위임 위치 검증을 `commandServiceSearchPipeline` 기준에서 `commandServiceUtils` 기준으로 갱신했다 (현재 호출처 두 곳 모두 `CommandService.Utils` 안에 있음).
+- `apps/omninode-middleware/src/CommandService.{Utils,Citations,InputPreparation,Config,SearchPipeline,Telegram,WebResultSelection,ProviderRouting,Coding,CodingProfiles}.cs` (wrapper 정리)
+  - `CommandService.Citations`의 `LooksLikeListOutputRequest`/`LooksLikeTableRenderRequest` 2종 wrapper를 제거하고 호출처를 `SearchQueryPolicy` 직접 호출로 정리했다.
+  - `CommandService.Utils`의 단일 줄 위임 wrapper 11종(`ShouldUsePriorConversationContext`/`LooksLikeStrongFollowupQuestion`/`LooksLikeExplicitStandaloneQuestion`/`HasMeaningfulTokenOverlap`/`ExtractContextTokens`/`NormalizeContextToken`/`IsContextStopToken`/`IsPinnedCopilotProvider`/`NormalizePinnedProviderModelSelection`/`IsPinnedCopilotModel`/`IsGroqRateLimitResponse`/`IsGroqMaxTokensResponse`)를 제거했다.
+  - InputPreparation/Config/SearchPipeline/Telegram/WebResultSelection/ProviderRouting/Coding/CodingProfiles의 호출처를 `ConversationContextPolicy.*`/`ProviderModelSelectionPolicy.*`/`GroqPromptPolicy.*`/`SearchQueryPolicy.*` 직접 호출로 일괄 갱신했다.
+  - `ProviderModelSelectionPolicy.NormalizePinnedProviderModelSelection` 호출에는 `DefaultCopilotModel`과 `NormalizeModelSelection`을 명시 인자로 전달하도록 정리했다.
+  - `CommandService.Utils.cs` 본문 크기: 2268 → 2204 라인, `CommandService.Citations.cs` 본문 크기: 1591 → 1578 라인.
+- `scripts/check-security-boundaries.mjs`
+  - 사라진 wrapper 위임 계약을 갱신했다: Groq rate-limit/max-token 검사 위임을 `commandServiceUtils` → `providerRouting` 기준으로 옮기고, `IsPinnedCopilotProvider`/`IsPinnedCopilotModel` 위임을 `commandServiceCoding` 기준으로 옮기고, `LooksLikeStrongFollowupQuestion` 위임 assertion을 ConversationContextPolicy 내부 자체 사용으로 축소했다.
+- `scripts/check-chat-telegram-contract.mjs`
+  - 대화탭 공통 맥락 판단 규칙 검증에서 `LooksLikeStrongFollowupQuestion` 직접 참조를 제외하고, `ConversationContextPolicy.LooksLikeExplicitStandaloneQuestion` 직접 호출 + `LooksLikeStandaloneFreshGreeting(input)` 사용 + 공통 맥락 가이드 문구로 기준을 갱신했다.
 
 검증 결과:
 
@@ -842,7 +852,7 @@ git diff --check
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter TelegramPseudoCommandExecutorTests`: 통과, 7 tests
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "TelegramLlmPreferencePolicyTests|TelegramPseudoCommandExecutorTests"`: 통과, 17 tests
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 788 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 708
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 706
 - `node scripts/check-chat-telegram-contract.mjs`: 통과
 - `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
 - `node scripts/check-gateway-runtime-contract.mjs`: 통과

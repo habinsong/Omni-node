@@ -425,7 +425,7 @@ public sealed partial class CommandService
         var normalizedResponse = (responseText ?? string.Empty).Trim();
         if (citations == null || citations.Count == 0)
         {
-            if (LooksLikeListOutputRequest(input))
+            if (SearchQueryPolicy.LooksLikeListOutputRequest(input))
             {
                 return ApplyHighRiskFactualGuardFallback(
                     input,
@@ -436,7 +436,7 @@ public sealed partial class CommandService
             return ApplyHighRiskFactualGuardFallback(input, normalizedResponse);
         }
 
-        if (!LooksLikeListOutputRequest(input))
+        if (!SearchQueryPolicy.LooksLikeListOutputRequest(input))
         {
             return ApplyHighRiskFactualGuardFallback(input, normalizedResponse);
         }
@@ -542,7 +542,7 @@ public sealed partial class CommandService
             );
         }
 
-        var tableMode = LooksLikeTableRenderRequest(input);
+        var tableMode = SearchQueryPolicy.LooksLikeTableRenderRequest(input);
         var builder = new StringBuilder();
         if (tableMode)
         {
@@ -1381,16 +1381,6 @@ public sealed partial class CommandService
 
         return normalized.Equals("vietnam.vn", StringComparison.Ordinal)
             || normalized.EndsWith(".vietnam.vn", StringComparison.Ordinal);
-    }
-
-    private static bool LooksLikeListOutputRequest(string input)
-    {
-        return SearchQueryPolicy.LooksLikeListOutputRequest(input);
-    }
-
-    private static bool LooksLikeTableRenderRequest(string input)
-    {
-        return SearchQueryPolicy.LooksLikeTableRenderRequest(input);
     }
 
     private static int CountListItemsInResponse(string responseText)

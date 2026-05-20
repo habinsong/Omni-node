@@ -879,7 +879,7 @@ public sealed partial class CommandService
 
     private static bool ShouldUseForcedMemoryContext(string input)
     {
-        return ShouldUsePriorConversationContext(input, out _)
+        return ConversationContextPolicy.ShouldUsePriorConversationContext(input, out _)
             || ContainsAny(
                 (input ?? string.Empty).Trim().ToLowerInvariant(),
                 "rag",
@@ -952,9 +952,9 @@ public sealed partial class CommandService
             return false;
         }
 
-        var queryTokens = ExtractContextTokens(query);
-        var resultTokens = ExtractContextTokens($"{top.Path}\n{top.Snippet}");
-        return HasMeaningfulTokenOverlap(queryTokens, resultTokens);
+        var queryTokens = ConversationContextPolicy.ExtractContextTokens(query);
+        var resultTokens = ConversationContextPolicy.ExtractContextTokens($"{top.Path}\n{top.Snippet}");
+        return ConversationContextPolicy.HasMeaningfulTokenOverlap(queryTokens, resultTokens);
     }
 
     private static bool LooksLikeProjectContextRequest(string input)
@@ -1071,8 +1071,8 @@ public sealed partial class CommandService
         var normalizedQuery = (query ?? string.Empty).Trim();
         var loweredQuery = normalizedQuery.ToLowerInvariant();
         var normalizedRequestedCount = Math.Clamp(requestedCount, 1, 10);
-        var tableMode = LooksLikeTableRenderRequest(normalizedQuery);
-        var listMode = LooksLikeListOutputRequest(normalizedQuery);
+        var tableMode = SearchQueryPolicy.LooksLikeTableRenderRequest(normalizedQuery);
+        var listMode = SearchQueryPolicy.LooksLikeListOutputRequest(normalizedQuery);
         var newsMode = ContainsAny(loweredQuery, "뉴스", "news", "헤드라인", "속보", "브리핑");
         return "[response_format_rule]\n"
             + "- 아래 web_search 항목에 있는 사실만 사용해 답변하세요.\n"

@@ -34,7 +34,7 @@ public sealed partial class CommandService
     )
     {
         var normalizedProvider = NormalizeProvider(provider, allowAuto: false);
-        var normalizedModel = NormalizePinnedProviderModelSelection(normalizedProvider, model) ?? ResolveProviderModel(normalizedProvider, model);
+        var normalizedModel = ProviderModelSelectionPolicy.NormalizePinnedProviderModelSelection(normalizedProvider, model, DefaultCopilotModel, NormalizeModelSelection) ?? ResolveProviderModel(normalizedProvider, model);
         var frontendLike = IsFrontendLikeCodingTask(objective, languageHint);
         var gameLike = IsGameLikeCodingTask(objective, languageHint);
         var multiFileLike = requestedPaths.Count > 1 || frontendLike || gameLike;
@@ -49,7 +49,7 @@ public sealed partial class CommandService
         var copilotActions = Math.Max(1, _context.CodingCopilotMaxActionsPerIteration);
         var defaultSnapshotEntries = Math.Max(20, _context.CodingWorkspaceSnapshotMaxEntries);
         var defaultRecentLoopHistory = 4;
-        var copilotMini = IsPinnedCopilotModel(normalizedProvider, normalizedModel);
+        var copilotMini = ProviderModelSelectionPolicy.IsPinnedCopilotModel(normalizedProvider, normalizedModel, DefaultCopilotModel);
         var defaultPlanTokens = normalizedProvider switch
         {
             "groq" or "gemini" or "cerebras" or "nvidia" => Math.Clamp(_context.CodingMaxOutputTokens, 1200, 3200),
@@ -216,7 +216,7 @@ public sealed partial class CommandService
         var frontendLike = IsFrontendLikeCodingTask(objective, normalizedLanguage);
         var gameLike = IsGameLikeCodingTask(objective, normalizedLanguage);
         var multiFileLike = requestedPaths.Count > 1 || frontendLike || gameLike;
-        var copilotMini = IsPinnedCopilotModel(profile.Provider, profile.Model);
+        var copilotMini = ProviderModelSelectionPolicy.IsPinnedCopilotModel(profile.Provider, profile.Model, DefaultCopilotModel);
 
         return normalizedLanguage switch
         {
@@ -420,7 +420,7 @@ public sealed partial class CommandService
             "gemini" when profile.Model.Contains("flash", StringComparison.OrdinalIgnoreCase)
                 || profile.Model.Contains("lite", StringComparison.OrdinalIgnoreCase) => Math.Min(configured, bundleMode ? 2200 : 1800),
             "codex" => Math.Min(configured, bundleMode ? 3600 : 2800),
-            "copilot" when IsPinnedCopilotModel(profile.Provider, profile.Model) => Math.Min(configured, bundleMode ? 1600 : 1300),
+            "copilot" when ProviderModelSelectionPolicy.IsPinnedCopilotModel(profile.Provider, profile.Model, DefaultCopilotModel) => Math.Min(configured, bundleMode ? 1600 : 1300),
             "copilot" => Math.Min(configured, bundleMode ? 3200 : 2600),
             _ => Math.Min(configured, bundleMode ? 2600 : 2200)
         };
@@ -438,7 +438,7 @@ public sealed partial class CommandService
             "gemini" when profile.Model.Contains("flash", StringComparison.OrdinalIgnoreCase)
                 || profile.Model.Contains("lite", StringComparison.OrdinalIgnoreCase) => Math.Min(configured, 1800),
             "codex" => Math.Min(configured, 2600),
-            "copilot" when IsPinnedCopilotModel(profile.Provider, profile.Model) => Math.Min(configured, 1400),
+            "copilot" when ProviderModelSelectionPolicy.IsPinnedCopilotModel(profile.Provider, profile.Model, DefaultCopilotModel) => Math.Min(configured, 1400),
             "copilot" => Math.Min(configured, 2400),
             _ => Math.Min(configured, 2200)
         };
@@ -478,7 +478,7 @@ public sealed partial class CommandService
                 lines.Add("- Codex/GPT-5 계열이다. 누락 요구사항과 엣지케이스까지 보완한 뒤 완료를 선언하라");
                 break;
             case "copilot":
-                lines.Add(IsPinnedCopilotModel(normalizedProvider, normalizedModel)
+                lines.Add(ProviderModelSelectionPolicy.IsPinnedCopilotModel(normalizedProvider, normalizedModel, DefaultCopilotModel)
                     ? "- Copilot gpt-5-mini 경로다. 설명보다 완성 파일과 단일 검증 흐름을 우선하고 액션 수를 스스로 줄여라"
                     : "- Copilot 계열이다. 빠른 초안보다 실제 실행과 출력 검증이 우선이다");
                 break;
@@ -633,7 +633,7 @@ public sealed partial class CommandService
             lines.Add("- Flash/Lite 계열이므로 파일 수를 최소로 유지하고 각 파일 역할을 명확하게 나눠 한 번에 완성하라");
         }
 
-        if (IsPinnedCopilotModel(normalizedProvider, normalizedModel))
+        if (ProviderModelSelectionPolicy.IsPinnedCopilotModel(normalizedProvider, normalizedModel, DefaultCopilotModel))
         {
             lines.Add("- Copilot gpt-5-mini 경로이므로 append_file보다 write_file 전체 교체를 우선하고 각 파일은 처음부터 끝까지 완성본만 써라");
             lines.Add("- 설명, 변명, 추가 제안 없이 요청된 파일 수와 stdout 형식만 정확히 맞춰라");

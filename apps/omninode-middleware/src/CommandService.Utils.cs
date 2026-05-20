@@ -345,10 +345,10 @@ public sealed partial class CommandService
             return false;
         }
 
-        if (ShouldUsePriorConversationContext(input, out var isAmbiguous))
+        if (ConversationContextPolicy.ShouldUsePriorConversationContext(input, out var isAmbiguous))
         {
             var normalized = (input ?? string.Empty).Trim();
-            if (LooksLikeExplicitStandaloneQuestion(normalized))
+            if (ConversationContextPolicy.LooksLikeExplicitStandaloneQuestion(normalized))
             {
                 return HasTopicalOverlapWithRecentConversation(conversationId, normalized);
             }
@@ -377,24 +377,9 @@ public sealed partial class CommandService
                && thread.Messages.Any(m => m.Role.Equals("assistant", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool ShouldUsePriorConversationContext(string input, out bool isAmbiguous)
-    {
-        return ConversationContextPolicy.ShouldUsePriorConversationContext(input, out isAmbiguous);
-    }
-
-    private static bool LooksLikeStrongFollowupQuestion(string normalized)
-    {
-        return ConversationContextPolicy.LooksLikeStrongFollowupQuestion(normalized);
-    }
-
-    private static bool LooksLikeExplicitStandaloneQuestion(string input)
-    {
-        return ConversationContextPolicy.LooksLikeExplicitStandaloneQuestion(input);
-    }
-
     private bool HasTopicalOverlapWithRecentConversation(string conversationId, string input)
     {
-        var inputTokens = ExtractContextTokens(input);
+        var inputTokens = ConversationContextPolicy.ExtractContextTokens(input);
         if (inputTokens.Count == 0)
         {
             return false;
@@ -422,38 +407,14 @@ public sealed partial class CommandService
                 return true;
             }
 
-            var messageTokens = ExtractContextTokens(messageText);
-            if (HasMeaningfulTokenOverlap(inputTokens, messageTokens))
+            var messageTokens = ConversationContextPolicy.ExtractContextTokens(messageText);
+            if (ConversationContextPolicy.HasMeaningfulTokenOverlap(inputTokens, messageTokens))
             {
                 return true;
             }
         }
 
         return false;
-    }
-
-    private static bool HasMeaningfulTokenOverlap(
-        IReadOnlySet<string> left,
-        IReadOnlySet<string> right,
-        int minimumShared = 2
-    )
-    {
-        return ConversationContextPolicy.HasMeaningfulTokenOverlap(left, right, minimumShared);
-    }
-
-    private static IReadOnlySet<string> ExtractContextTokens(string text)
-    {
-        return ConversationContextPolicy.ExtractContextTokens(text);
-    }
-
-    private static string NormalizeContextToken(string token)
-    {
-        return ConversationContextPolicy.NormalizeContextToken(token);
-    }
-
-    private static bool IsContextStopToken(string token)
-    {
-        return ConversationContextPolicy.IsContextStopToken(token);
     }
 
     private async Task EnsureConversationTitleFromFirstTurnAsync(
@@ -660,29 +621,14 @@ public sealed partial class CommandService
         });
     }
 
-    private static bool IsPinnedCopilotProvider(string? provider)
+    private string ResolveModel(string provider, string? modelOverride)
     {
-        return ProviderModelSelectionPolicy.IsPinnedCopilotProvider(provider);
-    }
-
-    private static string? NormalizePinnedProviderModelSelection(string provider, string? modelOverride)
-    {
-        return ProviderModelSelectionPolicy.NormalizePinnedProviderModelSelection(
+        var normalizedOverride = ProviderModelSelectionPolicy.NormalizePinnedProviderModelSelection(
             provider,
             modelOverride,
             DefaultCopilotModel,
             NormalizeModelSelection
         );
-    }
-
-    private static bool IsPinnedCopilotModel(string provider, string model)
-    {
-        return ProviderModelSelectionPolicy.IsPinnedCopilotModel(provider, model, DefaultCopilotModel);
-    }
-
-    private string ResolveModel(string provider, string? modelOverride)
-    {
-        var normalizedOverride = NormalizePinnedProviderModelSelection(provider, modelOverride);
         if (!string.IsNullOrWhiteSpace(normalizedOverride))
         {
             return normalizedOverride;
@@ -727,16 +673,6 @@ public sealed partial class CommandService
         }
 
         return null;
-    }
-
-    private static bool IsGroqRateLimitResponse(string text)
-    {
-        return GroqPromptPolicy.IsRateLimitResponse(text);
-    }
-
-    private static bool IsGroqMaxTokensResponse(string text)
-    {
-        return GroqPromptPolicy.IsMaxTokensResponse(text);
     }
 
     private static string BuildCodingQualityBrief(string objective, string languageHint)

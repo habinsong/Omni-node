@@ -79,24 +79,24 @@ public sealed partial class CommandService
         var groqResponse = streamCallback == null
             ? await _llmRouter.GenerateGroqChatAsync(input, groqModel, requestedMaxOutputTokens, cancellationToken)
             : await _llmRouter.GenerateGroqChatStreamingAsync(input, groqModel, requestedMaxOutputTokens, streamCallback, cancellationToken);
-        if (IsGroqMaxTokensResponse(groqResponse) && requestedMaxOutputTokens > 8192)
+        if (GroqPromptPolicy.IsMaxTokensResponse(groqResponse) && requestedMaxOutputTokens > 8192)
         {
             groqResponse = await _llmRouter.GenerateGroqChatAsync(input, groqModel, 8192, cancellationToken);
         }
 
-        if (IsGroqRateLimitResponse(groqResponse))
+        if (GroqPromptPolicy.IsRateLimitResponse(groqResponse))
         {
             var retryResponse = groqResponse;
             foreach (var delayMs in new[] { 900, 1800 })
             {
                 await Task.Delay(delayMs, cancellationToken);
                 retryResponse = await _llmRouter.GenerateGroqChatAsync(input, groqModel, requestedMaxOutputTokens, cancellationToken);
-                if (IsGroqMaxTokensResponse(retryResponse) && requestedMaxOutputTokens > 8192)
+                if (GroqPromptPolicy.IsMaxTokensResponse(retryResponse) && requestedMaxOutputTokens > 8192)
                 {
                     retryResponse = await _llmRouter.GenerateGroqChatAsync(input, groqModel, 8192, cancellationToken);
                 }
 
-                if (!IsGroqRateLimitResponse(retryResponse))
+                if (!GroqPromptPolicy.IsRateLimitResponse(retryResponse))
                 {
                     return CompleteTokenUsage("groq", groqModel, input, retryResponse);
                 }
@@ -336,7 +336,7 @@ public sealed partial class CommandService
                 streamCallback: i == 0 ? streamCallback : null
             );
             var cleaned = SanitizeChatOutput(generated.Text);
-            if (!IsGroqRateLimitResponse(cleaned))
+            if (!GroqPromptPolicy.IsRateLimitResponse(cleaned))
             {
                 return generated with { Provider = "groq", Text = cleaned };
             }
@@ -413,7 +413,7 @@ public sealed partial class CommandService
 
     private string ResolveProviderModel(string provider, string? model)
     {
-        var normalizedModel = NormalizePinnedProviderModelSelection(provider, model);
+        var normalizedModel = ProviderModelSelectionPolicy.NormalizePinnedProviderModelSelection(provider, model, DefaultCopilotModel, NormalizeModelSelection);
         if (!string.IsNullOrWhiteSpace(normalizedModel))
         {
             return normalizedModel;
@@ -871,7 +871,7 @@ public sealed partial class CommandService
     )
     {
         var normalizedProvider = NormalizeProvider(provider, allowAuto: false);
-        var normalizedModel = NormalizePinnedProviderModelSelection(normalizedProvider, modelOverride);
+        var normalizedModel = ProviderModelSelectionPolicy.NormalizePinnedProviderModelSelection(normalizedProvider, modelOverride, DefaultCopilotModel, NormalizeModelSelection);
         if (!string.IsNullOrWhiteSpace(normalizedModel))
         {
             return normalizedModel;

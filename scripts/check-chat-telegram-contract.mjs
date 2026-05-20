@@ -97,12 +97,11 @@ assert(
   "첨부는 선택 모델이 직접 못 볼 때 가능한 보조 provider로 요약 후 전달해야 합니다."
 );
 assert(
-  utils.includes("LooksLikeStrongFollowupQuestion") &&
-    utils.includes("LooksLikeExplicitStandaloneQuestion") &&
+  utils.includes("ConversationContextPolicy.LooksLikeExplicitStandaloneQuestion") &&
     utils.includes("LooksLikeStandaloneFreshGreeting(input)") &&
     utils.includes("contextDecisionInput") &&
     utils.includes("새 요청에 자체 주제와 대상이 분명하면 [최근 대화]는 배경으로만 참고"),
-  "대화탭은 후속 질문, 독립 질문, 독립 인사를 구분하는 공통 맥락 판단 규칙을 가져야 합니다."
+  "대화탭은 독립 질문, 독립 인사를 구분하는 공통 맥락 판단 규칙을 가져야 합니다."
 );
 assert(
   utils.includes("SearchQueryPolicy.LooksLikeStandaloneFreshGreeting") &&

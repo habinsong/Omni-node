@@ -1131,7 +1131,7 @@ public sealed partial class CommandService
             && !isSkillContextQuery
             && !thinkPlusActiveForTelegram)
         {
-            var allowMarkdownTable = LooksLikeTableRenderRequest(effectiveTopicInput);
+            var allowMarkdownTable = SearchQueryPolicy.LooksLikeTableRenderRequest(effectiveTopicInput);
             var memoryHint = BuildSafeWebMemoryPreferenceHint(
                 telegramStateKey,
                 effectiveTopicInput,
@@ -1204,7 +1204,7 @@ public sealed partial class CommandService
 
             if (shouldUseGeminiWeb)
             {
-                var allowMarkdownTable = LooksLikeTableRenderRequest(effectiveTopicInput);
+                var allowMarkdownTable = SearchQueryPolicy.LooksLikeTableRenderRequest(effectiveTopicInput);
                 var memoryHint = BuildSafeWebMemoryPreferenceHint(
                     telegramStateKey,
                     effectiveTopicInput,

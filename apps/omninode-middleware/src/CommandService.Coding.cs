@@ -1449,7 +1449,7 @@ public sealed partial class CommandService
 
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var copilotPinned = modelByProvider.TryGetValue("copilot", out var copilotModel)
-            && IsPinnedCopilotModel("copilot", copilotModel);
+            && ProviderModelSelectionPolicy.IsPinnedCopilotModel("copilot", copilotModel, DefaultCopilotModel);
         return new[]
         {
             CreateOrchestrationStageAssignment("planning", "기획", new[] { "설계", "기획", "리스크", "구조", "테스트" }, copilotPinned ? new[] { "gemini", "codex", "cerebras", "groq", "copilot" } : new[] { "gemini", "codex", "cerebras", "copilot", "groq" }, selectedProviders, modelByProvider, roleByProvider, used),
@@ -1595,7 +1595,7 @@ public sealed partial class CommandService
         var uiHeavy = ContainsAny(normalizedInput, "ui", "ux", "layout", "frontend", "html", "css", "컴포넌트", "화면");
         var reviewHeavy = ContainsAny(normalizedInput, "bug", "error", "fix", "debug", "test", "회귀", "검증", "오류", "테스트");
         var copilotPinned = modelByProvider.TryGetValue("copilot", out var copilotModel)
-            && IsPinnedCopilotModel("copilot", copilotModel);
+            && ProviderModelSelectionPolicy.IsPinnedCopilotModel("copilot", copilotModel, DefaultCopilotModel);
         var resolved = new Dictionary<string, string>(defaults, StringComparer.OrdinalIgnoreCase);
 
         if (resolved.ContainsKey("copilot"))

@@ -379,7 +379,7 @@ public sealed partial class CommandService
         }
 
         var normalizedQuery = (query ?? string.Empty).Trim();
-        if (LooksLikeListOutputRequest(normalizedQuery))
+        if (SearchQueryPolicy.LooksLikeListOutputRequest(normalizedQuery))
         {
             return true;
         }
