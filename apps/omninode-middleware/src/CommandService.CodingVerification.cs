@@ -159,7 +159,7 @@ public sealed partial class CommandService
     )
     {
         var objectiveText = CodingLanguagePolicy.ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty));
-        var normalizedLanguage = NormalizeLanguageForCode(language);
+        var normalizedLanguage = CodingLanguagePolicy.NormalizeLanguageForCode(language);
         var expectedOutputLines = CodingExpectedOutputPolicy.ExtractExpectedConsoleOutputLines(objectiveText);
         var hasExpectedOutput = !string.IsNullOrWhiteSpace(expectedOutput) || expectedOutputLines.Count > 0;
         var shouldRunProgram = ShouldPreferProgramExecutionForVerification(

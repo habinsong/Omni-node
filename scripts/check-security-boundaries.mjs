@@ -489,8 +489,8 @@ assertIncludes(providerModelSelectionPolicy, "IsPinnedCopilotModel", "provider m
 assertIncludes(memoryNoteSelectionPolicy, "NormalizeExplicitNames", "memory note selection policy owns explicit note normalization");
 assertIncludes(memoryNoteSelectionPolicy, "MergeNames", "memory note selection policy owns memory note merge");
 assertIncludes(utils, "CodingLanguagePolicy.NormalizeLanguageForCode", "command service utils delegates language normalization");
-assertIncludes(utils, "CodingLanguagePolicy.NormalizeCodingLanguageHintPreservingAuto", "command service utils delegates auto-preserving language hint normalization");
-assertIncludes(utils, "CodingLanguagePolicy.ResolveExplicitObjectiveLanguage", "command service utils delegates explicit language detection");
+assertIncludes(commandServiceCodingProfiles, "CodingLanguagePolicy.NormalizeCodingLanguageHintPreservingAuto", "command service coding profiles delegates auto-preserving language hint normalization");
+assertIncludes(commandServiceCodingProfiles, "CodingLanguagePolicy.ResolveExplicitObjectiveLanguage", "command service coding profiles delegates explicit language detection");
 assertIncludes(utils, "CodingLanguagePolicy.ResolveInitialCodingLanguage", "command service utils delegates initial language resolution");
 assertIncludes(utils, "CodingLanguagePolicy.GuessLanguageFromPath", "command service utils delegates extension language mapping");
 assertIncludes(utils, "CodingLanguagePolicy.ResolveFinalResultLanguage", "command service utils delegates final result language resolution");

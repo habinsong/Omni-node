@@ -25,7 +25,7 @@ public sealed partial class CommandService
             ?? throw new InvalidOperationException("최근 코딩 결과가 없습니다.");
         var target = ResolveLatestCodingExecutionTarget(latest)
             ?? throw new InvalidOperationException("다시 실행할 대상 파일이나 명령을 찾지 못했습니다.");
-        var normalizedLanguage = NormalizeLanguageForCode(target.Language);
+        var normalizedLanguage = CodingLanguagePolicy.NormalizeLanguageForCode(target.Language);
 
         if (string.Equals(normalizedLanguage, "html", StringComparison.OrdinalIgnoreCase))
         {
@@ -190,7 +190,7 @@ public sealed partial class CommandService
 
         foreach (var candidate in ordered)
         {
-            if (string.Equals(NormalizeLanguageForCode(candidate.Language), "html", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(CodingLanguagePolicy.NormalizeLanguageForCode(candidate.Language), "html", StringComparison.OrdinalIgnoreCase))
             {
                 var previewEntry = ResolveHtmlPreviewEntryPath(candidate.Execution, candidate.ChangedFiles, candidate.RunDirectory);
                 if (!string.IsNullOrWhiteSpace(previewEntry))
@@ -235,7 +235,7 @@ public sealed partial class CommandService
 
     private LatestCodingExecutionCommandPlan TryBuildPreferredLatestCodingLaunchCommand(LatestCodingExecutionTarget target)
     {
-        var normalizedLanguage = NormalizeLanguageForCode(target.Language);
+        var normalizedLanguage = CodingLanguagePolicy.NormalizeLanguageForCode(target.Language);
         var availableFiles = (target.ChangedFiles ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -569,7 +569,7 @@ public sealed partial class CommandService
         IReadOnlyList<string> changedFiles
     )
     {
-        var normalizedLanguage = NormalizeLanguageForCode(language);
+        var normalizedLanguage = CodingLanguagePolicy.NormalizeLanguageForCode(language);
         var availableFiles = (changedFiles ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
             .Distinct(StringComparer.OrdinalIgnoreCase)

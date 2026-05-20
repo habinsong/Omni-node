@@ -983,7 +983,7 @@ public sealed partial class CommandService
             builder.AppendLine($"- ...(추가 {result.ChangedFiles.Count - 8}개)");
         }
 
-        var summaryText = TrimForOutput(RemoveCodeBlocksFromText(result.Summary), 1400);
+        var summaryText = TrimForOutput(ChatOutputSanitizerPolicy.RemoveCodeBlocksFromText(result.Summary), 1400);
         if (!string.IsNullOrWhiteSpace(summaryText))
         {
             builder.AppendLine();
@@ -1014,28 +1014,28 @@ public sealed partial class CommandService
         {
             builder.AppendLine();
             builder.AppendLine("공통 요약:");
-            builder.AppendLine(TrimForOutput(RemoveCodeBlocksFromText(result.CommonSummary), 700));
+            builder.AppendLine(TrimForOutput(ChatOutputSanitizerPolicy.RemoveCodeBlocksFromText(result.CommonSummary), 700));
         }
 
         if (!string.IsNullOrWhiteSpace(result.CommonPoints))
         {
             builder.AppendLine();
             builder.AppendLine("공통점:");
-            builder.AppendLine(TrimForOutput(RemoveCodeBlocksFromText(result.CommonPoints), 500));
+            builder.AppendLine(TrimForOutput(ChatOutputSanitizerPolicy.RemoveCodeBlocksFromText(result.CommonPoints), 500));
         }
 
         if (!string.IsNullOrWhiteSpace(result.Differences))
         {
             builder.AppendLine();
             builder.AppendLine("차이:");
-            builder.AppendLine(TrimForOutput(RemoveCodeBlocksFromText(result.Differences), 500));
+            builder.AppendLine(TrimForOutput(ChatOutputSanitizerPolicy.RemoveCodeBlocksFromText(result.Differences), 500));
         }
 
         if (!string.IsNullOrWhiteSpace(result.Recommendation))
         {
             builder.AppendLine();
             builder.AppendLine("추천:");
-            builder.AppendLine(TrimForOutput(RemoveCodeBlocksFromText(result.Recommendation), 400));
+            builder.AppendLine(TrimForOutput(ChatOutputSanitizerPolicy.RemoveCodeBlocksFromText(result.Recommendation), 400));
         }
 
         if (result.Workers.Count > 0)
@@ -1053,7 +1053,7 @@ public sealed partial class CommandService
     {
         var changedFiles = worker.ChangedFiles.Take(4).Select(path => Path.GetFileName(path)).ToArray();
         var filesText = changedFiles.Length == 0 ? "파일 없음" : string.Join(", ", changedFiles);
-        var summary = TrimForOutput(RemoveCodeBlocksFromText(worker.Summary), 220);
+        var summary = TrimForOutput(ChatOutputSanitizerPolicy.RemoveCodeBlocksFromText(worker.Summary), 220);
         var summaryText = string.IsNullOrWhiteSpace(summary) ? "요약 없음" : summary;
         var role = string.IsNullOrWhiteSpace(worker.Role) ? "독립 완주" : worker.Role;
         return $"{FormatProviderDisplayName(worker.Provider)} ({worker.Model}) · 역할={role} · status={worker.Execution.Status} · exit={worker.Execution.ExitCode} · 파일={filesText} · 요약={summaryText}";
@@ -1326,7 +1326,7 @@ public sealed partial class CommandService
         var normalized = (language ?? string.Empty).Trim().ToLowerInvariant();
         return normalized.Length == 0 || normalized == "auto"
             ? "auto"
-            : NormalizeLanguageForCode(normalized);
+            : CodingLanguagePolicy.NormalizeLanguageForCode(normalized);
     }
 
     private static string FormatCodingWorkerModel(string? model)

@@ -212,7 +212,7 @@ public sealed partial class CommandService
         IReadOnlyList<string> requestedPaths
     )
     {
-        var normalizedLanguage = ResolveInitialCodingLanguage(languageHint, objective);
+        var normalizedLanguage = CodingLanguagePolicy.ResolveInitialCodingLanguage(languageHint, objective);
         var frontendLike = IsFrontendLikeCodingTask(objective, normalizedLanguage);
         var gameLike = IsGameLikeCodingTask(objective, normalizedLanguage);
         var multiFileLike = requestedPaths.Count > 1 || frontendLike || gameLike;
@@ -299,9 +299,9 @@ public sealed partial class CommandService
 
     private static bool IsFrontendLikeCodingTask(string objective, string languageHint)
     {
-        var lang = NormalizeCodingLanguageHintPreservingAuto(languageHint);
+        var lang = CodingLanguagePolicy.NormalizeCodingLanguageHintPreservingAuto(languageHint);
         var text = CodingLanguagePolicy.ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty)).ToLowerInvariant();
-        var explicitLanguage = ResolveExplicitObjectiveLanguage(objective);
+        var explicitLanguage = CodingLanguagePolicy.ResolveExplicitObjectiveLanguage(objective);
         var backendSignals = ContainsAny(
             text,
             "api",
@@ -353,14 +353,14 @@ public sealed partial class CommandService
 
     private static bool IsGameLikeCodingTask(string objective, string languageHint)
     {
-        var lang = NormalizeCodingLanguageHintPreservingAuto(languageHint);
+        var lang = CodingLanguagePolicy.NormalizeCodingLanguageHintPreservingAuto(languageHint);
         var text = CodingLanguagePolicy.ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty)).ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(text))
         {
             return lang is "html" or "javascript" or "css";
         }
 
-        var explicitLanguage = ResolveExplicitObjectiveLanguage(objective);
+        var explicitLanguage = CodingLanguagePolicy.ResolveExplicitObjectiveLanguage(objective);
         var gameSignals = ContainsAny(text, "게임", "game", "arcade", "슈팅", "shooter", "shooting", "platformer", "tetris", "pong", "snake", "벽돌깨기", "비행기");
         if (!gameSignals)
         {
@@ -724,7 +724,7 @@ public sealed partial class CommandService
         CodeExecutionResult lastExecution
     )
     {
-        var resolvedLanguage = ResolveInitialCodingLanguage(languageHint, objective);
+        var resolvedLanguage = CodingLanguagePolicy.ResolveInitialCodingLanguage(languageHint, objective);
         var builder = new StringBuilder();
         builder.AppendLine("로컬 코딩 실행 에이전트다. 반드시 JSON 객체만 출력하라.");
         builder.AppendLine($"provider={profile.Provider}");
@@ -857,7 +857,7 @@ public sealed partial class CommandService
             VisibleCodingStageTotal
         ));
 
-        var initialLanguage = ResolveInitialCodingLanguage(languageHint, objective);
+        var initialLanguage = CodingLanguagePolicy.ResolveInitialCodingLanguage(languageHint, objective);
         var bundlePreferred = ShouldPreferFileBundleFallback(profile, objective, requestedPaths);
         if (bundlePreferred)
         {

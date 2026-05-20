@@ -21,7 +21,7 @@ public sealed partial class CommandService
         CodeExecutionResult execution
     )
     {
-        var normalizedLanguage = NormalizeLanguageForCode(language);
+        var normalizedLanguage = CodingLanguagePolicy.NormalizeLanguageForCode(language);
         var objectiveText = CodingLanguagePolicy.ExtractLatestCodingRequestText(objective ?? string.Empty);
         var files = (changedFiles ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))

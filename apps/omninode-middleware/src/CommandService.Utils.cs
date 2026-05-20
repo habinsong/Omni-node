@@ -772,8 +772,8 @@ public sealed partial class CommandService
         }
 
         var resolvedLanguage = string.IsNullOrWhiteSpace(parsed.Language)
-            ? ResolveInitialCodingLanguage(languageHint, objective)
-            : NormalizeLanguageForCode(parsed.Language);
+            ? CodingLanguagePolicy.ResolveInitialCodingLanguage(languageHint, objective)
+            : CodingLanguagePolicy.NormalizeLanguageForCode(parsed.Language);
         var execution = new CodeExecutionResult(
             resolvedLanguage,
             "-",
@@ -823,7 +823,7 @@ public sealed partial class CommandService
         TokenUsage? totalTokenUsage = null;
         var progressMode = string.IsNullOrWhiteSpace(progressModeOverride) ? modeLabel : progressModeOverride;
 
-        var currentLanguage = ResolveInitialCodingLanguage(languageHint, objective);
+        var currentLanguage = CodingLanguagePolicy.ResolveInitialCodingLanguage(languageHint, objective);
         var expectedOutput = CodingFallbackPolicy.ExtractExpectedConsoleOutput(objective);
         var lastCode = string.Empty;
         var lastWritePath = "-";
@@ -1707,7 +1707,7 @@ public sealed partial class CommandService
 
     private static string BuildFallbackCodeOnlyPrompt(string objective, string languageHint)
     {
-        var resolvedLanguage = ResolveInitialCodingLanguage(languageHint, objective);
+        var resolvedLanguage = CodingLanguagePolicy.ResolveInitialCodingLanguage(languageHint, objective);
         var projectProfile = ResolveCodingProjectProfile(objective, languageHint);
         return CodingFallbackPolicy.BuildCodeOnlyPrompt(
             objective,
@@ -1723,7 +1723,7 @@ public sealed partial class CommandService
         IReadOnlyList<string>? requestedPaths = null
     )
     {
-        var resolvedLanguage = ResolveInitialCodingLanguage(languageHint, objective);
+        var resolvedLanguage = CodingLanguagePolicy.ResolveInitialCodingLanguage(languageHint, objective);
         var projectProfile = ResolveCodingProjectProfile(objective, languageHint, requestedPaths);
         return CodingFallbackPolicy.BuildFileBundlePrompt(
             objective,
@@ -1755,7 +1755,7 @@ public sealed partial class CommandService
             lastExecution,
             changedFiles,
             BuildLanguagePromptRuleLines(string.Empty, string.Empty, languageHint, objective ?? string.Empty),
-            NormalizeLanguageForCode(languageHint) == "python" && IsInteractiveProgramObjective(objective ?? string.Empty, "python")
+            CodingLanguagePolicy.NormalizeLanguageForCode(languageHint) == "python" && IsInteractiveProgramObjective(objective ?? string.Empty, "python")
         ));
     }
 
@@ -1924,7 +1924,7 @@ public sealed partial class CommandService
         CodeExecutionResult lastExecution
     )
     {
-        var resolvedLanguage = ResolveInitialCodingLanguage(languageHint, objective);
+        var resolvedLanguage = CodingLanguagePolicy.ResolveInitialCodingLanguage(languageHint, objective);
         return CodingPromptPolicy.BuildLoopPrompt(new CodingLoopPromptPolicyRequest(
             objective,
             resolvedLanguage,
@@ -1948,7 +1948,7 @@ public sealed partial class CommandService
 
     private static string BuildCodingAgentObjectivePrompt(string input, string languageHint, string modeLabel)
     {
-        var resolvedLanguage = ResolveInitialCodingLanguage(languageHint, input);
+        var resolvedLanguage = CodingLanguagePolicy.ResolveInitialCodingLanguage(languageHint, input);
         return CodingPromptPolicy.BuildAgentObjectivePrompt(
             input,
             modeLabel,
@@ -1959,7 +1959,7 @@ public sealed partial class CommandService
 
     private static string BuildDraftCodingWorkerPrompt(string objective, string languageHint)
     {
-        var resolvedLanguage = ResolveInitialCodingLanguage(languageHint, objective);
+        var resolvedLanguage = CodingLanguagePolicy.ResolveInitialCodingLanguage(languageHint, objective);
         return CodingPromptPolicy.BuildDraftWorkerPrompt(
             objective,
             resolvedLanguage,
@@ -2003,33 +2003,9 @@ public sealed partial class CommandService
         return CodingPromptPolicy.BuildMultiSummaryPrompt(originalInput, digests);
     }
 
-    private static string RemoveCodeBlocksFromText(string text)
-    {
-        return ChatOutputSanitizerPolicy.RemoveCodeBlocksFromText(text);
-    }
-
     private async Task<IReadOnlyList<string>> GetAvailableProvidersAsync(CancellationToken cancellationToken)
     {
         return await _providerRegistry.GetAvailableProvidersAsync(cancellationToken);
     }
 
-    private static string NormalizeLanguageForCode(string? language)
-    {
-        return CodingLanguagePolicy.NormalizeLanguageForCode(language);
-    }
-
-    private static string NormalizeCodingLanguageHintPreservingAuto(string? languageHint)
-    {
-        return CodingLanguagePolicy.NormalizeCodingLanguageHintPreservingAuto(languageHint);
-    }
-
-    private static string ResolveExplicitObjectiveLanguage(string? objective)
-    {
-        return CodingLanguagePolicy.ResolveExplicitObjectiveLanguage(objective);
-    }
-
-    private static string ResolveInitialCodingLanguage(string? languageHint, string objective)
-    {
-        return CodingLanguagePolicy.ResolveInitialCodingLanguage(languageHint, objective);
-    }
 }

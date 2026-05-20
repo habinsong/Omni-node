@@ -14,7 +14,7 @@ public sealed partial class CommandService
         {
             return (
                 false,
-                NormalizeLanguageForCode(languageHint),
+                CodingLanguagePolicy.NormalizeLanguageForCode(languageHint),
                 string.Empty,
                 Array.Empty<string>(),
                 new CodeExecutionResult("bash", workspaceRoot, "-", "(skipped)", 0, string.Empty, string.Empty, "skipped"),
@@ -135,7 +135,7 @@ public sealed partial class CommandService
         }
 
         var resolvedLanguage = CodingLanguagePolicy.ResolveFinalResultLanguage(
-            ResolveInitialCodingLanguage(languageHint, objective),
+            CodingLanguagePolicy.ResolveInitialCodingLanguage(languageHint, objective),
             languageHint,
             objective,
             recoveredFiles

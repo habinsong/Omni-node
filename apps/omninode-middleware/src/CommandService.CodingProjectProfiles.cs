@@ -21,8 +21,8 @@ public sealed partial class CommandService
     )
     {
         var text = CodingLanguagePolicy.ExtractLatestCodingRequestText(WebUtility.HtmlDecode(objective ?? string.Empty)).ToLowerInvariant();
-        var explicitLanguage = ResolveExplicitObjectiveLanguage(objective);
-        var language = NormalizeCodingLanguageHintPreservingAuto(languageHint);
+        var explicitLanguage = CodingLanguagePolicy.ResolveExplicitObjectiveLanguage(objective);
+        var language = CodingLanguagePolicy.NormalizeCodingLanguageHintPreservingAuto(languageHint);
         if (language == "auto" && !string.IsNullOrWhiteSpace(explicitLanguage))
         {
             language = explicitLanguage;
@@ -41,7 +41,7 @@ public sealed partial class CommandService
 
         if (language == "auto")
         {
-            language = ResolveInitialCodingLanguage(languageHint, objective ?? string.Empty);
+            language = CodingLanguagePolicy.ResolveInitialCodingLanguage(languageHint, objective ?? string.Empty);
         }
 
         var singleFile = IsExplicitSingleFileSimpleTask(objective, language, requestedPaths);

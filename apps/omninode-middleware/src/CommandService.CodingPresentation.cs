@@ -146,7 +146,7 @@ public sealed partial class CommandService
             ? "- 변경 파일 없음"
             : string.Join("\n", displayFiles.Select(path => $"- {path}"));
         var hasMoreFiles = changedFiles.Count > displayFiles.Length;
-        var compactSummary = TrimForOutput(RemoveCodeBlocksFromText(summary), 800);
+        var compactSummary = TrimForOutput(ChatOutputSanitizerPolicy.RemoveCodeBlocksFromText(summary), 800);
         var stdoutSnippet = BuildExecutionLogSnippet(execution.StdOut, 260);
         var stderrSnippet = BuildExecutionLogSnippet(execution.StdErr, 260);
         var installSummary = BuildAutoInstallSummary(execution.StdOut, execution.StdErr);
@@ -250,7 +250,7 @@ public sealed partial class CommandService
             builder.AppendLine($"stderr 요약: {stderrSnippet}");
         }
 
-        var summary = TrimForOutput(RemoveCodeBlocksFromText(worker.Summary ?? string.Empty), 1800);
+        var summary = TrimForOutput(ChatOutputSanitizerPolicy.RemoveCodeBlocksFromText(worker.Summary ?? string.Empty), 1800);
         if (!string.IsNullOrWhiteSpace(summary))
         {
             builder.AppendLine("요약:");

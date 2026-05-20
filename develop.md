@@ -857,6 +857,12 @@ git diff --check
 - `apps/omninode-middleware/src/CommandService.Utils.cs` (memory note 잔여 wrapper 정리)
   - 단일 줄 위임 wrapper 2종(`NormalizeExplicitMemoryNoteNames`/`MergeMemoryNoteNames`)을 제거하고 호출처(Utils, SearchPipeline)를 `MemoryNoteSelectionPolicy.NormalizeExplicitNames`/`MemoryNoteSelectionPolicy.MergeNames` 직접 호출로 갱신했다.
   - `CommandService.Utils.cs` 본문 크기: 2045 → 2035 라인.
+- `apps/omninode-middleware/src/CommandService.Utils.cs` (language/code-block 잔여 wrapper 정리)
+  - 단일 줄 위임 wrapper 5종(`RemoveCodeBlocksFromText`/`NormalizeLanguageForCode`/`NormalizeCodingLanguageHintPreservingAuto`/`ResolveExplicitObjectiveLanguage`/`ResolveInitialCodingLanguage`)을 제거하고 호출처를 `ChatOutputSanitizerPolicy.RemoveCodeBlocksFromText`/`CodingLanguagePolicy.*` 직접 호출로 갱신했다.
+  - 갱신된 partial: Utils, CodingPresentation, CodingProfiles, CodingResultActions, CodingDeterministicRepairs, CodingVerification, CodingProjectProfiles, CodingQuality, Telegram.Coding.
+  - `CommandService.Utils.cs` 본문 크기: 2035 → 2011 라인.
+- `scripts/check-security-boundaries.mjs`
+  - `NormalizeCodingLanguageHintPreservingAuto`/`ResolveExplicitObjectiveLanguage` 위임 위치 검증을 `utils` → `commandServiceCodingProfiles` 기준으로 갱신했다.
 
 검증 결과:
 
