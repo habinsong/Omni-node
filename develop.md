@@ -1110,7 +1110,7 @@ git diff --check
 
 ## 진척도 스냅샷
 
-업데이트 기준: 2026-05-19
+업데이트 기준: 2026-05-21
 
 | 우선순위 | 상태 | 완료율 | 남은 핵심 작업 |
 |---|---|---|---|
@@ -1175,6 +1175,7 @@ git diff --check
 ## 운영 판단
 
 - 이 프로젝트는 기능적으로는 이미 개인 운영 도구 이상의 범위를 갖췄다.
-- 단기 품질은 보안 경계와 contract test가 받치고 있다.
-- 중기 리스크는 거대한 중심 타입과 문서 drift다.
-- 다음 개발은 새 기능 확장보다 문서 일관성, runtime 통합 테스트, 도메인 분리 순서가 더 안전하다.
+- 단기 품질은 보안 경계와 contract test가 받치고 있다 (middleware 단위 테스트 841, 보안 경계 assertions 721, coding 계약 106).
+- 중기 리스크는 거대한 중심 타입과 문서 drift였으나, 순수 로직(정책/파서/리졸버) 분리와 위임 wrapper 인라인 정리가 사실상 마무리되며 `CommandService`/`LlmRouter` 중심 타입의 순수 책임은 대부분 테스트된 정책 클래스로 이동했다.
+- 남은 P3 잔여(로직 그래프의 인스턴스-서비스 의존 노드 실행기 file/web/chat/coding/session/cron/browser/routine, exception/loop recovery orchestration)는 `_conversationStore`/`_memorySearchTool`/LLM 라우터/파일 IO 등 인스턴스 서비스에 강결합돼 있어, 추출하면 `CommandService` 전체를 넘기거나 무거운 DI 플럼빙이 필요하다. 현재 이들은 작고 단일 책임이라 위치만 인스턴스일 뿐이며, 추출의 회귀 위험이 유지보수 이득보다 크다고 판단해 보류한다.
+- 다음 개발은 새 기능 확장보다 문서 일관성, runtime 통합 테스트, (필요 시) 노드 실행기 DI 설계 순서가 더 안전하다.
