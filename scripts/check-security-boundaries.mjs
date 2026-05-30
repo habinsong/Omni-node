@@ -585,6 +585,13 @@ assertIncludes(telegramLlmPreferencePolicy, "ApplyTalkDefaults", "telegram llm p
 assertIncludes(telegramLlmPreferencePolicy, "ApplyCodeDefaults", "telegram llm preference policy owns code preset defaults");
 assertIncludes(telegramLlmPreferencePolicy, "ResolveQuickModelSelection", "telegram llm preference policy owns quick model selection");
 assertIncludes(telegramLlmPreferencePolicy, "NormalizeThinkingLevel", "telegram llm preference policy owns thinking level normalization");
+const telegramLlmControlCommandParser = read("apps/omninode-middleware/src/Infrastructure/Telegram/TelegramLlmControlCommandParser.cs");
+assertIncludes(telegramLlmControlCommandParser, "TelegramLlmControlCommandKind", "telegram llm control command parser owns command kind taxonomy");
+assertIncludes(telegramLlmControlCommandParser, "public static TelegramLlmControlCommand Parse(", "telegram llm control command parser owns /llm token parsing");
+assertIncludes(telegramLlmControlCommandParser, "IsNvidiaAlias", "telegram llm control command parser owns nvidia alias normalization");
+assertIncludes(telegram, "TelegramLlmControlCommandParser.Parse", "command service telegram delegates /llm parsing to control command parser");
+assertNotIncludes(telegram, "사용법: /llm mode <single|orchestration|multi>", "command service telegram no longer owns /llm usage strings");
+assertNotIncludes(telegram, "알 수 없는 /llm 명령입니다", "command service telegram no longer owns /llm unknown message");
 assertIncludes(telegram, "TelegramPromptPolicy.BuildCompressionPrompt", "command service telegram delegates compression prompt");
 assertIncludes(telegram, "TelegramPromptPolicy.BuildProfilePrompt", "command service telegram delegates profile prompt");
 assertIncludes(telegram, "TelegramPromptPolicy.ResolveThinkingLevel", "command service telegram delegates thinking level resolution");

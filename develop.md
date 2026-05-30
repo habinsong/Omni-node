@@ -63,8 +63,8 @@ git diff --check
 최근 확인 결과:
 
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 788 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 696
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 824 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 702
 - `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
 - `node scripts/check-chat-telegram-contract.mjs`: 통과
 - `node scripts/check-gateway-runtime-contract.mjs`: 통과
@@ -888,8 +888,8 @@ git diff --check
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "CodingDeterministicStructuredRepairPolicyTests|CodingExpectedOutputPolicyTests"`: 통과, 12 tests
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter TelegramPseudoCommandExecutorTests`: 통과, 7 tests
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "TelegramLlmPreferencePolicyTests|TelegramPseudoCommandExecutorTests"`: 통과, 17 tests
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 788 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 696
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 824 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 702
 - `node scripts/check-chat-telegram-contract.mjs`: 통과
 - `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
 - `node scripts/check-gateway-runtime-contract.mjs`: 통과
@@ -1117,11 +1117,26 @@ git diff --check
 | P0. 작업트리 커밋 기준점 | 완료 | 100% | — |
 | P1. 문서 불일치 정리 | 완료 | 100% | — |
 | P2. WebSocket runtime 통합 테스트 | 완료 | 100% | — |
-| P3. CommandService 도메인 분리 | 진행 중 | 99.97% | logic graph 노드별 실행기(`ExecuteLogic*Node` 30+) 및 템플릿/edge resolver 분리, Telegram `/llm` 세부 설정 핸들러 서비스화, SearchPipeline의 Gemini 호출 orchestration 축소, exception/loop recovery orchestration |
+| P3. CommandService 도메인 분리 | 진행 중 | 99.98% | logic graph 노드별 실행기(`ExecuteLogic*Node` 30+) 및 템플릿/edge resolver 분리, exception/loop recovery orchestration |
 | P4. Provider adapter 구조 정리 | 완료 | 100% | — (usage capture/continuation loop는 turn-state 결합으로 추가 분리 미적용) |
 | P5. 상태 저장소 복구 정책 확대 | 완료 | 100% | — |
 
-전체 산술 평균: 99.99% (P0 100, P1 100, P2 100, P3 99.97, P4 100, P5 100 → 평균 99.99%).
+전체 산술 평균: 99.99% (P0 100, P1 100, P2 100, P3 99.98, P4 100, P5 100 → 평균 99.997%).
+
+### 추가 진행 (Telegram /llm 제어 명령 파서 분리, 2026-05-21)
+
+- `apps/omninode-middleware/src/Infrastructure/Telegram/TelegramLlmControlCommandParser.cs`
+  - `/llm` 제어 명령의 토큰 파싱·alias 정규화(nvidia/nvidia-nim/nvidia_nim/nim)·usage/unknown 메시지 판정을 순수 파서로 분리했다.
+  - `TelegramLlmControlCommandKind`(Help/Status/SetMode/Models/Usage/SetGroqModel/SetCopilotModel/SetSingleProviderThenModel/SetSingleProvider/SetSingleModel/SetOrchestrationProvider/SetOrchestrationModel/SetMultiChannelModel/SetMultiSummaryProvider/UsageError/Unknown) 분류와 `TelegramLlmControlCommand` 레코드를 노출한다.
+  - multi 채널 매핑(`multi.<provider>`)과 summary provider 소문자 정규화를 파서가 소유한다.
+- `apps/omninode-middleware/src/CommandService.Telegram.cs`
+  - `TryHandleTelegramLlmControlCommandAsync`를 파서 결과 기반 switch dispatch로 교체했다. 인스턴스 상태 변경(`SetChannelMode`/`SetChannelProvider`/`SetChannelModel`, async 보고)과 multi 락 범위는 핸들러에 유지했다.
+  - status 응답 조립을 `BuildTelegramLlmStatusAsync` 헬퍼로 분리했다.
+  - `CommandService.Telegram.cs` 본문 크기: 2806 → 2585 라인.
+- `apps/omninode-middleware-tests/TelegramLlmControlCommandParserTests.cs`
+  - help/status/mode/models/usage alias, set groq·copilot 모델 케이스 보존, nvidia/codex provider-then-model, set 미지원 provider/짧은 입력 usage, single/orchestration provider·model, multi 채널 매핑(7종)·summary 소문자, 미지 subcommand unknown 메시지를 단위 테스트로 고정했다 (36 cases).
+- `scripts/check-security-boundaries.mjs`
+  - `TelegramLlmControlCommandParser` 소유권과 `CommandService.Telegram`의 파서 위임 + usage/unknown 문자열 비보유 계약을 추가했다 (assertions 696 → 702).
 
 이 수치는 책임 분량을 동등 가중치로 본 추정이다. P3는 SearchPipeline 정책/포매터/README 로더, Telegram 응답 포매터/프롬프트/후속질문/자연어 명령/pseudo command executor/LLM preference 정책, 공통 대화 맥락 정책, 코딩 언어/진행상태/프롬프트/루프 계획 파서/생성 코드 텍스트/fallback/대화 제목/대화 히스토리/chat output sanitizer/multi comparison/code candidate/코딩 실행 안전성/품질 브리프/루프 튜닝/deterministic stdout repair/UI clone scaffold/web shooter scaffold/artifact cleanup/loop action executor/fallback decision/Groq fallback 응답 판정/provider model selection/memory note selection/expected output parsing/structured repair plan 정책 추출이 진행됐지만 Telegram `/llm` 세부 설정 핸들러와 일부 exception recovery/loop recovery orchestration도 한 타입에 남아 있어, 실제 코드 양 기준으로 가중치를 다시 잡으면 90% 중반이 더 보수적이다. P4는 provider별 HTTP 호출/SSE/citation dedup이 adapter/parser/policy/accumulator로 분리된 상태이며, 잔여 항목(usage capture/continuation loop)은 turn-state 결합으로 추가 분리의 이득이 작아 마무리로 간주한다.
 

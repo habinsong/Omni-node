@@ -101,240 +101,123 @@ public sealed partial class CommandService
 
     private async Task<string?> TryHandleTelegramLlmControlCommandAsync(string text, CancellationToken cancellationToken)
     {
-        if (!text.StartsWith("/llm", StringComparison.OrdinalIgnoreCase))
+        if (!TelegramLlmControlCommandParser.IsControlCommand(text))
         {
             return null;
         }
 
-        var tokens = text.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (tokens.Length == 1 || tokens[1].Equals("help", StringComparison.OrdinalIgnoreCase))
+        var command = TelegramLlmControlCommandParser.Parse(text);
+        switch (command.Kind)
         {
-            return BuildUnifiedLlmHelpText("telegram");
-        }
+            case TelegramLlmControlCommandKind.Help:
+                return BuildUnifiedLlmHelpText("telegram");
 
-        if (tokens[1].Equals("status", StringComparison.OrdinalIgnoreCase))
-        {
-            TelegramLlmPreferences snapshot;
-            lock (_telegramLlmLock)
+            case TelegramLlmControlCommandKind.Status:
+                return await BuildTelegramLlmStatusAsync(cancellationToken);
+
+            case TelegramLlmControlCommandKind.SetMode:
+                return SetChannelMode("telegram", command.Primary);
+
+            case TelegramLlmControlCommandKind.Models:
+                return await BuildTelegramModelsReportAsync(command.Primary, cancellationToken);
+
+            case TelegramLlmControlCommandKind.Usage:
+                return await BuildTelegramUsageReportAsync(cancellationToken);
+
+            case TelegramLlmControlCommandKind.SetGroqModel:
+                return await SetGroqModelForTelegramAsync(command.Primary, cancellationToken);
+
+            case TelegramLlmControlCommandKind.SetCopilotModel:
+                return await SetCopilotModelForTelegramAsync(command.Primary, cancellationToken);
+
+            case TelegramLlmControlCommandKind.SetSingleProviderThenModel:
             {
-                snapshot = _telegramLlmPreferences.Clone();
-            }
-
-            var quota = GetTelegramUpgradeQuotaSnapshot();
-            var copilotStatus = await _copilotWrapper.GetStatusAsync(cancellationToken);
-            var toolSnapshot = _toolRegistry.GetAvailabilitySnapshot();
-            var enabledTools = toolSnapshot
-                .Where(item => item.Enabled)
-                .Select(item => item.ToolId)
-                .ToArray();
-            var pendingTools = toolSnapshot
-                .Where(item => !item.Enabled)
-                .Select(item => $"{item.ToolId}({item.Reason})")
-                .ToArray();
-
-            var enabledText = enabledTools.Length == 0 ? "(none)" : string.Join(", ", enabledTools);
-            var pendingText = pendingTools.Length == 0 ? "(none)" : string.Join(", ", pendingTools);
-
-            var statusBody = $"""
-                    {BuildChannelModelStatus("telegram")}
-
-                    [부가 상태]
-                    프로필: {snapshot.Profile}
-                    thinking.talk: {snapshot.TalkThinkingLevel}
-                    thinking.code: {snapshot.CodeThinkingLevel}
-                    qwen 업그레이드 사용량: {quota.Used}/{quota.Cap} (day={quota.DayKey})
-                    Copilot 상태: {copilotStatus.Mode} / {(copilotStatus.Authenticated ? "authenticated" : "unauthenticated")}
-                    사용 가능 도구: {enabledText}
-                    대기 중 도구: {pendingText}
-                    """;
-
-            // single chat provider 빠른 전환 버튼.
-            return AppendTelegramInlineButtons(
-                statusBody,
-                ("/llm single provider groq", "Groq"),
-                ("/llm single provider gemini", "Gemini"),
-                ("/llm single provider cerebras", "Cerebras"),
-                ("/llm single provider nvidia", "NVIDIA"),
-                ("/llm single provider copilot", "Copilot")
-            );
-        }
-
-        if (tokens[1].Equals("mode", StringComparison.OrdinalIgnoreCase))
-        {
-            if (tokens.Length < 3)
-            {
-                return "사용법: /llm mode <single|orchestration|multi>";
-            }
-            return SetChannelMode("telegram", tokens[2].ToLowerInvariant());
-        }
-
-        if (tokens[1].Equals("models", StringComparison.OrdinalIgnoreCase))
-        {
-            var target = tokens.Length >= 3 ? tokens[2].Trim().ToLowerInvariant() : "all";
-            return await BuildTelegramModelsReportAsync(target, cancellationToken);
-        }
-
-        if (tokens[1].Equals("usage", StringComparison.OrdinalIgnoreCase)
-            || tokens[1].Equals("limits", StringComparison.OrdinalIgnoreCase)
-            || tokens[1].Equals("quota", StringComparison.OrdinalIgnoreCase))
-        {
-            return await BuildTelegramUsageReportAsync(cancellationToken);
-        }
-
-        if (tokens[1].Equals("set", StringComparison.OrdinalIgnoreCase))
-        {
-            if (tokens.Length < 4)
-            {
-                    return "사용법: /llm set <groq|copilot|codex|nvidia> <model-id>";
-            }
-
-            var provider = tokens[2].Trim().ToLowerInvariant();
-            var modelId = string.Join(' ', tokens.Skip(3)).Trim();
-            if (provider == "groq")
-            {
-                return await SetGroqModelForTelegramAsync(modelId, cancellationToken);
-            }
-
-            if (provider == "copilot")
-            {
-                return await SetCopilotModelForTelegramAsync(modelId, cancellationToken);
-            }
-
-            if (provider == "codex")
-            {
-                var providerSet = SetChannelProvider("telegram", "single", "codex");
+                var providerSet = SetChannelProvider("telegram", "single", command.Primary);
                 if (providerSet.StartsWith("지원", StringComparison.OrdinalIgnoreCase)
                     || providerSet.StartsWith("invalid", StringComparison.OrdinalIgnoreCase))
                 {
                     return providerSet;
                 }
 
-                return SetChannelModel("telegram", "single", modelId);
+                return SetChannelModel("telegram", "single", command.Secondary);
             }
 
-            if (provider == "nvidia" || provider == "nvidia-nim" || provider == "nvidia_nim" || provider == "nim")
-            {
-                var providerSet = SetChannelProvider("telegram", "single", "nvidia");
-                if (providerSet.StartsWith("지원", StringComparison.OrdinalIgnoreCase)
-                    || providerSet.StartsWith("invalid", StringComparison.OrdinalIgnoreCase))
+            case TelegramLlmControlCommandKind.SetSingleProvider:
+                return SetChannelProvider("telegram", "single", command.Primary);
+
+            case TelegramLlmControlCommandKind.SetSingleModel:
+                return SetChannelModel("telegram", "single", command.Secondary);
+
+            case TelegramLlmControlCommandKind.SetOrchestrationProvider:
+                return SetChannelProvider("telegram", "orchestration", command.Primary);
+
+            case TelegramLlmControlCommandKind.SetOrchestrationModel:
+                return SetChannelModel("telegram", "orchestration", command.Secondary);
+
+            case TelegramLlmControlCommandKind.SetMultiChannelModel:
+                lock (_telegramLlmLock)
                 {
-                    return providerSet;
+                    return SetChannelModel("telegram", command.Primary, command.Secondary);
                 }
 
-                return SetChannelModel("telegram", "single", modelId);
-            }
+            case TelegramLlmControlCommandKind.SetMultiSummaryProvider:
+                lock (_telegramLlmLock)
+                {
+                    return SetChannelProvider("telegram", "summary", command.Primary);
+                }
 
-            return "사용법: /llm set <groq|copilot|codex|nvidia> <model-id>";
+            case TelegramLlmControlCommandKind.UsageError:
+            case TelegramLlmControlCommandKind.Unknown:
+            default:
+                return command.Message;
         }
+    }
 
-        if (tokens[1].Equals("single", StringComparison.OrdinalIgnoreCase))
+    private async Task<string> BuildTelegramLlmStatusAsync(CancellationToken cancellationToken)
+    {
+        TelegramLlmPreferences snapshot;
+        lock (_telegramLlmLock)
         {
-            if (tokens.Length < 4)
-            {
-                return "사용법: /llm single provider <groq|gemini|copilot|cerebras|nvidia|codex> | /llm single model <model-id>";
-            }
-
-            if (tokens[2].Equals("provider", StringComparison.OrdinalIgnoreCase))
-            {
-                return SetChannelProvider("telegram", "single", tokens[3].Trim().ToLowerInvariant());
-            }
-
-            if (tokens[2].Equals("model", StringComparison.OrdinalIgnoreCase))
-            {
-                var model = string.Join(' ', tokens.Skip(3)).Trim();
-                if (string.IsNullOrWhiteSpace(model))
-                {
-                    return "usage: /llm single model <model-id>";
-                }
-
-                return SetChannelModel("telegram", "single", model);
-            }
-
-            return "사용법: /llm single provider <groq|gemini|copilot|cerebras|nvidia|codex> | /llm single model <model-id>";
+            snapshot = _telegramLlmPreferences.Clone();
         }
 
-        if (tokens[1].Equals("orchestration", StringComparison.OrdinalIgnoreCase))
-        {
-            if (tokens.Length < 4)
-            {
-                return "사용법: /llm orchestration provider <auto|groq|gemini|copilot|cerebras|nvidia|codex> | /llm orchestration model <model-id>";
-            }
+        var quota = GetTelegramUpgradeQuotaSnapshot();
+        var copilotStatus = await _copilotWrapper.GetStatusAsync(cancellationToken);
+        var toolSnapshot = _toolRegistry.GetAvailabilitySnapshot();
+        var enabledTools = toolSnapshot
+            .Where(item => item.Enabled)
+            .Select(item => item.ToolId)
+            .ToArray();
+        var pendingTools = toolSnapshot
+            .Where(item => !item.Enabled)
+            .Select(item => $"{item.ToolId}({item.Reason})")
+            .ToArray();
 
-            if (tokens[2].Equals("provider", StringComparison.OrdinalIgnoreCase))
-            {
-                return SetChannelProvider("telegram", "orchestration", tokens[3].Trim().ToLowerInvariant());
-            }
+        var enabledText = enabledTools.Length == 0 ? "(none)" : string.Join(", ", enabledTools);
+        var pendingText = pendingTools.Length == 0 ? "(none)" : string.Join(", ", pendingTools);
 
-            if (tokens[2].Equals("model", StringComparison.OrdinalIgnoreCase))
-            {
-                var model = string.Join(' ', tokens.Skip(3)).Trim();
-                if (string.IsNullOrWhiteSpace(model))
-                {
-                    return "usage: /llm orchestration model <model-id>";
-                }
+        var statusBody = $"""
+                {BuildChannelModelStatus("telegram")}
 
-                return SetChannelModel("telegram", "orchestration", model);
-            }
+                [부가 상태]
+                프로필: {snapshot.Profile}
+                thinking.talk: {snapshot.TalkThinkingLevel}
+                thinking.code: {snapshot.CodeThinkingLevel}
+                qwen 업그레이드 사용량: {quota.Used}/{quota.Cap} (day={quota.DayKey})
+                Copilot 상태: {copilotStatus.Mode} / {(copilotStatus.Authenticated ? "authenticated" : "unauthenticated")}
+                사용 가능 도구: {enabledText}
+                대기 중 도구: {pendingText}
+                """;
 
-            return "사용법: /llm orchestration provider <auto|groq|gemini|copilot|cerebras|nvidia|codex> | /llm orchestration model <model-id>";
-        }
-
-        if (tokens[1].Equals("multi", StringComparison.OrdinalIgnoreCase))
-        {
-            if (tokens.Length < 4)
-            {
-                return "사용법: /llm multi <groq|gemini|copilot|cerebras|nvidia|codex> <model-id> | /llm multi summary <auto|groq|gemini|copilot|cerebras|nvidia|codex>";
-            }
-
-            var key = tokens[2].ToLowerInvariant();
-            var value = string.Join(' ', tokens.Skip(3)).Trim();
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return "사용법: /llm multi <groq|gemini|copilot|cerebras|nvidia|codex> <model-id> | /llm multi summary <auto|groq|gemini|copilot|cerebras|nvidia|codex>";
-            }
-
-            lock (_telegramLlmLock)
-            {
-                if (key == "groq")
-                {
-                    return SetChannelModel("telegram", "multi.groq", value);
-                }
-
-                if (key == "gemini")
-                {
-                    return SetChannelModel("telegram", "multi.gemini", value);
-                }
-
-                if (key == "copilot")
-                {
-                    return SetChannelModel("telegram", "multi.copilot", value);
-                }
-
-                if (key == "cerebras")
-                {
-                    return SetChannelModel("telegram", "multi.cerebras", value);
-                }
-
-                if (key == "nvidia" || key == "nvidia-nim" || key == "nvidia_nim" || key == "nim")
-                {
-                    return SetChannelModel("telegram", "multi.nvidia", value);
-                }
-
-                if (key == "codex")
-                {
-                    return SetChannelModel("telegram", "multi.codex", value);
-                }
-
-                if (key == "summary")
-                {
-                    return SetChannelProvider("telegram", "summary", value.Trim().ToLowerInvariant());
-                }
-            }
-
-            return "사용법: /llm multi <groq|gemini|copilot|cerebras|nvidia|codex> <model-id> | /llm multi summary <auto|groq|gemini|copilot|cerebras|nvidia|codex>";
-        }
-
-        return "알 수 없는 /llm 명령입니다. /llm help 또는 자연어 요청을 사용하세요.";
+        // single chat provider 빠른 전환 버튼.
+        return AppendTelegramInlineButtons(
+            statusBody,
+            ("/llm single provider groq", "Groq"),
+            ("/llm single provider gemini", "Gemini"),
+            ("/llm single provider cerebras", "Cerebras"),
+            ("/llm single provider nvidia", "NVIDIA"),
+            ("/llm single provider copilot", "Copilot")
+        );
     }
 
     private Task<string?> TryHandleTelegramQuickModelCommandAsync(string text, CancellationToken cancellationToken)
