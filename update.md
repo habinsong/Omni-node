@@ -1,7 +1,9 @@
 # Omni-node v1.0.5 업데이트 내역
 
 작성일: 2026-05-15
-문서 최신화: 2026-05-15
+문서 최신화: 2026-05-21
+
+> **정정 (2026-05-21)**: 아래 v1.0.5 본문의 "외부 제한 모드에서 대화/코딩/루틴/로직 그래프 실행 허용" 설명은 이후 보안 정책이 강화되면서 더 이상 유효하지 않다. **현재 외부 제한 모드는 모든 작업 실행(대화/코딩/루틴/로직 그래프/task graph/refactor/tool)을 차단하고, 읽기 중심 조회와 모델/라우팅 설정만 허용한다.** 권한표의 최신 기준은 [아키텍처 문서](./docs/아키텍처_흐름.md#외부접속-제한-모드-권한표)와 [검증 가이드](./docs/검증_가이드.md)를 따른다. 아래 v1.0.5 내역은 당시 릴리스 기록으로 보존한다.
 
 이번 업데이트는 v1.0.4 이후 확인한 외부접속 제한 모드와 문서/릴리스 위생을 정리한 패치다. 외부 접속에서 OTP 요청 자체를 제거하고 제한 모드로 자동 진입하게 했으며, 원격에서 허용할 작업과 차단할 인증/시크릿/외부접속 설정을 UI·서버·문서·계약 테스트에 같은 기준으로 맞췄다. `./scripts/Omni-node setup` 실행 흐름도 README와 docs에 명시했다.
 
@@ -74,3 +76,23 @@ v1.0.5는 외부접속을 “OTP를 다시 요구하는 원격 화면”이 아�
 반대로 OTP 요청, CLI 로그인/로그아웃, Telegram/LLM 키 변경, 외부접속 토글 변경은 막는다. 서버와 대시보드는 이 차단 이유를 인증, 시크릿, 외부접속 설정으로 나눠 보여준다.
 
 또한 처음 설치하는 사람이 헷갈리지 않도록 `./scripts/Omni-node setup`과 `.\scripts\Omni-node.ps1 setup`을 README와 docs에 명확히 넣었다.
+
+## 내부 구조 리팩터링 (2026-05-21)
+
+기능 동작 변경 없이 미들웨어 중심 타입(`CommandService`, `LlmRouter`)의 순수 로직을 단위 테스트 가능한 정책/파서/리졸버 클래스로 분리하는 작업을 진행했다. 외부 API·동작·보안 경계는 그대로다.
+
+- 순수 판정·파싱·프롬프트·resolver 로직을 검색/코딩/대화/텔레그램/루틴/로직 그래프/provider 도메인별 정책 클래스로 추출했다. 대표: `SearchQueryPolicy`, `CodingWorkerSelectionPolicy`, `ChatRetryGuardPolicy`, `TelegramLlmControlCommandParser`, `RoutineSchedulePolicy`, `LogicGraphValidationPolicy`, `LogicTemplateResolver`, `LogicLeafNodeExecutor`, `OpenAiCompatibleProtocol`, `ProviderTimeoutPolicy` 등.
+- `CommandService`/`LlmRouter`로 단순 위임만 하던 wrapper 메서드 다수를 제거하고 호출부를 정책 직접 호출로 정리했다.
+- `LogicExecutionContext`/`LogicNodeExecutionOutcome` 같은 실행 컨텍스트 타입을 top-level로 승격해 노드 실행기를 정책으로 분리할 수 있게 했다.
+- 인스턴스 서비스(LLM 호출, 파일 IO, 대화 저장소)에 강결합된 로직 그래프 노드 실행기(file/web/chat/coding/session/cron/browser/routine)와 exception/loop recovery orchestration은 추출 시 회귀 위험이 이득보다 커 현재 위치에 유지했다. 진척 상세는 `develop.md` 참고.
+
+### 검증 (2026-05-21 기준)
+
+```bash
+dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj   # 경고 0
+dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj   # 841 통과
+node scripts/check-security-boundaries.mjs                          # assertions 721
+node scripts/check-coding-python-game-contract.mjs                  # assertions 106
+npm test                                                            # 전체 통과
+make -C apps/omninode-core -B
+```

@@ -2,7 +2,7 @@
 
 [한국어](../환경변수_및_상태파일.md) · [English](./environment-and-state.md)
 
-Updated: 2026-05-19
+Updated: 2026-05-21
 
 Secrets should use `*_FILE` or a secure store where possible. Runtime state lives under `~/.omninode`; generated work lives under `workspace/`.
 

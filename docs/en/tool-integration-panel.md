@@ -2,7 +2,7 @@
 
 [한국어](../도구_통합_패널_사용_가이드.md) · [English](./tool-integration-panel.md)
 
-Updated: 2026-05-19
+Updated: 2026-05-21
 
 ![Settings tab](../assets/readme/dashboard-settings-tab.png)
 

@@ -28,7 +28,7 @@ assert.match(logicModels, /string ActiveRunId = ""/);
 assert.match(logicGraphs, /ToLogicGraphSummaryWithRuntime/);
 assert.match(logicGraphs, /ClearLogicGraphRunningState/);
 assert.match(logicGraphs, /NormalizeLogicCodingOutcome/);
-assert.match(logicGraphs, /LooksLikeLogicAiFailure/);
+assert.match(logicGraphs, /LogicNodeRuntimePolicy\.LooksLikeAiFailure/);
 
 assert.match(app, /const graphPayload = logicDirty \|\| !targetGraphId \? draftGraph : null/);
 assert.match(app, /requestLogicGraphRunGet,/);

@@ -2,7 +2,7 @@
 
 [한국어](../검증_가이드.md) · [English](./validation.md)
 
-Updated: 2026-05-19
+Updated: 2026-05-21
 
 ```bash
 make -C apps/omninode-core

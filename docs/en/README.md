@@ -2,7 +2,7 @@
 
 [한국어](../README.md) · [English](./README.md)
 
-Updated: 2026-05-19
+Updated: 2026-05-21
 
 This folder keeps the practical documentation for installing, using, operating, and validating Omni-node. As of v1.0.5, the docs reflect `./scripts/Omni-node setup`, the remote-dashboard limited-mode permission table, WebSocket security boundaries, sticky skill behavior, routines, and Telegram flows. Older Gemini search migration notes are kept as archival records under `gemini-retriever-plan/`.
 

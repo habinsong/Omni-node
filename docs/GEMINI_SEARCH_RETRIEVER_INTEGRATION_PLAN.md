@@ -2,7 +2,7 @@
 
 [한국어](./GEMINI_SEARCH_RETRIEVER_INTEGRATION_PLAN.md) · [English](./en/gemini-search-retriever-integration-plan.md)
 
-업데이트 기준: 2026-05-19
+업데이트 기준: 2026-05-21
 
 이 문서는 최신 사용법이 아니라 Gemini grounding 검색 전환 당시의 설계 기록이다. 현재 운영 기준은 [사용법](./사용법_빠른시작.md)과 [도구 통합 패널](./도구_통합_패널_사용_가이드.md)을 우선한다.
 

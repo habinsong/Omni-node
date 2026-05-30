@@ -2,7 +2,7 @@
 
 [한국어](./NOTEBOOKS_AND_HANDOFF.md) · [English](./en/notebooks-and-handoff.md)
 
-업데이트 기준: 2026-05-19
+업데이트 기준: 2026-05-21
 
 노트북은 작업 중 남길 말을 모으는 곳이다. LLM 답변을 다시 요약하는 기능이 아니라, 사람이 다음 세션에서 바로 이어갈 수 있게 작업 메모, 결정, 검증, handoff를 남긴다.
 

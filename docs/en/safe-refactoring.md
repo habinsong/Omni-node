@@ -2,7 +2,7 @@
 
 [한국어](../SAFE_REFACTORING.md) · [English](./safe-refactoring.md)
 
-Updated: 2026-05-19
+Updated: 2026-05-21
 
 ![Safe Refactor](../assets/readme/dashboard-safe-refactor.png)
 

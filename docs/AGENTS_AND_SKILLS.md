@@ -2,7 +2,7 @@
 
 [한국어](./AGENTS_AND_SKILLS.md) · [English](./en/agents-and-skills.md)
 
-업데이트 기준: 2026-05-19
+업데이트 기준: 2026-05-21
 
 Omni-node는 프로젝트 지침과 스킬을 런타임 문맥으로 읽는다. 기본 원칙은 단순하다. 항상 주입할 지침은 AGENTS에 두고, 필요할 때만 켤 작업 방식은 Skill로 분리한다.
 

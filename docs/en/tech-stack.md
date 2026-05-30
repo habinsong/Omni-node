@@ -2,7 +2,7 @@
 
 [한국어](../기술스택_정리.md) · [English](./tech-stack.md)
 
-Updated: 2026-05-19
+Updated: 2026-05-21
 
 | Area | Stack |
 |---|---|

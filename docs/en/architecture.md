@@ -2,7 +2,7 @@
 
 [한국어](../아키텍처_흐름.md) · [English](./architecture.md)
 
-Updated: 2026-05-19
+Updated: 2026-05-21
 
 Omni-node keeps the web dashboard and Telegram bot on the same command layer. That is the main design choice.
 
@@ -18,6 +18,10 @@ flowchart LR
 ```
 
 The core daemon is C11, the middleware is .NET 9, the dashboard is static web code, and executable artifacts live under `workspace/`.
+
+## Internal structure: policy layer
+
+`CommandService` and `LlmRouter` act only as entry points and orchestrators. Pure decision/parsing/prompt-assembly logic lives in unit-tested policy, parser, and resolver classes; only instance state and external services (LLM calls, file IO, conversation store) stay in the orchestrator. Representative split classes include `SearchQueryPolicy`/`SearchPromptPolicy`/`SearchAnswerFormatterPolicy` (search), `CodingLanguagePolicy`/`CodingFallbackPolicy`/`CodingWorkerSelectionPolicy`/`CodingLoopActionExecutor` (coding), `ChatRetryGuardPolicy`/`LocalAssistantQuestionPolicy`/`ConversationContextPolicy`/`TelegramLlmControlCommandParser` (chat/telegram), `RoutineSchedulePolicy`/`LogicGraphValidationPolicy`/`LogicTemplateResolver`/`LogicLeafNodeExecutor` (routine/logic graph), and `OpenAiCompatibleProtocol`/`ProviderResponseParser`/`ProviderTimeoutPolicy` (provider). Each policy has unit tests under `apps/omninode-middleware-tests`, and `scripts/check-security-boundaries.mjs` verifies that the policy owns the responsibility while CommandService/LlmRouter only delegate.
 
 Security boundaries are explicit: remote dashboard clients enter limited mode without an OTP prompt, remote OTP requests stay blocked, and remote WebSocket messages must pass a limited-mode allowlist before dispatch. The remote allowlist is read-oriented; chat, coding, routine, logic graph, task, refactor, and tool execution actions are blocked remotely. WebSocket requests pass an Origin gate and pre-auth message allowlist; missing Origin is allowed only for local loopback clients and rejected for remote clients. The default WebSocket message cap is 16 MB, `/api/local-image` only serves routine assets, attachments are rejected when they exceed count or size limits, and Markdown raw HTML is disabled. JSON state writes take a per-file `.lock` lease, replace files atomically, keep the previous valid file as `.bak`, and conversation, session, routine, routing policy, plan, task graph, Telegram outbox, guard retry timeline, and usage state stores attempt backup recovery when the primary JSON is corrupt. The workspace doctor check reports state JSON, backup, lock, corrupt JSON counts, and whether each listed corrupt file has a backup. Startup memory index sync failures do not block middleware startup; sync logs and manual rebuild results report total documents, memory/session/project source counts, indexed/skipped/removed counts, and elapsedMs. Explicit local code execution is allowed only when `OMNINODE_ENABLE_DYNAMIC_CODE=true`; missing dependency auto-install is disabled by default and only runs with `OMNINODE_ENABLE_AUTO_INSTALL=true`. The Python sandbox is a local execution limiter, not a full filesystem/network/environment sandbox. The C core IPC accepts only fixed `get_metrics` and `kill <pid>` line commands, and kill requests must pass middleware allowlist checks first.
 
