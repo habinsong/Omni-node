@@ -141,6 +141,20 @@ public sealed record LogicNodeResultEnvelope(
     IReadOnlyList<string> Links
 );
 
+/// <summary>
+/// 로직 그래프 1회 실행의 가변 상태 holder. run 입력/작업 디렉터리, 변수,
+/// 노드 결과, 산출물, 세션 매핑을 담는다. 템플릿/참조 resolver가 읽기 전용으로 참조한다.
+/// </summary>
+internal sealed class LogicExecutionContext
+{
+    public string RunInput { get; init; } = string.Empty;
+    public string RunDirectory { get; init; } = string.Empty;
+    public Dictionary<string, string> Vars { get; } = new(StringComparer.Ordinal);
+    public Dictionary<string, LogicNodeResultEnvelope> Nodes { get; } = new(StringComparer.Ordinal);
+    public List<string> Artifacts { get; } = new();
+    public Dictionary<string, string> Sessions { get; } = new(StringComparer.Ordinal);
+}
+
 public sealed record LogicNodeRunState(
     string NodeId,
     string Type,

@@ -659,6 +659,16 @@ assertIncludes(logicGraphValidationPolicy, "IsSourcePortValid", "logic graph val
 assertIncludes(logicGraphValidationPolicy, "IsTargetPortValid", "logic graph validation policy owns target port check");
 assertIncludes(logicGraphValidationPolicy, "HasCycle", "logic graph validation policy owns cycle detection");
 assertIncludes(logicGraphValidationPolicy, "public static LogicGraphValidationResult Validate(", "logic graph validation policy owns graph validation entrypoint");
+const logicTemplateResolver = read("apps/omninode-middleware/src/LogicTemplateResolver.cs");
+assertIncludes(logicTemplateResolver, "public static string ResolveTemplate(", "logic template resolver owns template substitution");
+assertIncludes(logicTemplateResolver, "public static string ResolveReference(", "logic template resolver owns reference resolution");
+assertIncludes(logicTemplateResolver, "public static string ResolveEdgeValue(", "logic template resolver owns edge value extraction");
+assertIncludes(commandServiceLogicGraphs, "LogicTemplateResolver.ResolveTemplate", "command service delegates template resolution");
+assertIncludes(commandServiceLogicGraphs, "LogicTemplateResolver.ResolveReference", "command service delegates reference resolution");
+assertIncludes(commandServiceLogicGraphs, "LogicTemplateResolver.ResolveEdgeValue", "command service delegates edge value extraction");
+assertNotIncludes(commandServiceLogicGraphs, "private string ResolveLogicTemplate(", "command service no longer owns template resolution");
+assertNotIncludes(commandServiceLogicGraphs, "private string ResolveLogicReference(", "command service no longer owns reference resolution");
+assertNotIncludes(commandServiceLogicGraphs, "private string ResolveLogicEdgeValue(", "command service no longer owns edge value extraction");
 assertIncludes(commandServiceLogicGraphs, "LogicGraphValidationPolicy.Validate(", "command service delegates graph validation to policy");
 assertIncludes(commandServiceLogicGraphs, "LogicGraphValidationPolicy.SchemaVersion", "command service uses policy schema version");
 assertIncludes(commandServiceLogicGraphs, "LogicGraphValidationPolicy.NormalizePort", "command service uses policy port normalizer");
@@ -708,7 +718,7 @@ assertIncludes(commandServiceLogicGraphs, "LogicNodeRuntimePolicy.IsSuccessfulEx
 assertIncludes(commandServiceLogicGraphs, "LogicNodeRuntimePolicy.IsTerminalStatus", "command service uses runtime policy terminal status check");
 assertIncludes(commandServiceLogicGraphs, "LogicNodeRuntimePolicy.IsNodeReadyToRun", "command service uses runtime policy node readiness check");
 assertIncludes(commandServiceLogicGraphs, "LogicNodeRuntimePolicy.BuildConversationTitle", "command service uses runtime policy conversation title builder");
-assertIncludes(commandServiceLogicGraphs, "LogicNodeRuntimePolicy.TemplateRegex", "command service uses runtime policy template regex");
+assertIncludes(logicTemplateResolver, "LogicNodeRuntimePolicy.TemplateRegex", "logic template resolver uses runtime policy template regex");
 assertNotIncludes(commandServiceLogicGraphs, "private static bool IsSuccessfulLogicExecutionStatus(", "command service no longer owns success status check");
 assertNotIncludes(commandServiceLogicGraphs, "private static bool IsTerminalLogicStatus(", "command service no longer owns terminal status check");
 assertNotIncludes(commandServiceLogicGraphs, "private static bool LooksLikeLogicAiFailure(", "command service no longer owns AI failure heuristic");
