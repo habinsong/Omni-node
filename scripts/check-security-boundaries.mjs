@@ -659,6 +659,17 @@ assertIncludes(logicGraphValidationPolicy, "IsSourcePortValid", "logic graph val
 assertIncludes(logicGraphValidationPolicy, "IsTargetPortValid", "logic graph validation policy owns target port check");
 assertIncludes(logicGraphValidationPolicy, "HasCycle", "logic graph validation policy owns cycle detection");
 assertIncludes(logicGraphValidationPolicy, "public static LogicGraphValidationResult Validate(", "logic graph validation policy owns graph validation entrypoint");
+const logicLeafNodeExecutor = read("apps/omninode-middleware/src/LogicLeafNodeExecutor.cs");
+assertIncludes(logicLeafNodeExecutor, "public static LogicNodeExecutionOutcome ExecuteStart(", "logic leaf node executor owns start node");
+assertIncludes(logicLeafNodeExecutor, "public static LogicNodeExecutionOutcome ExecuteIf(", "logic leaf node executor owns if node");
+assertIncludes(logicLeafNodeExecutor, "public static LogicNodeExecutionOutcome ExecuteSetVar(", "logic leaf node executor owns set_var node");
+assertIncludes(logicLeafNodeExecutor, "ResolveCondition", "logic leaf node executor owns condition resolution");
+assertIncludes(commandServiceLogicGraphs, "LogicLeafNodeExecutor.ExecuteStart", "command service delegates start node to leaf executor");
+assertIncludes(commandServiceLogicGraphs, "LogicLeafNodeExecutor.ExecuteIf", "command service delegates if node to leaf executor");
+assertIncludes(commandServiceLogicGraphs, "LogicLeafNodeExecutor.ExecutePass", "command service delegates parallel pass node to leaf executor");
+assertNotIncludes(commandServiceLogicGraphs, "private LogicNodeExecutionOutcome ExecuteLogicStartNode(", "command service no longer owns start node executor");
+assertNotIncludes(commandServiceLogicGraphs, "private LogicNodeExecutionOutcome ExecuteLogicIfNode(", "command service no longer owns if node executor");
+assertNotIncludes(commandServiceLogicGraphs, "private static LogicEdgeCondition ResolveLogicCondition(", "command service no longer owns condition resolution");
 const logicTemplateResolver = read("apps/omninode-middleware/src/LogicTemplateResolver.cs");
 assertIncludes(logicTemplateResolver, "public static string ResolveTemplate(", "logic template resolver owns template substitution");
 assertIncludes(logicTemplateResolver, "public static string ResolveReference(", "logic template resolver owns reference resolution");

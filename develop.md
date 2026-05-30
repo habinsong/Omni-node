@@ -63,8 +63,8 @@ git diff --check
 최근 확인 결과:
 
 - `dotnet build apps/omninode-middleware/OmniNode.Middleware.csproj`: 통과, 경고 0
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 833 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 711
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 841 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 721
 - `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
 - `node scripts/check-chat-telegram-contract.mjs`: 통과
 - `node scripts/check-gateway-runtime-contract.mjs`: 통과
@@ -888,8 +888,8 @@ git diff --check
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "CodingDeterministicStructuredRepairPolicyTests|CodingExpectedOutputPolicyTests"`: 통과, 12 tests
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter TelegramPseudoCommandExecutorTests`: 통과, 7 tests
 - `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj --filter "TelegramLlmPreferencePolicyTests|TelegramPseudoCommandExecutorTests"`: 통과, 17 tests
-- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 833 tests
-- `node scripts/check-security-boundaries.mjs`: 통과, assertions 711
+- `dotnet test apps/omninode-middleware-tests/OmniNode.Middleware.Tests.csproj`: 통과, 841 tests
+- `node scripts/check-security-boundaries.mjs`: 통과, assertions 721
 - `node scripts/check-chat-telegram-contract.mjs`: 통과
 - `node scripts/check-coding-python-game-contract.mjs`: 통과, assertions 106
 - `node scripts/check-gateway-runtime-contract.mjs`: 통과
@@ -1117,7 +1117,7 @@ git diff --check
 | P0. 작업트리 커밋 기준점 | 완료 | 100% | — |
 | P1. 문서 불일치 정리 | 완료 | 100% | — |
 | P2. WebSocket runtime 통합 테스트 | 완료 | 100% | — |
-| P3. CommandService 도메인 분리 | 진행 중 | 99.99% | logic graph 노드별 실행기(`ExecuteLogic*Node` 30+, 인스턴스 서비스 의존), exception/loop recovery orchestration |
+| P3. CommandService 도메인 분리 | 진행 중 | 99.99% | logic graph 인스턴스-서비스 의존 노드 실행기(file/web/chat/coding/session/cron/browser/routine), exception/loop recovery orchestration — 모두 instance state/service 강결합으로 추출 시 DI 플럼빙 비용이 이득보다 큼 |
 | P4. Provider adapter 구조 정리 | 완료 | 100% | — (usage capture/continuation loop는 turn-state 결합으로 추가 분리 미적용) |
 | P5. 상태 저장소 복구 정책 확대 | 완료 | 100% | — |
 
@@ -1152,6 +1152,23 @@ git diff --check
   - run.input/vars/sessions 참조, 중괄호 제거, artifacts index/last, node text/type/ok/conversationId/sessionKey/data 필드, 미지 prefix literal fallback, 템플릿 다중 치환, edge value의 main/session/conversation/artifact/data 포트 및 누락 source 처리를 단위 테스트로 고정했다 (9 cases).
 - `scripts/check-security-boundaries.mjs`
   - `LogicTemplateResolver` 소유권과 `CommandService.LogicGraphs`의 resolver 위임/제거, TemplateRegex 소비 위치 이전 계약을 추가했다 (assertions 702 → 711).
+
+### 추가 진행 (로직 그래프 순수 노드 실행기 분리, 2026-05-21)
+
+- `apps/omninode-middleware/src/Application/Logic/LogicGraphModels.cs`
+  - `CommandService` 내부 private nested `LogicNodeExecutionOutcome` 레코드를 top-level `internal sealed record`로 승격했다 (envelope + if 분기 라벨).
+- `apps/omninode-middleware/src/LogicLeafNodeExecutor.cs`
+  - 인스턴스 서비스에 의존하지 않는 순수 노드 실행기 7종(start/end/output/template/set_var/if/parallel pass)을 분리했다. config/context와 `LogicTemplateResolver`/`LogicValueParsingPolicy`/`LogicGraphValidationPolicy`만 사용한다.
+  - `ResolveLogicCondition`을 `ResolveCondition`으로 옮기고, envelope 조립 helper와 `MainInputKey`(`"__main_input"`) 단일 소스를 정책이 소유한다.
+- `apps/omninode-middleware/src/CommandService.LogicGraphs.cs`
+  - 사설 `ExecuteLogicStartNode`/`ExecuteLogicEndNode`/`ExecuteLogicOutputNode`/`ExecuteLogicTemplateNode`/`ExecuteLogicSetVarNode`/`ExecuteLogicIfNode`/`ExecuteLogicPassNode` 7개 메서드와 `ResolveLogicCondition`을 제거하고 dispatch switch를 `LogicLeafNodeExecutor.*` 호출로 갱신했다.
+  - `LogicResolvedMainInputKey` const를 `LogicLeafNodeExecutor.MainInputKey` 참조로 바꿔 단일 소스를 유지했다.
+  - file/web/chat/coding/session/cron/browser/routine 노드 실행기는 인스턴스 서비스(`_memorySearchTool`, `_conversationStore`, LLM 라우터, 파일 IO 등) 의존이 강해 추출하지 않았다.
+  - `CommandService.LogicGraphs.cs` 본문 크기: 2421 → 2215 라인.
+- `apps/omninode-middleware-tests/LogicLeafNodeExecutorTests.cs`
+  - start의 run-input/fallback, end의 result→text→main-input→last-node→기본 폴백 우선순위, output 빈 폴백, template render, set_var 저장/이름 누락 거부, if의 true/false 분기, parallel pass의 main-input/fallback, ResolveCondition의 node config 폴백·operator 기본값을 단위 테스트로 고정했다 (8 cases).
+- `scripts/check-security-boundaries.mjs`
+  - `LogicLeafNodeExecutor` 소유권과 `CommandService.LogicGraphs`의 노드 실행기 위임/제거, ResolveLogicCondition 제거 계약을 추가했다 (assertions 711 → 721).
 
 이 수치는 책임 분량을 동등 가중치로 본 추정이다. P3는 SearchPipeline 정책/포매터/README 로더, Telegram 응답 포매터/프롬프트/후속질문/자연어 명령/pseudo command executor/LLM preference 정책, 공통 대화 맥락 정책, 코딩 언어/진행상태/프롬프트/루프 계획 파서/생성 코드 텍스트/fallback/대화 제목/대화 히스토리/chat output sanitizer/multi comparison/code candidate/코딩 실행 안전성/품질 브리프/루프 튜닝/deterministic stdout repair/UI clone scaffold/web shooter scaffold/artifact cleanup/loop action executor/fallback decision/Groq fallback 응답 판정/provider model selection/memory note selection/expected output parsing/structured repair plan 정책 추출이 진행됐지만 Telegram `/llm` 세부 설정 핸들러와 일부 exception recovery/loop recovery orchestration도 한 타입에 남아 있어, 실제 코드 양 기준으로 가중치를 다시 잡으면 90% 중반이 더 보수적이다. P4는 provider별 HTTP 호출/SSE/citation dedup이 adapter/parser/policy/accumulator로 분리된 상태이며, 잔여 항목(usage capture/continuation loop)은 turn-state 결합으로 추가 분리의 이득이 작아 마무리로 간주한다.
 

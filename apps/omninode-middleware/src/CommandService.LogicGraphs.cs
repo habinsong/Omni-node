@@ -8,7 +8,7 @@ public sealed partial class CommandService
     private const string LogicGraphExecutionMode = "logic_graph";
     private const string LogicRunSnapshotFileName = "snapshot.json";
     private const string LogicRunEventsFileName = "events.log";
-    private const string LogicResolvedMainInputKey = "__main_input";
+    private const string LogicResolvedMainInputKey = LogicLeafNodeExecutor.MainInputKey;
     private const int LogicRunMaxLogs = 512;
     private static readonly IReadOnlyDictionary<string, string> LogicImplicitMainInputPortByType =
         new Dictionary<string, string>(StringComparer.Ordinal)
@@ -46,11 +46,6 @@ public sealed partial class CommandService
         public DateTimeOffset? CompletedAtUtc { get; set; }
         public LogicNodeResultEnvelope? Result { get; set; }
     }
-
-    private sealed record LogicNodeExecutionOutcome(
-        LogicNodeResultEnvelope Envelope,
-        string? Branch = null
-    );
 
     internal void ConfigureLogicGraphRuntime(
         IStatePathResolver pathResolver,
@@ -873,15 +868,15 @@ public sealed partial class CommandService
         var resolvedConfig = ResolveLogicNodeConfig(node, context, incomingEdges);
         return node.Type switch
         {
-            "start" => ExecuteLogicStartNode(node, context),
-            "end" => ExecuteLogicEndNode(node, context, resolvedConfig),
-            "output" => ExecuteLogicOutputNode(node, context, resolvedConfig),
-            "template" => ExecuteLogicTemplateNode(node, resolvedConfig),
-            "set_var" => ExecuteLogicSetVarNode(node, resolvedConfig, context),
+            "start" => LogicLeafNodeExecutor.ExecuteStart(node, context),
+            "end" => LogicLeafNodeExecutor.ExecuteEnd(node, context, resolvedConfig),
+            "output" => LogicLeafNodeExecutor.ExecuteOutput(node, context, resolvedConfig),
+            "template" => LogicLeafNodeExecutor.ExecuteTemplate(node, resolvedConfig),
+            "set_var" => LogicLeafNodeExecutor.ExecuteSetVar(node, resolvedConfig, context),
             "delay" => await ExecuteLogicDelayNodeAsync(node, resolvedConfig, cancellationToken).ConfigureAwait(false),
-            "if" => ExecuteLogicIfNode(node, resolvedConfig, context),
-            "parallel_split" => ExecuteLogicPassNode(node, resolvedConfig, "병렬 분기 실행"),
-            "parallel_join" => ExecuteLogicPassNode(node, resolvedConfig, "병렬 합류 완료"),
+            "if" => LogicLeafNodeExecutor.ExecuteIf(node, resolvedConfig, context),
+            "parallel_split" => LogicLeafNodeExecutor.ExecutePass(node, resolvedConfig, "병렬 분기 실행"),
+            "parallel_join" => LogicLeafNodeExecutor.ExecutePass(node, resolvedConfig, "병렬 합류 완료"),
             "chat_single" => NormalizeLogicAiOutcome(await ExecuteLogicChatNodeAsync(graph, node, resolvedConfig, "single", cancellationToken).ConfigureAwait(false)),
             "chat_orchestration" => NormalizeLogicAiOutcome(await ExecuteLogicChatNodeAsync(graph, node, resolvedConfig, "orchestration", cancellationToken).ConfigureAwait(false)),
             "chat_multi" => NormalizeLogicAiOutcome(await ExecuteLogicChatMultiNodeAsync(graph, node, resolvedConfig, cancellationToken).ConfigureAwait(false)),
@@ -907,132 +902,6 @@ public sealed partial class CommandService
             "telegram_stub" => await ExecuteLogicTelegramStubNodeAsync(node, resolvedConfig, cancellationToken).ConfigureAwait(false),
             _ => throw new InvalidOperationException($"지원하지 않는 노드 타입입니다: {node.Type}")
         };
-    }
-
-    private LogicNodeExecutionOutcome ExecuteLogicStartNode(
-        LogicNodeDefinition node,
-        LogicExecutionContext context
-    )
-    {
-        var text = string.IsNullOrWhiteSpace(context.RunInput)
-            ? "흐름 시작"
-            : context.RunInput;
-        return new LogicNodeExecutionOutcome(BuildLogicEnvelope(
-            ok: true,
-            type: node.Type,
-            text: text,
-            data: new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["input"] = context.RunInput
-            }
-        ));
-    }
-
-    private LogicNodeExecutionOutcome ExecuteLogicEndNode(
-        LogicNodeDefinition node,
-        LogicExecutionContext context,
-        IReadOnlyDictionary<string, string> config
-    )
-    {
-        var text = LogicValueParsingPolicy.FirstNonEmpty(
-            config.TryGetValue("result", out var resultValue) ? resultValue : null,
-            config.TryGetValue("text", out var textValue) ? textValue : null,
-            config.TryGetValue(LogicResolvedMainInputKey, out var mainInput) ? mainInput : null,
-            context.Nodes.Values.LastOrDefault()?.Text,
-            "흐름 실행이 끝났습니다."
-        );
-        return new LogicNodeExecutionOutcome(BuildLogicEnvelope(
-            ok: true,
-            type: node.Type,
-            text: text,
-            data: new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["result"] = text
-            }
-        ));
-    }
-
-    private LogicNodeExecutionOutcome ExecuteLogicOutputNode(
-        LogicNodeDefinition node,
-        LogicExecutionContext context,
-        IReadOnlyDictionary<string, string> config
-    )
-    {
-        var text = LogicValueParsingPolicy.FirstNonEmpty(
-            config.TryGetValue("result", out var resultValue) ? resultValue : null,
-            config.TryGetValue("text", out var textValue) ? textValue : null,
-            config.TryGetValue(LogicResolvedMainInputKey, out var mainInput) ? mainInput : null,
-            context.Nodes.Values.LastOrDefault()?.Text,
-            string.Empty
-        );
-        return new LogicNodeExecutionOutcome(BuildLogicEnvelope(
-            ok: true,
-            type: node.Type,
-            text: text,
-            data: new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["result"] = text
-            }
-        ));
-    }
-
-    private LogicNodeExecutionOutcome ExecuteLogicTemplateNode(
-        LogicNodeDefinition node,
-        IReadOnlyDictionary<string, string> config
-    )
-    {
-        var text = LogicValueParsingPolicy.FirstNonEmpty(
-            config.TryGetValue("template", out var template) ? template : null,
-            config.TryGetValue("text", out var textValue) ? textValue : null,
-            string.Empty
-        );
-        return new LogicNodeExecutionOutcome(BuildLogicEnvelope(
-            ok: true,
-            type: node.Type,
-            text: text,
-            data: new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["rendered"] = text
-            }
-        ));
-    }
-
-    private LogicNodeExecutionOutcome ExecuteLogicSetVarNode(
-        LogicNodeDefinition node,
-        IReadOnlyDictionary<string, string> config,
-        LogicExecutionContext context
-    )
-    {
-        var name = (config.TryGetValue("name", out var rawName) ? rawName : string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return new LogicNodeExecutionOutcome(BuildLogicEnvelope(
-                ok: false,
-                type: node.Type,
-                text: "변수 이름이 필요합니다.",
-                data: new Dictionary<string, string>(StringComparer.Ordinal)
-                {
-                    ["error"] = "name_required"
-                }
-            ));
-        }
-
-        var value = LogicValueParsingPolicy.FirstNonEmpty(
-            config.TryGetValue("value", out var rawValue) ? rawValue : null,
-            config.TryGetValue("text", out var textValue) ? textValue : null,
-            string.Empty
-        );
-        context.Vars[name] = value;
-        return new LogicNodeExecutionOutcome(BuildLogicEnvelope(
-            ok: true,
-            type: node.Type,
-            text: value,
-            data: new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["name"] = name,
-                ["value"] = value
-            }
-        ));
     }
 
     private async Task<LogicNodeExecutionOutcome> ExecuteLogicDelayNodeAsync(
@@ -1078,56 +947,6 @@ public sealed partial class CommandService
             {
                 ["milliseconds"] = milliseconds.ToString(CultureInfo.InvariantCulture)
             }
-        ));
-    }
-
-    private LogicNodeExecutionOutcome ExecuteLogicIfNode(
-        LogicNodeDefinition node,
-        IReadOnlyDictionary<string, string> config,
-        LogicExecutionContext context
-    )
-    {
-        var condition = ResolveLogicCondition(node, config);
-        var left = LogicTemplateResolver.ResolveReference(condition.LeftRef, context);
-        var matched = LogicValueParsingPolicy.EvaluateCondition(left, condition.Operator, condition.RightValue);
-        var branch = matched ? "true" : "false";
-        var payload = LogicValueParsingPolicy.FirstNonEmpty(
-            config.TryGetValue(LogicResolvedMainInputKey, out var mainInput) ? mainInput : null,
-            left,
-            matched ? "조건 참" : "조건 거짓"
-        );
-        return new LogicNodeExecutionOutcome(
-            BuildLogicEnvelope(
-                ok: true,
-                type: node.Type,
-                text: payload,
-                data: new Dictionary<string, string>(StringComparer.Ordinal)
-                {
-                    ["left"] = left,
-                    ["operator"] = condition.Operator,
-                    ["right"] = condition.RightValue,
-                    ["branch"] = branch
-                }
-            ),
-            branch
-        );
-    }
-
-    private LogicNodeExecutionOutcome ExecuteLogicPassNode(
-        LogicNodeDefinition node,
-        IReadOnlyDictionary<string, string> config,
-        string fallbackText
-    )
-    {
-        var text = LogicValueParsingPolicy.FirstNonEmpty(
-            config.TryGetValue(LogicResolvedMainInputKey, out var mainInput) ? mainInput : null,
-            fallbackText
-        );
-        return new LogicNodeExecutionOutcome(BuildLogicEnvelope(
-            ok: true,
-            type: node.Type,
-            text: text,
-            data: new Dictionary<string, string>(StringComparer.Ordinal)
         ));
     }
 
@@ -2127,31 +1946,6 @@ public sealed partial class CommandService
         }
 
         return selected;
-    }
-
-    private static LogicEdgeCondition ResolveLogicCondition(
-        LogicNodeDefinition node,
-        IReadOnlyDictionary<string, string> config
-    )
-    {
-        node.Config.TryGetValue("leftRef", out var originalLeft);
-        node.Config.TryGetValue("operator", out var originalOperator);
-        node.Config.TryGetValue("rightValue", out var originalRight);
-        return new LogicEdgeCondition
-        {
-            LeftRef = LogicValueParsingPolicy.FirstNonEmpty(
-                config.TryGetValue("leftRef", out var fallbackLeft) ? fallbackLeft : originalLeft,
-                string.Empty
-            ),
-            Operator = LogicGraphValidationPolicy.NormalizeOperator(LogicValueParsingPolicy.FirstNonEmpty(
-                config.TryGetValue("operator", out var fallbackOperator) ? fallbackOperator : originalOperator,
-                "equals"
-            )),
-            RightValue = LogicValueParsingPolicy.FirstNonEmpty(
-                config.TryGetValue("rightValue", out var fallbackRight) ? fallbackRight : originalRight,
-                string.Empty
-            )
-        };
     }
 
 

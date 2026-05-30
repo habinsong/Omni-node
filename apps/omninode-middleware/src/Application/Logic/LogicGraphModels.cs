@@ -155,6 +155,14 @@ internal sealed class LogicExecutionContext
     public Dictionary<string, string> Sessions { get; } = new(StringComparer.Ordinal);
 }
 
+/// <summary>
+/// 단일 로직 노드 실행 결과 envelope과 (if 노드의) 분기 라벨.
+/// </summary>
+internal sealed record LogicNodeExecutionOutcome(
+    LogicNodeResultEnvelope Envelope,
+    string? Branch = null
+);
+
 public sealed record LogicNodeRunState(
     string NodeId,
     string Type,
