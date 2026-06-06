@@ -14,9 +14,16 @@
 
 </div>
 
-업데이트 기준: 2026-05-21
+> **Official repository notice**  
 
-Omni-node는 챗봇 하나 더 만들자는 프로젝트가 아니다. LLM에게 물어보고, 코드 만들고, 실행해 보고, 실패하면 고치고, 그 기록을 다시 꺼내보는 과정을 한 화면에 묶으려고 만든 도구다.
+> This is the official repository for this Omni-node project, created and maintained by [habinsong](https://github.com/habinsong).  
+
+> Repositories, packages, marketplace listings, websites, services, or other projects that copy, mirror, rebrand, or closely imitate this repository’s original documentation, README text, architecture descriptions, feature descriptions, screenshots, UI concepts, project metadata, or other original materials are not affiliated with this project unless explicitly stated in this repository.  
+
+> Copyright © 2026 송하빈. All rights reserved.
+
+
+## Omni-node는 챗봇 하나 더 만들자는 프로젝트가 아니다. LLM에게 물어보고, 코드 만들고, 실행해 보고, 실패하면 고치고, 그 기록을 다시 꺼내보는 과정을 한 화면에 묶으려고 만든 도구다.
 
 요즘 AI 도구 이야기는 종종 이상한 방향으로 흐른다. 비싼 장비를 사야 한다거나, 최고가 모델 하나만 써야 한다거나, 토큰 비용을 크게 태우는 게 실력처럼 보이는 식이다. Omni-node는 반대로 간다. 지금 가진 환경에서 바로 켜고, 여러 제공자를 바꿔 쓰고, 결과를 파일과 로그로 남기는 쪽을 우선한다.
 
@@ -244,3 +251,8 @@ dotnet run --project apps/omninode-middleware/OmniNode.Middleware.csproj -- doct
 - 웹 대시보드와 텔레그램 봇을 같은 작업 흐름으로 쓰고 싶은 사람
 - 리팩터링을 바로 적용하기 전에 preview와 stale 검증을 거치고 싶은 사람
 - 자동화, 루틴, 검색, 노트북 기록을 따로 관리하기 싫은 사람
+
+
+업데이트 기준: 2026-06-07
+
+
